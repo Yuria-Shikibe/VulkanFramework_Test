@@ -1,0 +1,103 @@
+cmake_minimum_required(VERSION 3.28)
+
+project(vulkan
+        VERSION 0.0.1
+        LANGUAGES CXX C
+)
+
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 23)
+
+set(CMAKE_BUILD_PARALLEL_LEVEL 8)
+
+#find msvc dir, totally mess
+set(MSVC_DIR ${CMAKE_CXX_COMPILER})
+get_filename_component(MSVC_DIR ${MSVC_DIR} DIRECTORY)
+get_filename_component(MSVC_DIR ${MSVC_DIR} DIRECTORY)
+get_filename_component(MSVC_DIR ${MSVC_DIR} DIRECTORY)
+get_filename_component(MSVC_DIR ${MSVC_DIR} DIRECTORY)
+
+message(STATUS "Msvc Current Dir: ${MSVC_DIR}")
+
+set(MSVC_MODULE_DIR ${MSVC_DIR}/modules)
+file(COPY ${MSVC_MODULE_DIR} DESTINATION
+        ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+set(SRC_DIR src)
+set(INCLUDES include)
+set(LIB_DIR lib)
+set(BUILD_DIR build)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_DIR})
+
+set(EXE_DIR_RELA ${BUILD_DIR}/${CMAKE_BUILD_TYPE})
+set(EXE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${EXE_DIR_RELA})
+
+add_compile_options("/W4")
+add_compile_options("/wd4244")
+add_compile_options("/wd4100")
+add_compile_options("/wd4458")
+add_compile_options("/wd4267")
+add_compile_options("/wd4189")
+add_compile_options("/permissive-")
+add_link_options("/NODEFAULTLIB:library")
+
+message(STATUS "Loading...")
+
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    add_compile_definitions(DEBUG_CHECK=1)
+else()
+    add_compile_definitions(DEBUG_CHECK=0)
+endif()
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/${INCLUDES})
+
+# Source Files...
+file(GLOB_RECURSE SOURCE_FILES
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.c
+)
+
+# Header Files...
+file(GLOB_RECURSE CURRENT_HEADERS
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.hpp
+)
+
+# Modules...
+#
+file(GLOB_RECURSE FAST_MODULES
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.cppm
+    ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.ixx
+)
+
+message(STATUS "Building...")
+
+set(MODULE_DIR modules)
+
+# Build .exe
+add_executable(
+        ${PROJECT_NAME}      #[[Project Name]]
+        ${SOURCE_FILES}      #[[.cpp]]
+        ${CURRENT_HEADERS}   #[[.h]]
+        main.cpp
+#        ${MODULE_DIR}/std.compat.ixx
+        ${MODULE_DIR}/std.ixx
+)
+
+target_link_libraries(${PROJECT_NAME}
+    ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/glfw3.lib
+    ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/vulkan-1.lib
+)
+
+target_sources(${PROJECT_NAME}
+        PUBLIC
+        ${FAST_MODULES}      #[[Modules]]
+)
+
+set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
+add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+    COMMAND ${CMAKE_COMMAND} -E remove ${FILE_TO_DELETE}
+    COMMENT "Deleting ${FILE_TO_DELETE}"
+)
