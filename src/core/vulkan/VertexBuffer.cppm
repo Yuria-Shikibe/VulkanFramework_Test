@@ -12,6 +12,7 @@ export namespace Core::Vulkan{
 	struct Vertex {
 		Geom::Vec2 position{};
 		Graphic::Color color{};
+		Geom::Vec2 texCoord{};
 
 		static VkVertexInputBindingDescription getBindingDescription() {
 			VkVertexInputBindingDescription bindingDescription{};
@@ -22,8 +23,8 @@ export namespace Core::Vulkan{
 			return bindingDescription;
 		}
 
-		static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-			std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
+		static auto getAttributeDescriptions() {
+			std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
 
 			attributeDescriptions[0].binding = 0;
 			attributeDescriptions[0].location = 0;
@@ -35,15 +36,20 @@ export namespace Core::Vulkan{
 			attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			attributeDescriptions[1].offset = std::bit_cast<std::uint32_t>(&Vertex::color);
 
+			attributeDescriptions[2].binding = 0;
+			attributeDescriptions[2].location = 2;
+			attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+			attributeDescriptions[2].offset = std::bit_cast<std::uint32_t>(&Vertex::texCoord);
+
 			return attributeDescriptions;
 		}
 	};
 
 	const std::vector<Vertex> test_vertices = {
-		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-	   {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-	   {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-	   {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+		{{ 0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {0.0f, 1.0f}},
+		{{ 0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+		{{-0.5f,  0.5f}, {1.0f, 1.0f, 1.0f}, {1.0f, 0.0f}}
 	};
 
 	std::uint32_t findMemoryType(const std::uint32_t typeFilter, VkPhysicalDevice physicalDevice, VkMemoryPropertyFlags properties) {
@@ -124,10 +130,10 @@ export namespace Core::Vulkan{
 		}
 
 		~DataBuffer(){
-			destroy();
+			free();
 		}
 
-		void destroy(){
+		void free(){
 			if(device){
 				if(handler)vkDestroyBuffer(device, handler, nullptr);
 				if(memory)vkFreeMemory(device, memory, nullptr);
@@ -208,11 +214,7 @@ export namespace Core::Vulkan{
 		}
 	};
 
-
-	void copyBuffer(
-		VkCommandPool commandPool, VkDevice device, VkQueue queue,
-		VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size
-	) {
+	VkCommandBuffer beginSingleTimeCommands(VkCommandPool commandPool, VkDevice device) {
 		VkCommandBufferAllocateInfo allocInfo = {};
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
@@ -228,12 +230,10 @@ export namespace Core::Vulkan{
 
 		vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
-		VkBufferCopy copyRegion = {};
-		copyRegion.srcOffset = 0; // Optional
-		copyRegion.dstOffset = 0; // Optional
-		copyRegion.size = size;
-		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+		return commandBuffer;
+	}
 
+	void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkDevice device, VkQueue queue) {
 		vkEndCommandBuffer(commandBuffer);
 
 		VkSubmitInfo submitInfo = {};
@@ -242,9 +242,23 @@ export namespace Core::Vulkan{
 		submitInfo.pCommandBuffers = &commandBuffer;
 
 		vkQueueSubmit(queue, 1, &submitInfo, nullptr);
-		vkQueueWaitIdle(queue); //TODO async
+		vkQueueWaitIdle(queue);
 
 		vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+	}
+
+
+	void copyBuffer(
+		VkCommandPool commandPool, VkDevice device, VkQueue queue,
+		VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size
+	) {
+		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
+
+		VkBufferCopy copyRegion = {};
+		copyRegion.size = size;
+		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
+
+		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
 	DataBuffer createIndexBuffer(VkPhysicalDevice physicalDevice, VkDevice device,

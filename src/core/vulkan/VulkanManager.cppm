@@ -10,8 +10,11 @@ import ext.MetaProgramming;
 import Core.Window;
 import Core.Vulkan.Uniform;
 import Core.Vulkan.Shader;
+import Core.Vulkan.Image;
 import Core.Vulkan.Buffer;
 import std;
+
+import StackTrace;
 
 export namespace Core::Vulkan{
 	void getValidExtensions(){
@@ -33,7 +36,9 @@ export namespace Core::Vulkan{
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 		void* pUserData){
-		std::println(std::cerr, "validation layer: {}", pCallbackData->pMessage);
+
+		std::println(std::cerr, "{}", pCallbackData->pMessage);
+		ext::getStackTraceBrief(std::cerr);
 
 		return VK_FALSE;
 	}
@@ -322,6 +327,12 @@ export namespace Core::Vulkan{
 		VkDescriptorPool descriptorPool{};
 		std::vector<VkDescriptorSet> descriptorSets{};
 
+		std::uint32_t mipLevels;
+		VkImage textureImage{};
+		VkDeviceMemory textureImageMemory{};
+		VkImageView textureImageView{};
+		Sampler textureSampler{};
+
 		bool framebufferResized = false;
 
 		[[nodiscard]] bool checkValidationLayerSupport() const{
@@ -462,6 +473,11 @@ export namespace Core::Vulkan{
 			vertexBuffer = createVertexBuffer(physicalDevice.device, device, commandPool, graphicsQueue);
 			indexBuffer = createIndexBuffer(physicalDevice.device, device, commandPool, graphicsQueue);
 
+			std::uint32_t mipmapLevel{};
+			createTextureImage(physicalDevice, commandPool, device, graphicsQueue, textureImage, textureImageMemory, mipmapLevel);
+			textureImageView = createImageView(device, textureImage, swapChainImageFormat, mipmapLevel);
+			textureSampler = createTextureSampler(device);
+
 			createDescriptorPool();
 			createUniformBuffer();
 			createDescriptorSets();
@@ -485,6 +501,40 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("failed to allocate descriptor sets!");
 			}
 
+			for (std::size_t i = 0; i < swapChainImages.size(); i++) {
+				VkDescriptorBufferInfo bufferInfo = {};
+				bufferInfo.buffer = uniformBuffers[i];
+				bufferInfo.offset = 0;
+				bufferInfo.range = sizeof(UniformBufferObject);
+
+				VkDescriptorImageInfo imageInfo = {};
+				imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				imageInfo.imageView = textureImageView;
+				imageInfo.sampler = textureSampler;
+
+				std::array<VkWriteDescriptorSet, 2> descriptorWrites = {};
+
+				descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[0].dstSet = descriptorSets[i];
+				descriptorWrites[0].dstBinding = 0;
+				descriptorWrites[0].dstArrayElement = 0;
+				descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				descriptorWrites[0].descriptorCount = 1;
+				descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+				descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+				descriptorWrites[1].dstSet = descriptorSets[i];
+				descriptorWrites[1].dstBinding = 1;
+				descriptorWrites[1].dstArrayElement = 0;
+				descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+				descriptorWrites[1].descriptorCount = 1;
+				descriptorWrites[1].pImageInfo = &imageInfo;
+
+				vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
+
+			}
+
+
 			for (size_t i = 0; i < swapChainImages.size(); i++) {
 				VkDescriptorBufferInfo bufferInfo{};
 				bufferInfo.buffer = uniformBuffers[i];
@@ -505,19 +555,22 @@ export namespace Core::Vulkan{
 		}
 
 		void createDescriptorPool() {
-			VkDescriptorPoolSize poolSize{};
-			poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			poolSize.descriptorCount = static_cast<uint32_t>(swapChainImages.size());
 
-			VkDescriptorPoolCreateInfo poolInfo{};
-			poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			poolInfo.poolSizeCount = 1;
-			poolInfo.pPoolSizes = &poolSize;
-			poolInfo.maxSets = static_cast<uint32_t>(swapChainImages.size());
+			std::array<VkDescriptorPoolSize, 2> poolSizes{};
+			poolSizes[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<std::uint32_t>(swapChainImages.size())};
+			poolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<std::uint32_t>(swapChainImages.size())};
+
+			VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+			poolInfo.poolSizeCount = poolSizes.size();
+			poolInfo.pPoolSizes = poolSizes.data();
+			poolInfo.maxSets = swapChainImages.size();
+
 
 			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor pool!");
 			}
+
+
 		}
 
 		void createUniformBuffer() {
@@ -731,8 +784,7 @@ export namespace Core::Vulkan{
 
 			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
-			VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-			vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
 			auto bindingDescription = Vertex::getBindingDescription();
 			auto attributeDescriptions = Vertex::getAttributeDescriptions();
@@ -879,7 +931,9 @@ export namespace Core::Vulkan{
 				swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
 			}
 
-			return indices.isComplete() && extensionsSupported && swapChainAdequate;
+			bool featuresMeet = PhysicalDevice{device}.meetFeatures(&VkPhysicalDeviceFeatures::samplerAnisotropy);
+
+			return indices.isComplete() && extensionsSupported && swapChainAdequate && featuresMeet;
 		}
 
 		void initWindow(GLFWwindow* window){
@@ -916,6 +970,7 @@ export namespace Core::Vulkan{
 			queueCreateInfo.pQueuePriorities = &queuePriority;
 
 			VkPhysicalDeviceFeatures deviceFeatures = {};
+			deviceFeatures.samplerAnisotropy = true;
 
 			VkDeviceCreateInfo createInfo = {};
 			createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
@@ -1117,25 +1172,7 @@ export namespace Core::Vulkan{
 		void createImageViews(){
 			swapChainImageViews.resize(swapChainImages.size());
 			for(const auto& [index, swapChainImage] : swapChainImages | std::ranges::views::enumerate){
-				VkImageViewCreateInfo createInfo = {};
-				createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-				createInfo.image = swapChainImage;
-				createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-				createInfo.format = swapChainImageFormat;
-				createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-				createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-				createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-				createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-				createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				createInfo.subresourceRange.baseMipLevel = 0;
-				createInfo.subresourceRange.levelCount = 1;
-				createInfo.subresourceRange.baseArrayLayer = 0;
-				createInfo.subresourceRange.layerCount = 1;
-
-				if(vkCreateImageView(device, &createInfo, nullptr, &swapChainImageViews[index]) != VK_SUCCESS){
-					throw std::runtime_error("failed to create image views!");
-				}
+				swapChainImageViews[index] = createImageView(device, swapChainImage, swapChainImageFormat, 1);
 			}
 		}
 
@@ -1166,9 +1203,14 @@ export namespace Core::Vulkan{
 
 			vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
 
-			indexBuffer.destroy();
-			vertexBuffer.destroy();
+			indexBuffer.free();
+			vertexBuffer.free();
 			uniformBuffers.clear();
+			textureSampler.free();
+
+			vkDestroyImageView(device, textureImageView, nullptr);
+			vkDestroyImage(device, textureImage, nullptr);
+			vkFreeMemory(device, textureImageMemory, nullptr);
 
 			for (std::size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
 				vkDestroySemaphore(device, renderFinishedSemaphores[i], nullptr);

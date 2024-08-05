@@ -12,7 +12,6 @@ module;
 
 export module Image;
 
-import OS.File;
 import std;
 
 export namespace ext{
@@ -39,10 +38,10 @@ export namespace ext{
 	//byte per pixel
 	//RGBA ~ 4 ~ 32 [0 ~ 255]
 	//RGB ~ 3
-	std::unique_ptr<unsigned char[]> loadPng(const OS::File& file, int& width, int& height, int& bpp, const int requiredBpp = 4) {
+	std::unique_ptr<unsigned char[]> loadPng(const std::filesystem::path& file, int& width, int& height, int& bpp, const int requiredBpp = 4) {
 		int w, h, b;
 
-		const auto data = stbi_load(file.absolutePath().string().data(), &w, &h, &b, requiredBpp);
+		const auto data = stbi_load(std::filesystem::absolute(file).string().data(), &w, &h, &b, requiredBpp);
 		width = w;
 		height = h;
 		bpp = requiredBpp;
@@ -53,11 +52,11 @@ export namespace ext{
 		return stbi_failure_reason();
 	}
 
-	[[maybe_unused]] int writePng(const OS::File& file, const unsigned int width, const unsigned int height, const unsigned int bpp, const unsigned char* data, const int stride = 0) {
-		return stbi_write_png(file.absolutePath().string().data(), static_cast<int>(width), static_cast<int>(height), static_cast<int>(bpp), data, stride);
+	[[maybe_unused]] int writePng(const std::filesystem::path& file, const unsigned int width, const unsigned int height, const unsigned int bpp, const unsigned char* data, const int stride = 0) {
+		return stbi_write_png(std::filesystem::absolute(file).string().data(), static_cast<int>(width), static_cast<int>(height), static_cast<int>(bpp), data, stride);
 	}
 
-	[[maybe_unused]] int writeBmp(const OS::File& file, const unsigned int width, const unsigned int height, const unsigned int bpp, const unsigned char* data) {
-		return stbi_write_bmp(file.absolutePath().string().data(), static_cast<int>(width), static_cast<int>(height), static_cast<int>(bpp), data);
+	[[maybe_unused]] int writeBmp(const std::filesystem::path& file, const unsigned int width, const unsigned int height, const unsigned int bpp, const unsigned char* data) {
+		return stbi_write_bmp(std::filesystem::absolute(file).string().data(), static_cast<int>(width), static_cast<int>(height), static_cast<int>(bpp), data);
 	}
 }
