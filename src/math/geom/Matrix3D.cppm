@@ -126,6 +126,10 @@ export namespace Geom{
 		// 	return setToRotation(translation.rot).translateTo(translation.vec);
 		// }
 
+		constexpr float operator[](std::size_t index) const {
+			return val[index];
+		}
+
 		constexpr Matrix3D& setOrthogonal(const float x, const float y, const float width, const float height) {
 			const float right = x + width, top = y + height;
 

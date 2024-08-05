@@ -13,12 +13,10 @@ out gl_PerVertex {
 
 layout(set = 0, binding = 0) uniform UBO {
     mat3 view;
-    float v1;
-    float v2;
-    float v3;
+    float v;
 } ubo;
 
 void main() {
-    gl_Position = vec4(inPosition, 0, 1);//vec4((ubo.view * vec3(inPosition, 0.0)).xy, 0.0, 1.0);
-    fragColor = vec4(ubo.v1, ubo.v2, ubo.v3, 1.0);
+    gl_Position = vec4((ubo.view * vec3(inPosition, 1.0)).xy, 0.0, 1.0);
+    fragColor = inColor + ubo.v;
 }

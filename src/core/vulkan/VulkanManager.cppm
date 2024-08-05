@@ -364,8 +364,9 @@ export namespace Core::Vulkan{
 
 
 			auto data = uniformBuffers[currentImage].map();
-			UniformBufferObject d{{}, 0.3f, 0.4F, 0.5};
-			std::memcpy(data, &d, sizeof(d));
+			Geom::Matrix3D matrix3D{};
+			matrix3D.setToRotation(time * 5);
+			new (data) UniformBufferObject{matrix3D, 0};
 			uniformBuffers[currentImage].unmap();
 		}
 
