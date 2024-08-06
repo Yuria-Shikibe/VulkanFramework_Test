@@ -4,6 +4,7 @@ import std;
 import Core.Window;
 import Core.Vulkan.Manager;
 import Core.Vulkan.Shader.Compile;
+import Core.Vulkan.Instance;
 
 import Core;
 
@@ -22,6 +23,10 @@ int main(){
 	}.compile();
 
 	Core::init();
+	// Core::GLFW::init();
+	// Core::Vulkan::VkCore vkCore{};
+
+	// vkCore.init();
 
 	while(!Core::window->shouldClose()) {
 		Core::window->pollEvents();
@@ -29,6 +34,7 @@ int main(){
 	}
 
 	vkDeviceWaitIdle(Core::vulkanManager->device);
+
 
 	Core::terminate();
 }

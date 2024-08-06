@@ -25,7 +25,7 @@ export namespace ext{
 
 			exePrefix = exePrefix == std::string::npos && showExec ? 0 : exePrefix + 1;
 
-			auto charIndex = entry.description().find_first_of("+0x");
+			auto charIndex = entry.description().find("+0x");
 
 			std::filesystem::path src{entry.source_file()};
 

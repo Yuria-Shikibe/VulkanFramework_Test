@@ -127,7 +127,14 @@ export namespace Core::Vulkan{
 
 	void generateMipmaps(
 		VkCommandPool commandPool, VkDevice device, VkQueue queue,
-		VkImage image/*, VkFormat imageFormat*/, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
+		VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) {
+
+		// VkFormatProperties formatProperties;
+		// vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
+		//
+		// if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
+		// 	throw std::runtime_error("texture image format does not support linear blitting!");
+		// }
 
 
 		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
@@ -232,7 +239,7 @@ export namespace Core::Vulkan{
 		//                       textureImage,
 		//                       VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
 
-		generateMipmaps(commandPool, device, queue, textureImage, pixmap.getWidth(), pixmap.getHeight(), mipLevels);
+		generateMipmaps(commandPool, device, queue, textureImage, VK_FORMAT_R8G8B8A8_UNORM, pixmap.getWidth(), pixmap.getHeight(), mipLevels);
 	}
 
 	VkImageView createImageView(VkDevice device, VkImage image, VkFormat format, std::uint32_t mipLevels) {
@@ -312,7 +319,7 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	[[nodiscard]] Sampler createTextureSampler(VkDevice device) {
+	[[nodiscard]] Sampler createTextureSampler(VkDevice device, const std::uint32_t mipLevels) {
 		VkSamplerCreateInfo samplerInfo{VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
 
 		samplerInfo.magFilter = VK_FILTER_LINEAR;
@@ -336,6 +343,11 @@ export namespace Core::Vulkan{
 		samplerInfo.mipLodBias = 0.0f;
 		samplerInfo.minLod = 0.0f;
 		samplerInfo.maxLod = 0.0f;
+
+		samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		samplerInfo.minLod = 0; // Optional
+		samplerInfo.maxLod = static_cast<float>(mipLevels);
+		samplerInfo.mipLodBias = 0; // Optional
 
 		Sampler textureSampler{device, samplerInfo};
 
