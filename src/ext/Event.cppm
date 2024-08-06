@@ -1,82 +1,135 @@
 export module ext.Event;
 
 import std;
-import ext.RuntimeException;
 import ext.Concepts;
+import ext.Heterogeneous;
 
 export namespace ext {
 	struct EventType {};
 
-	template<Concepts::Derived<EventType> T>
+	template<std::derived_from<EventType> T>
 	constexpr std::type_index typeIndexOf() {
 		return std::type_index(typeid(T));
 	}
 
-	class EventManager {
-#ifdef _DEBUG
+	struct EventProjection{
+		static decltype(auto) projection(const std::ranges::range auto& range){
+			return range;
+		}
+	};
+
+	template <template <typename...> typename Container = std::vector, typename Proj = EventProjection>
+	struct BasicEventManager{
+	protected:
+		using FuncType = std::function<void(const void*)>;
+		using FuncContainer = Container<FuncType>;
+
+#if DEBUG_CHECK
 		std::set<std::type_index> registered{};
 #endif
-		std::unordered_map<std::type_index, std::vector<std::function<void(const void*)>>> events{};
+		std::unordered_map<std::type_index, FuncContainer> events{};
+
 
 	public:
-		template <Concepts::Derived<EventType> T>
-			requires std::is_final_v<T>
-		void fire(const T& event) const {
-#ifdef _DEBUG
+		template <std::derived_from<EventType> T>
+			requires (std::is_final_v<T>)
+		void fire(const T& event) const{
+#if DEBUG_CHECK
 			checkRegister<T>();
 #endif
-			if (const auto itr = events.find(typeIndexOf<T>()); itr != events.end()) {
-				for (const auto& listener : itr->second) {
+			if(const auto itr = events.find(typeIndexOf<T>()); itr != events.end()){
+				for(const auto& listener : Proj::projection(itr->second)){
 					listener(&event);
 				}
 			}
 		}
 
-		template <Concepts::Derived<EventType> T, typename ...Args>
+		template <std::derived_from<EventType> T, typename... Args>
 			requires std::is_final_v<T>
-		void emplace_fire(Args&& ...args) const {
-			this->fire<T>(T{std::forward<Args>(args) ...});
+		void emplace_fire(Args&&... args) const{
+			this->fire<T>(T{std::forward<Args>(args)...});
 		}
 
-		template <Concepts::Derived<EventType> T, std::invocable<const T&> Func>
-			requires std::is_final_v<T>
-		void on(Func&& func){
-#ifdef _DEBUG
-			checkRegister<T>();
-#endif
-			events[typeIndexOf<T>()].emplace_back([fun = std::forward<decltype(func)>(func)](const void* event) {
-				fun(*static_cast<const T*>(event));
-			});
-		}
-
-		template <Concepts::Derived<EventType> ...T>
-		void registerType() {
-#ifdef _DEBUG
+		template <std::derived_from<EventType> ...T>
+		void registerType(){
+#if DEBUG_CHECK
 			(registered.insert(typeIndexOf<T>()), ...);
 #endif
 		}
 
-		[[nodiscard]] explicit EventManager(std::set<std::type_index>&& registered)
-#ifdef _DEBUG
+		[[nodiscard]] explicit BasicEventManager(std::set<std::type_index>&& registered)
+#if DEBUG_CHECK
 			: registered(std::move(registered))
 #endif
 		{}
 
-		[[nodiscard]] EventManager(const std::initializer_list<std::type_index> registeredList)
-#ifdef _DEBUG
+		[[nodiscard]] BasicEventManager(const std::initializer_list<std::type_index> registeredList)
+#if DEBUG_CHECK
 			: registered(registeredList)
 #endif
 		{}
 
-		[[nodiscard]] EventManager() = default;
+		[[nodiscard]] BasicEventManager() = default;
+
 	protected:
-		template <Concepts::Derived<EventType> T>
-		void checkRegister() const {
-#ifdef _DEBUG
-			if(!registered.empty() && !registered.contains(typeIndexOf<T>()))throw ext::RuntimeException{"Unexpected Event Type!"};
+		template <std::derived_from<EventType> T>
+		void checkRegister() const{
+#if DEBUG_CHECK
+			if(!registered.empty() && !registered.contains(typeIndexOf<T>()))
+				throw std::runtime_error{"Unexpected Event Type!"};
 #endif
 		}
+	};
 
+	struct EventManager : BasicEventManager<std::vector>{
+		using BasicEventManager<std::vector>::BasicEventManager;
+		template <std::derived_from<EventType> T, std::invocable<const T&> Func>
+			requires std::is_final_v<T>
+		void on(Func&& func){
+#if DEBUG_CHECK
+			checkRegister<T>();
+#endif
+			events[typeIndexOf<T>()].emplace_back([fun = std::forward<decltype(func)>(func)](const void* event){
+				fun(*static_cast<const T*>(event));
+			});
+		}
+
+	};
+
+	struct NamedEventManager : BasicEventManager<ext::StringHashMap, NamedEventManager>{
+		using BasicEventManager::BasicEventManager;
+
+		template <std::derived_from<EventType> T, std::invocable<const T&> Func>
+			requires std::is_final_v<T>
+		void on(const std::string_view name, Func&& func){
+#if DEBUG_CHECK
+			checkRegister<T>();
+#endif
+			events[typeIndexOf<T>()].insert_or_assign(name, [fun = std::forward<decltype(func)>(func)](const void* event){
+				fun(*static_cast<const T*>(event));
+			});
+		}
+
+		template <std::derived_from<EventType> T>
+			requires std::is_final_v<T>
+		std::optional<FuncType> erase(const std::string_view name){
+#if DEBUG_CHECK
+			checkRegister<T>();
+#endif
+			if(const auto itr = events.find(typeIndexOf<T>()); itr != events.end()){
+				if(const auto eitr = itr->second.find(name); eitr != itr->second.end()){
+					std::optional opt{eitr->second};
+					itr->second.erase(eitr);
+					return opt;
+				}
+			}
+
+			return std::nullopt;
+		}
+
+		static decltype(auto) projection(const FuncContainer& range){
+			return range | std::views::values;
+		}
 	};
 
 	/**

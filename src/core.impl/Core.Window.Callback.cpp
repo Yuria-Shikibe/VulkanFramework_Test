@@ -15,9 +15,9 @@ void Core::GLFW::framebufferResizeCallback(GLFWwindow* window, int width, int he
 
 	vulkanManager->framebufferResized = true;
 
-	auto app = static_cast<Window*>(glfwGetWindowUserPointer(window));
+	const auto app = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
-	app->size.set(width, height);
+	app->resize(width, height);
 }
 
 void Core::GLFW::setCallBack(GLFWwindow* window, void* user){

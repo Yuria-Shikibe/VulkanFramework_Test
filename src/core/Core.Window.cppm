@@ -1,12 +1,13 @@
 module;
 
 #define GLFW_INCLUDE_VULKAN
-#include <../include/GLFW/glfw3.h>
+#include <GLFW/glfw3.h>
 
 export module Core.Window;
 import std;
 import Core.Window.Callback;
 import Geom.Vector2D;
+import ext.Event;
 
 export namespace Core{
 	constexpr std::uint32_t WIDTH = 800;
@@ -18,22 +19,36 @@ export namespace Core{
 			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 			// glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		}
+
+		void terminate(){
+			glfwTerminate();
+		}
 	}
 
 	struct Window{
-		GLFWwindow* handle{};
-		Geom::Vector2D<int> size{};
+		struct ResizeEvent final : ext::EventType{
+			Geom::Vector2D<int> size{};
+
+			[[nodiscard]] explicit ResizeEvent(const Geom::Vector2D<int>& size)
+				: size{size}{}
+		};
+
+		ext::NamedEventManager eventManager{
+			ext::typeIndexOf<ResizeEvent>()
+		};
 
 		[[nodiscard]] Window(){
 			handle = glfwCreateWindow(WIDTH, HEIGHT, "Vulkan", nullptr, nullptr);
 
 			Core::GLFW::setCallBack(handle, this);
-			updateSize();
+
+			glfwGetWindowSize(handle, &size.x, &size.y);
 		}
 
 		~Window(){
-			glfwDestroyWindow(handle);
-			glfwTerminate();
+			if(handle){
+				glfwDestroyWindow(handle);
+			}
 		}
 
 		[[nodiscard]] bool shouldClose() const{
@@ -44,13 +59,47 @@ export namespace Core{
 			glfwPollEvents();
 		}
 
+		[[nodiscard]] VkSurfaceKHR createSurface(VkInstance instance) const{
+			VkSurfaceKHR surface{};
+			if(glfwCreateWindowSurface(instance, handle, nullptr, &surface) != VK_SUCCESS){
+				throw std::runtime_error("Failed to create window surface!");
+			}
+
+			return surface;
+		}
+
 		[[nodiscard]] GLFWwindow* getHandle() const{ return handle; }
 
 		[[nodiscard]] Geom::Vector2D<int> getSize() const{ return size; }
 
-	private:
-		void updateSize(){
-			glfwGetWindowSize(handle, &size.x, &size.y);
+		void resize(const int w, const int h){
+			if(w == size.x && h == size.y)return;
+			size.set(w, h);
+			eventManager.fire(ResizeEvent{size});
 		}
+
+		Window(const Window& other);
+
+		Window(Window&& other) noexcept
+			: eventManager{std::move(other.eventManager)},
+			  handle{other.handle},
+			  size{std::move(other.size)}{
+			other.handle = nullptr;
+		}
+
+		Window& operator=(const Window& other);
+
+		Window& operator=(Window&& other) noexcept{
+			if(this == &other) return *this;
+			eventManager = std::move(other.eventManager);
+			handle = other.handle;
+			size = std::move(other.size);
+			other.handle = nullptr;
+			return *this;
+		}
+
+	private:
+		GLFWwindow* handle{};
+		Geom::Vector2D<int> size{};
 	};
 }

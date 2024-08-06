@@ -35,6 +35,5 @@ int main(){
 
 	vkDeviceWaitIdle(Core::vulkanManager->device);
 
-
 	Core::terminate();
 }

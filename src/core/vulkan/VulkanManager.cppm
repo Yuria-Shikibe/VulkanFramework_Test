@@ -14,84 +14,14 @@ import Core.Vulkan.Image;
 import Core.Vulkan.Buffer;
 import std;
 
-import Core.Vulkan.Instance;
+import Core.Vulkan.Core;
 import Core.Vulkan.Validation;
+import Core.Vulkan.SwapChain;
+
 
 export namespace Core::Vulkan{
 	constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-	struct QueueFamilyIndices{
-		static constexpr auto InvalidFamily = std::numeric_limits<std::uint32_t>::max();
-		std::uint32_t graphicsFamily = InvalidFamily;
-		std::uint32_t presentFamily = InvalidFamily;
-
-		[[nodiscard]] constexpr bool isComplete() const noexcept{
-			return graphicsFamily != InvalidFamily && presentFamily != InvalidFamily;
-		}
-	};
-
-	QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface){
-		QueueFamilyIndices indices;
-
-		std::uint32_t queueFamilyCount = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-		std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-
-		for(const auto& [index, queueFamily] : queueFamilies | std::views::enumerate){
-			VkBool32 presentSupport = false;
-			vkGetPhysicalDeviceSurfaceSupportKHR(device, index, surface, &presentSupport);
-
-			if(queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT){
-				indices.graphicsFamily = static_cast<int>(index);
-			}
-
-			if(queueFamily.queueCount > 0 && presentSupport){
-				indices.presentFamily = index;
-			}
-
-
-			if(indices.isComplete()){
-				break;
-			}
-		}
-
-
-		return indices;
-	}
-
-	struct SwapChainInfo{
-		VkSurfaceCapabilitiesKHR capabilities{};
-		std::vector<VkSurfaceFormatKHR> formats{};
-		std::vector<VkPresentModeKHR> presentModes{};
-	};
-
-	SwapChainInfo querySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface){
-		SwapChainInfo details{};
-
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
-
-		std::uint32_t formatCount{};
-		vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, nullptr);
-
-		if(formatCount != 0){
-			details.formats.resize(formatCount);
-			vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface, &formatCount, details.formats.data());
-		}
-
-		std::uint32_t presentModeCount;
-		vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, nullptr);
-
-		if(presentModeCount != 0){
-			details.presentModes.resize(presentModeCount);
-			vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface, &presentModeCount, details.presentModes.data());
-		}
-
-
-		return details;
-	}
 
 	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats){
 		static constexpr VkFormat TARGET_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
@@ -128,7 +58,7 @@ export namespace Core::Vulkan{
 
 	class VulkanManager{
 	public:
-		[[nodiscard]] explicit VulkanManager(GLFWwindow* window) : window{window}{
+		[[nodiscard]] explicit VulkanManager(Window* window){
 			initVulkan(window);
 		}
 
@@ -142,16 +72,7 @@ export namespace Core::Vulkan{
 
 		VkCore vkCore{};
 
-		PhysicalDevice physicalDevice{}; // = VK_NULL_HANDLE;
-
-
-		VkDevice device{};
-
-		VkQueue graphicsQueue{};
-		VkQueue presentQueue{};
-
-		GLFWwindow* window;
-		VkSurfaceKHR surface{};
+		SwapChain swapChainObj{};
 		VkSwapchainKHR swapChain{};
 		std::vector<VkImage> swapChainImages{};
 		std::vector<VkImageView> swapChainImageViews{};
@@ -159,6 +80,10 @@ export namespace Core::Vulkan{
 		VkExtent2D swapChainExtent{};
 		std::vector<VkFramebuffer> swapChainFramebuffers{};
 
+
+		VkDevice device{};
+		VkQueue graphicsQueue{};
+		VkQueue presentQueue{};
 
 		VkRenderPass renderPass{};
 		VkPipelineLayout pipelineLayout{};
@@ -290,14 +215,14 @@ export namespace Core::Vulkan{
 
 
 	private:
-		void initVulkan(GLFWwindow* window){
-			// vkCreateInstance()
+		void initVulkan(Window* window){
+			vkCore.init();
 
-			createInstance();
+			swapChainObj.attachWindow(window);
+			swapChainObj.createSurface(vkCore.instance);
 
-			initWindow(window);
+			vkCore.selectPhysicalDevice(swapChainObj.getSurface());
 
-			selectPhysicalDevice();
 			createLogicalDevice();
 
 			createSwapChain();
@@ -312,10 +237,10 @@ export namespace Core::Vulkan{
 
 			createCommandPool();
 
-			vertexBuffer = createVertexBuffer(physicalDevice.device, device, commandPool, graphicsQueue);
-			indexBuffer = createIndexBuffer(physicalDevice.device, device, commandPool, graphicsQueue);
+			vertexBuffer = createVertexBuffer(vkCore.selectedDevice, device, commandPool, graphicsQueue);
+			indexBuffer = createIndexBuffer(vkCore.selectedDevice, device, commandPool, graphicsQueue);
 
-			createTextureImage(physicalDevice, commandPool, device, graphicsQueue, textureImage, textureImageMemory, mipLevels);
+			createTextureImage(vkCore.selectedDevice, commandPool, device, graphicsQueue, textureImage, textureImageMemory, mipLevels);
 			textureImageView = createImageView(device, textureImage, swapChainImageFormat, mipLevels);
 			textureSampler = createTextureSampler(device, mipLevels);
 
@@ -422,7 +347,7 @@ export namespace Core::Vulkan{
 			for (auto& buffer : uniformBuffers) {
 
 				buffer = DataBuffer{
-					physicalDevice, device, bufferSize,
+					vkCore.selectedDevice, device, bufferSize,
 					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 				};
@@ -432,7 +357,7 @@ export namespace Core::Vulkan{
 		void recreateSwapChain() {
 			int width = 0, height = 0;
 			while (width == 0 || height == 0) {
-				glfwGetFramebufferSize(window, &width, &height);
+				glfwGetFramebufferSize(swapChainObj.getTargetWindow()->getHandle(), &width, &height);
 				glfwWaitEvents();
 			}
 
@@ -475,7 +400,7 @@ export namespace Core::Vulkan{
 				return capabilities.currentExtent;
 			} else{
 				int width, height;
-				glfwGetFramebufferSize(window, &width, &height);
+				glfwGetFramebufferSize(swapChainObj.getTargetWindow()->getHandle(), &width, &height);
 
 				VkExtent2D actualExtent = {
 					static_cast<std::uint32_t>(width),
@@ -571,7 +496,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createCommandPool(){
-			QueueFamilyIndices queueFamilyIndices = findQueueFamilies(physicalDevice.device, surface);
+			QueueFamilyIndices queueFamilyIndices(vkCore.selectedDevice, swapChainObj.getSurface());
 
 			VkCommandPoolCreateInfo poolInfo = {};
 			poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -761,30 +686,8 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		bool isPhysicalDeviceValid(VkPhysicalDevice device) const{
-			const QueueFamilyIndices indices = findQueueFamilies(device, surface);
-
-			const bool extensionsSupported = checkDeviceExtensionSupport(device);
-
-			bool swapChainAdequate = false;
-			if(extensionsSupported){
-				const SwapChainInfo swapChainSupport = querySwapChainSupport(device, surface);
-				swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-			}
-
-			bool featuresMeet = PhysicalDevice{device}.meetFeatures(&VkPhysicalDeviceFeatures::samplerAnisotropy);
-
-			return indices.isComplete() && extensionsSupported && swapChainAdequate && featuresMeet;
-		}
-
-		void initWindow(GLFWwindow* window){
-			if(glfwCreateWindowSurface(vkCore.instance, window, nullptr, &surface) != VK_SUCCESS){
-				throw std::runtime_error("failed to create window surface!");
-			}
-		}
-
 		void createLogicalDevice(){
-			const QueueFamilyIndices indices = findQueueFamilies(physicalDevice.device, surface);
+			const QueueFamilyIndices indices(vkCore.selectedDevice, swapChainObj.getSurface());
 
 
 			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
@@ -830,7 +733,7 @@ export namespace Core::Vulkan{
 				createInfo.enabledLayerCount = 0;
 			}
 
-			if(vkCreateDevice(physicalDevice.device, &createInfo, nullptr, &device) != VK_SUCCESS){
+			if(vkCreateDevice(vkCore.selectedDevice, &createInfo, nullptr, &device) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create logical device!");
 			}
 
@@ -838,51 +741,9 @@ export namespace Core::Vulkan{
 			vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
 		}
 
-		void createInstance(){
-			vkCore.init();
-		}
-
-		void selectPhysicalDevice(){
-			std::uint32_t deviceCount = 0;
-			vkEnumeratePhysicalDevices(vkCore.instance, &deviceCount, nullptr);
-
-			if(deviceCount == 0){
-				throw std::runtime_error("Failed to find GPUs with Vulkan support!");
-			}
-
-			std::vector<VkPhysicalDevice> devices(deviceCount);
-			vkEnumeratePhysicalDevices(vkCore.instance, &deviceCount, devices.data());
-
-			// Use an ordered map to automatically sort candidates by increasing score
-			std::multimap<std::uint32_t, PhysicalDevice, std::greater<std::uint32_t>> candidates;
-
-			for(const auto& device : devices | std::ranges::views::transform([](auto& device){
-				return PhysicalDevice{device};
-			})){
-				auto score = device.rateDeviceSuitability();
-				candidates.insert(std::make_pair(score, device));
-			}
-
-			// Check if the best candidate is suitable at all
-			for(const auto& device : candidates
-			    | std::views::filter(
-				    [this](const decltype(candidates)::value_type& item){
-					    return item.first && isPhysicalDeviceValid(item.second.device);
-				    })
-			    | std::views::values){
-				physicalDevice = device;
-				break;
-			}
-
-			if(!physicalDevice){
-				throw std::runtime_error("Failed to find a suitable GPU!");
-			} else{
-				std::println("Selected Physical Device: {}", physicalDevice.getName());
-			}
-		}
 
 		void createSwapChain(){
-			const SwapChainInfo swapChainSupport = querySwapChainSupport(physicalDevice.device, surface);
+			const SwapChainInfo swapChainSupport(vkCore.selectedDevice, swapChainObj.getSurface());
 
 			const VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
 			const VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
@@ -898,7 +759,7 @@ export namespace Core::Vulkan{
 					.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
 					// .pNext = ,
 					// .flags = ,
-					.surface = surface,
+					.surface = swapChainObj.getSurface(),
 					.minImageCount = imageCount,
 					.imageFormat = surfaceFormat.format,
 					.imageColorSpace = surfaceFormat.colorSpace,
@@ -915,7 +776,7 @@ export namespace Core::Vulkan{
 					// .oldSwapchain =
 				};
 
-			const QueueFamilyIndices indices = findQueueFamilies(physicalDevice.device, surface);
+			const QueueFamilyIndices indices(vkCore.selectedDevice, swapChainObj.getSurface());
 			const std::array queueFamilyIndices{indices.graphicsFamily, indices.presentFamily};
 
 			if(indices.graphicsFamily != indices.presentFamily){
@@ -1002,9 +863,8 @@ export namespace Core::Vulkan{
 			vkDestroyCommandPool(device, commandPool, nullptr);
 
 			vkDestroyDevice(device, nullptr);
-
-			vkDestroySurfaceKHR(vkCore.instance, surface, nullptr);
 		}
 
 	};
 }
+

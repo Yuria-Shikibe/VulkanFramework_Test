@@ -26,6 +26,7 @@ namespace Core::Vulkan{
 		const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 		const VkAllocationCallbacks* pAllocator,
 		VkDebugUtilsMessengerEXT* pCallback){
+
 		if(const auto func = LoadFuncPtr(instance, vkCreateDebugUtilsMessengerEXT)){
 			return func(instance, pCreateInfo, pAllocator, pCallback);
 		} else{

@@ -59,7 +59,7 @@ export namespace ext::transparent{
 		}
 
 		std::size_t operator()(const std::string& val) const noexcept {
-			static constexpr std::hash<std::string> hasher{};
+			static constexpr std::hash<std::string_view> hasher{};
 			return hasher(val);
 		}
 	};

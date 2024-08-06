@@ -10,6 +10,7 @@ import std;
 namespace Core::Vulkan::Util{
 	template <::std::size_t index, typename... Ts>
 	struct find;
+
 	template <::std::size_t index, typename T, typename... Ts>
 	struct find<index, T, Ts...>{
 		using type = typename find<index - 1, Ts...>::type;
@@ -23,24 +24,27 @@ namespace Core::Vulkan::Util{
 		using type = ::std::nullptr_t;
 	};
 
+	template <typename T>
+	struct RstPair{
+		std::vector<T> Result{};
+		VkResult Code{VK_SUCCESS};
+	};
 
 	template <typename... Ts>
 	using get_last_t = typename find<sizeof...(Ts) - 1u, Ts...>::type;
 	template <::std::size_t drop, typename... Ts>
 	using get_last_n_t = typename find<sizeof...(Ts) - 1u - drop, Ts...>::type;
-
+	//
 	export
 	template <typename T, typename... Prms, typename... Args>
 	[[nodiscard]] auto enumerate(T (*fn)(Prms...), Args... args)
-		requires::std::invocable<T(*)(Prms...), Args..., ::uint32_t*, get_last_t<Prms...>>
+		requires::std::invocable<T(*)(Prms...), Args..., ::std::uint32_t*, get_last_t<Prms...>>
 	{
 		assert(fn/*,"Invoke function cannot be empty."*/);
-		using result_t = ::std::remove_pointer_t<get_last_t<Prms...>>;
-		if constexpr(!::std::is_void_v<T>){
-			struct{
-				::std::vector<result_t> Result{};
-				::VkResult Code{VK_SUCCESS};
-			} result;
+
+		if constexpr(!std::is_void_v<T>){
+
+			RstPair<std::remove_pointer_t<get_last_t<Prms...>>> result{};
 
 			::uint32_t nums;
 			if((result.Code = fn(args..., &nums, nullptr)) != VK_SUCCESS) return result;
@@ -48,7 +52,7 @@ namespace Core::Vulkan::Util{
 			result.Code = fn(args..., &nums, result.Result.data());
 			return result;
 		} else{
-			::std::vector<result_t> result{};
+			::std::vector<std::remove_pointer_t<get_last_t<Prms...>>> result{};
 
 			::uint32_t nums;
 			fn(args..., &nums, nullptr);
@@ -60,11 +64,12 @@ namespace Core::Vulkan::Util{
 		}
 	}
 
+	/*
 	export
 	template <typename T, typename... Prms, typename... Args>
 	[[nodiscard]] auto Invoke(T (*fn)(Prms...), Args... args) noexcept
 		requires::std::invocable<T(*)(Prms...), Args..., get_last_t<Prms...>>{
-		assert(fn/*, "Invoke function cannot be empty."*/);
+		assert(fn/*, "Invoke function cannot be empty."#1#);
 		using result_t = ::std::remove_pointer_t<get_last_t<Prms...>>;
 		if constexpr(!::std::is_void_v<T>){
 			struct{
@@ -123,5 +128,5 @@ namespace Core::Vulkan::Util{
 		::std::vector<::VkDescriptorSet> result{info->descriptorSetCount};
 		auto code = fn(device, info, result.data());
 		return result_t{::std::move(result), code};
-	}
+	}*/
 }

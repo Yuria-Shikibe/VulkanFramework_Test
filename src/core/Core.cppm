@@ -13,11 +13,13 @@ export namespace Core{
 		GLFW::init();
 
 		window = new Window{};
-		vulkanManager = new Vulkan::VulkanManager{window->handle};
+		vulkanManager = new Vulkan::VulkanManager{window};
 	}
 
 	void terminate(){
 		delete vulkanManager;
 		delete window;
+
+		GLFW::terminate();
 	}
 }
