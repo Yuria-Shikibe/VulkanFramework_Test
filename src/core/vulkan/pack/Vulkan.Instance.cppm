@@ -40,9 +40,6 @@ namespace Core::Vulkan{
 		.apiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
 	};
 
-	export constexpr std::array UsedValidationLayers{
-		"VK_LAYER_KHRONOS_validation"
-	};
 
 	[[nodiscard]] bool checkValidationLayerSupport(const decltype(UsedValidationLayers)& validationLayers = UsedValidationLayers){
 		auto [availableLayers, rst] = Util::enumerate(vkEnumerateInstanceLayerProperties);

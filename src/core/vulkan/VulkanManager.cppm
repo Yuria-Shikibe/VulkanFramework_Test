@@ -17,6 +17,7 @@ import std;
 import Core.Vulkan.Core;
 import Core.Vulkan.Validation;
 import Core.Vulkan.SwapChain;
+import Core.Vulkan.LogicalDevice;
 
 
 export namespace Core::Vulkan{
@@ -66,26 +67,12 @@ export namespace Core::Vulkan{
 			cleanup();
 		}
 
-		const std::vector<const char*> deviceExtensions = {
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME
-		};
 
-		VkCore vkCore{};
+		VkPhysicalContext vkCore{};
+		LogicalDevice device{};
 
-		SwapChain swapChainObj{};
-		VkSwapchainKHR swapChain{};
-		std::vector<VkImage> swapChainImages{};
-		std::vector<VkImageView> swapChainImageViews{};
-		VkFormat swapChainImageFormat{};
-		VkExtent2D swapChainExtent{};
-		std::vector<VkFramebuffer> swapChainFramebuffers{};
+		SwapChain swapChain{};
 
-
-		VkDevice device{};
-		VkQueue graphicsQueue{};
-		VkQueue presentQueue{};
-
-		VkRenderPass renderPass{};
 		VkPipelineLayout pipelineLayout{};
 
 		VkDescriptorSetLayout descriptorSetLayout{};
@@ -117,23 +104,6 @@ export namespace Core::Vulkan{
 		Sampler textureSampler{};
 
 		bool framebufferResized = false;
-
-
-		[[nodiscard]] bool checkDeviceExtensionSupport(VkPhysicalDevice device) const{
-			std::uint32_t extensionCount;
-			vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-			std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-			vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-			std::unordered_set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-
-			for(const auto& extension : availableExtensions){
-				requiredExtensions.erase(extension.extensionName);
-			}
-
-			return requiredExtensions.empty();
-		}
 
 		void updateUniformBuffer(const std::uint32_t currentImage) {
 			static auto startTime = std::chrono::high_resolution_clock::now();
@@ -184,7 +154,7 @@ export namespace Core::Vulkan{
 
 			vkResetFences(device, 1, &inFlightFences[currentFrame]);
 
-			if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
+			if (vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
 				throw std::runtime_error("failed to submit draw command buffer!");
 			}
 
@@ -194,14 +164,14 @@ export namespace Core::Vulkan{
 			presentInfo.waitSemaphoreCount = signalSemaphores.size();
 			presentInfo.pWaitSemaphores = signalSemaphores.data();
 
-			const std::array swapChains{swapChain};
+			const std::array swapChains{VkSwapchainKHR(swapChain)};
 			presentInfo.swapchainCount = swapChains.size();
 			presentInfo.pSwapchains = swapChains.data();
 			presentInfo.pImageIndices = &imageIndex;
 			presentInfo.pResults = nullptr; // Optional
 
 
-			result = vkQueuePresentKHR(presentQueue, &presentInfo);
+			result = vkQueuePresentKHR(device.getPresentQueue(), &presentInfo);
 
 			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
 				framebufferResized = false;
@@ -218,30 +188,25 @@ export namespace Core::Vulkan{
 		void initVulkan(Window* window){
 			vkCore.init();
 
-			swapChainObj.attachWindow(window);
-			swapChainObj.createSurface(vkCore.instance);
+			swapChain.attachWindow(window);
+			swapChain.createSurface(vkCore.instance);
 
-			vkCore.selectPhysicalDevice(swapChainObj.getSurface());
+			vkCore.selectPhysicalDevice(swapChain.getSurface());
+			device = LogicalDevice{vkCore.selectedPhysicalDevice, vkCore.currentQueueFamilyIndices};
 
-			createLogicalDevice();
-
-			createSwapChain();
-			createImageViews();
-
-			createRenderPass();
+			swapChain.createSwapChain(vkCore.selectedPhysicalDevice, device);
 
 			descriptorSetLayout = createDescriptorSetLayout(device);
-			createGraphicsPipeline();
 
-			createSwapChainFramebuffers();
+			createGraphicsPipeline();
 
 			createCommandPool();
 
-			vertexBuffer = createVertexBuffer(vkCore.selectedDevice, device, commandPool, graphicsQueue);
-			indexBuffer = createIndexBuffer(vkCore.selectedDevice, device, commandPool, graphicsQueue);
+			vertexBuffer = createVertexBuffer(vkCore.selectedPhysicalDevice, device, commandPool, device.getGraphicsQueue());
+			indexBuffer = createIndexBuffer(vkCore.selectedPhysicalDevice, device, commandPool, device.getGraphicsQueue());
 
-			createTextureImage(vkCore.selectedDevice, commandPool, device, graphicsQueue, textureImage, textureImageMemory, mipLevels);
-			textureImageView = createImageView(device, textureImage, swapChainImageFormat, mipLevels);
+			createTextureImage(vkCore.selectedPhysicalDevice, commandPool, device, device.getGraphicsQueue(), textureImage, textureImageMemory, mipLevels);
+			textureImageView = createImageView(device, textureImage, swapChain.getFormat(), mipLevels);
 			textureSampler = createTextureSampler(device, mipLevels);
 
 			createDescriptorPool();
@@ -255,19 +220,19 @@ export namespace Core::Vulkan{
 		}
 
 		void createDescriptorSets() {
-			std::vector<VkDescriptorSetLayout> layouts(swapChainImages.size(), descriptorSetLayout);
+			std::vector<VkDescriptorSetLayout> layouts(swapChain.size(), descriptorSetLayout);
 			VkDescriptorSetAllocateInfo allocInfo{};
 			allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 			allocInfo.descriptorPool = descriptorPool;
-			allocInfo.descriptorSetCount = swapChainImages.size();
+			allocInfo.descriptorSetCount = swapChain.size();
 			allocInfo.pSetLayouts = layouts.data();
 
-			descriptorSets.resize(swapChainImages.size());
+			descriptorSets.resize(swapChain.size());
 			if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS) {
 				throw std::runtime_error("failed to allocate descriptor sets!");
 			}
 
-			for (std::size_t i = 0; i < swapChainImages.size(); i++) {
+			for (std::size_t i = 0; i < swapChain.size(); i++) {
 				VkDescriptorBufferInfo bufferInfo = {};
 				bufferInfo.buffer = uniformBuffers[i];
 				bufferInfo.offset = 0;
@@ -301,7 +266,7 @@ export namespace Core::Vulkan{
 			}
 
 
-			for (size_t i = 0; i < swapChainImages.size(); i++) {
+			for (size_t i = 0; i < swapChain.size(); i++) {
 				VkDescriptorBufferInfo bufferInfo{};
 				bufferInfo.buffer = uniformBuffers[i];
 				bufferInfo.offset = 0;
@@ -323,13 +288,13 @@ export namespace Core::Vulkan{
 		void createDescriptorPool() {
 
 			std::array<VkDescriptorPoolSize, 2> poolSizes{};
-			poolSizes[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, static_cast<std::uint32_t>(swapChainImages.size())};
-			poolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, static_cast<std::uint32_t>(swapChainImages.size())};
+			poolSizes[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, swapChain.size()};
+			poolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, swapChain.size()};
 
 			VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
 			poolInfo.poolSizeCount = poolSizes.size();
 			poolInfo.pPoolSizes = poolSizes.data();
-			poolInfo.maxSets = swapChainImages.size();
+			poolInfo.maxSets = swapChain.size();
 
 
 			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
@@ -342,12 +307,12 @@ export namespace Core::Vulkan{
 		void createUniformBuffer() {
 			VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
-			uniformBuffers.resize(swapChainImages.size());
+			uniformBuffers.resize(swapChain.size());
 
 			for (auto& buffer : uniformBuffers) {
 
 				buffer = DataBuffer{
-					vkCore.selectedDevice, device, bufferSize,
+					vkCore.selectedPhysicalDevice, device, bufferSize,
 					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
 				};
@@ -355,9 +320,9 @@ export namespace Core::Vulkan{
 		}
 
 		void recreateSwapChain() {
-			int width = 0, height = 0;
+			int width = 0, height = 0; //Block when minimal
 			while (width == 0 || height == 0) {
-				glfwGetFramebufferSize(swapChainObj.getTargetWindow()->getHandle(), &width, &height);
+				glfwGetFramebufferSize(swapChain.getTargetWindow()->getHandle(), &width, &height);
 				glfwWaitEvents();
 			}
 
@@ -365,12 +330,9 @@ export namespace Core::Vulkan{
 
 			cleanupSwapChain();
 
+			swapChain.createSwapChain(vkCore.selectedPhysicalDevice, device);
 
-			createSwapChain();
-			createImageViews();
-			createRenderPass();
 			createGraphicsPipeline();
-			createSwapChainFramebuffers();
 			createCommandBuffers();
 		}
 
@@ -400,7 +362,7 @@ export namespace Core::Vulkan{
 				return capabilities.currentExtent;
 			} else{
 				int width, height;
-				glfwGetFramebufferSize(swapChainObj.getTargetWindow()->getHandle(), &width, &height);
+				glfwGetFramebufferSize(swapChain.getTargetWindow()->getHandle(), &width, &height);
 
 				VkExtent2D actualExtent = {
 					static_cast<std::uint32_t>(width),
@@ -417,7 +379,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createCommandBuffers(){
-			commandBuffers.resize(swapChainFramebuffers.size());
+			commandBuffers.resize(swapChain.size());
 
 			VkCommandBufferAllocateInfo allocInfo = {};
 			allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -441,11 +403,11 @@ export namespace Core::Vulkan{
 
 				VkRenderPassBeginInfo renderPassInfo = {};
 				renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-				renderPassInfo.renderPass = renderPass;
-				renderPassInfo.framebuffer = swapChainFramebuffers[i];
+				renderPassInfo.renderPass = swapChain.getRenderPass();
+				renderPassInfo.framebuffer = swapChain.getFrameBuffers()[i];
 
 				renderPassInfo.renderArea.offset = {0, 0};
-				renderPassInfo.renderArea.extent = swapChainExtent;
+				renderPassInfo.renderArea.extent = swapChain.getExtent();
 
 				VkClearValue clearColor = {0.4f, 0.4f, 0.4f, 1.0f};
 				renderPassInfo.clearValueCount = 1;
@@ -462,15 +424,15 @@ export namespace Core::Vulkan{
 				VkViewport viewport{};
 				viewport.x = 0.0f;
 				viewport.y = 0.0f;
-				viewport.width = static_cast<float>(swapChainExtent.width);
-				viewport.height = static_cast<float>(swapChainExtent.height);
+				viewport.width = swapChain.getExtent().width;
+				viewport.height = swapChain.getExtent().height;
 				viewport.minDepth = 0.0f;
 				viewport.maxDepth = 1.0f;
 				vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
 
 				VkRect2D scissor{};
 				scissor.offset = {0, 0};
-				scissor.extent = swapChainExtent;
+				scissor.extent = swapChain.getExtent();
 				vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
 				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
@@ -496,7 +458,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createCommandPool(){
-			QueueFamilyIndices queueFamilyIndices(vkCore.selectedDevice, swapChainObj.getSurface());
+			QueueFamilyIndices queueFamilyIndices(vkCore.selectedPhysicalDevice, swapChain.getSurface());
 
 			VkCommandPoolCreateInfo poolInfo = {};
 			poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -505,26 +467,6 @@ export namespace Core::Vulkan{
 
 			if(vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create command pool!");
-			}
-		}
-
-		void createSwapChainFramebuffers(){
-			swapChainFramebuffers.resize(swapChainImageViews.size());
-			for(const auto& [i, view] : swapChainImageViews | std::views::enumerate){
-				std::array attachments{view};
-
-				VkFramebufferCreateInfo framebufferInfo{};
-				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-				framebufferInfo.renderPass = renderPass;
-				framebufferInfo.attachmentCount = attachments.size();
-				framebufferInfo.pAttachments = attachments.data();
-				framebufferInfo.width = swapChainExtent.width;
-				framebufferInfo.height = swapChainExtent.height;
-				framebufferInfo.layers = 1;
-
-				if(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS){
-					throw std::runtime_error("failed to create framebuffer!");
-				}
 			}
 		}
 
@@ -634,7 +576,7 @@ export namespace Core::Vulkan{
 			pipelineInfo.pColorBlendState = &colorBlending;
 			pipelineInfo.pDynamicState = &dynamicState;
 			pipelineInfo.layout = pipelineLayout;
-			pipelineInfo.renderPass = renderPass;
+			pipelineInfo.renderPass = swapChain.getRenderPass();
 			pipelineInfo.subpass = 0;
 			pipelineInfo.basePipelineHandle = nullptr;
 
@@ -644,202 +586,24 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createRenderPass(){
-			VkAttachmentDescription colorAttachment{};
-			colorAttachment.format = swapChainImageFormat;
-			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-			VkAttachmentReference colorAttachmentRef{};
-			colorAttachmentRef.attachment = 0;
-			colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-			VkSubpassDescription subpass{};
-			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-			subpass.colorAttachmentCount = 1;
-			subpass.pColorAttachments = &colorAttachmentRef;
-
-			VkSubpassDependency dependency{};
-			dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-			dependency.dstSubpass = 0;
-			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.srcAccessMask = 0;
-			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-			VkRenderPassCreateInfo renderPassInfo{};
-			renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-			renderPassInfo.attachmentCount = 1;
-			renderPassInfo.pAttachments = &colorAttachment;
-			renderPassInfo.subpassCount = 1;
-			renderPassInfo.pSubpasses = &subpass;
-			renderPassInfo.dependencyCount = 1;
-			renderPassInfo.pDependencies = &dependency;
-
-			if(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS){
-				throw std::runtime_error("failed to create render pass!");
-			}
-		}
-
-		void createLogicalDevice(){
-			const QueueFamilyIndices indices(vkCore.selectedDevice, swapChainObj.getSurface());
-
-
-			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-			const std::unordered_set<std::uint32_t> uniqueQueueFamilies = {
-					indices.graphicsFamily, indices.presentFamily
-				};
-
-			const float queuePriority = 1.0f;
-			for(const std::uint32_t queueFamily : uniqueQueueFamilies){
-				VkDeviceQueueCreateInfo queueCreateInfo = {};
-				queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-				queueCreateInfo.queueFamilyIndex = queueFamily;
-				queueCreateInfo.queueCount = 1;
-				queueCreateInfo.pQueuePriorities = &queuePriority;
-				queueCreateInfos.push_back(queueCreateInfo);
-			}
-
-			VkDeviceQueueCreateInfo queueCreateInfo{
-					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-					.queueFamilyIndex = indices.graphicsFamily,
-					.queueCount = 1,
-				};
-
-			queueCreateInfo.pQueuePriorities = &queuePriority;
-
-			VkPhysicalDeviceFeatures deviceFeatures = {};
-			deviceFeatures.samplerAnisotropy = true;
-
-			VkDeviceCreateInfo createInfo = {};
-			createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-			createInfo.pEnabledFeatures = &deviceFeatures;
-
-			createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueCreateInfos.size());
-			createInfo.pQueueCreateInfos = queueCreateInfos.data();
-
-			createInfo.enabledExtensionCount = static_cast<std::uint32_t>(deviceExtensions.size());
-			createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
-			if constexpr(EnableValidationLayers){
-				createInfo.enabledLayerCount = static_cast<std::uint32_t>(UsedValidationLayers.size());
-				createInfo.ppEnabledLayerNames = UsedValidationLayers.data();
-			} else{
-				createInfo.enabledLayerCount = 0;
-			}
-
-			if(vkCreateDevice(vkCore.selectedDevice, &createInfo, nullptr, &device) != VK_SUCCESS){
-				throw std::runtime_error("Failed to create logical device!");
-			}
-
-			vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
-			vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
-		}
-
-
-		void createSwapChain(){
-			const SwapChainInfo swapChainSupport(vkCore.selectedDevice, swapChainObj.getSurface());
-
-			const VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
-			const VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
-			const VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-
-			std::uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-			if(swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.
-				maxImageCount){
-				imageCount = swapChainSupport.capabilities.maxImageCount;
-			}
-
-			VkSwapchainCreateInfoKHR createInfo{
-					.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-					// .pNext = ,
-					// .flags = ,
-					.surface = swapChainObj.getSurface(),
-					.minImageCount = imageCount,
-					.imageFormat = surfaceFormat.format,
-					.imageColorSpace = surfaceFormat.colorSpace,
-					.imageExtent = extent,
-					.imageArrayLayers = 1,
-					.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-					// .imageSharingMode = ,
-					// .queueFamilyIndexCount = ,
-					// .pQueueFamilyIndices = ,
-					// .preTransform = ,
-					// .compositeAlpha = ,
-					// .presentMode = ,
-					// .clipped = ,
-					// .oldSwapchain =
-				};
-
-			const QueueFamilyIndices indices(vkCore.selectedDevice, swapChainObj.getSurface());
-			const std::array queueFamilyIndices{indices.graphicsFamily, indices.presentFamily};
-
-			if(indices.graphicsFamily != indices.presentFamily){
-				createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-				createInfo.queueFamilyIndexCount = 2;
-				createInfo.pQueueFamilyIndices = queueFamilyIndices.data();
-			} else{
-				createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-				createInfo.queueFamilyIndexCount = 0;     // Optional
-				createInfo.pQueueFamilyIndices = nullptr; // Optional
-			}
-
-			createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
-
-			//Set Window Alpha Blend Mode
-			createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-
-			createInfo.presentMode = presentMode;
-			createInfo.clipped = true;
-
-			createInfo.oldSwapchain = nullptr;
-
-			if(vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS){
-				throw std::runtime_error("Failed to create swap chain!");
-			}
-
-			vkGetSwapchainImagesKHR(device, swapChain, &imageCount, nullptr);
-			swapChainImages.resize(imageCount);
-			vkGetSwapchainImagesKHR(device, swapChain, &imageCount, swapChainImages.data());
-
-			swapChainImageFormat = surfaceFormat.format;
-			swapChainExtent = extent;
-		}
-
-		void createImageViews(){
-			swapChainImageViews.resize(swapChainImages.size());
-			for(const auto& [index, swapChainImage] : swapChainImages | std::ranges::views::enumerate){
-				swapChainImageViews[index] = createImageView(device, swapChainImage, swapChainImageFormat, 1);
-			}
-		}
-
-
 		void cleanupSwapChain() {
-			for (const auto& framebuffer : swapChainFramebuffers) {
-				vkDestroyFramebuffer(device, framebuffer, nullptr);
-			}
-
 			vkFreeCommandBuffers(device, commandPool,
 			static_cast<std::uint32_t>(commandBuffers.size()), commandBuffers.data());
 
 			vkDestroyPipeline(device, graphicsPipeline, nullptr);
 			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-			vkDestroyRenderPass(device, renderPass, nullptr);
 
-			for (const auto view : swapChainImageViews) {
-				vkDestroyImageView(device, view, nullptr);
-			}
-
-			vkDestroySwapchainKHR(device, swapChain, nullptr);
+			swapChain.cleanupSwapChain();
 		}
 
 		void cleanup(){
-			cleanupSwapChain();
+			vkFreeCommandBuffers(device, commandPool,
+			static_cast<std::uint32_t>(commandBuffers.size()), commandBuffers.data());
+
+			vkDestroyPipeline(device, graphicsPipeline, nullptr);
+			vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+
+			//swapChain.cleanupSwapChain();
 
 			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
@@ -861,8 +625,6 @@ export namespace Core::Vulkan{
 			}
 
 			vkDestroyCommandPool(device, commandPool, nullptr);
-
-			vkDestroyDevice(device, nullptr);
 		}
 
 	};

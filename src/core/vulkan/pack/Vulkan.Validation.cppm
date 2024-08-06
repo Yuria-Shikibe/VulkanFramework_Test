@@ -7,9 +7,12 @@ export module Core.Vulkan.Validation;
 
 import std;
 import StackTrace;
-import Core.Vulkan.Util.Invoker;
 
 namespace Core::Vulkan{
+	export constexpr std::array UsedValidationLayers{
+		"VK_LAYER_KHRONOS_validation",
+	};
+
 	VKAPI_ATTR VkBool32 VKAPI_CALL validationCallback(
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,

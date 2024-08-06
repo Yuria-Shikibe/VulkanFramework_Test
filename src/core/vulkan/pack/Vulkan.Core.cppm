@@ -5,24 +5,24 @@ module;
 export module Core.Vulkan.Core;
 
 export import Core.Vulkan.Instance;
-import Core.Vulkan.Validation;
+export import Core.Vulkan.PhysicalDevice;
 
-import Core.Vulkan.Util.Invoker;
+import Core.Vulkan.Validation;
 import Core.Vulkan.Util;
-export import Core.Vulkan.Physical;
+
 
 import ext.MetaProgramming;
-
 import std;
 
 
 export namespace Core::Vulkan{
-	class VkCore{
+	class VkPhysicalContext{
 	public:
 		Instance instance{};
 		ValidationEntry validationEntry{};
 
-		PhysicalDevice selectedDevice{};
+		PhysicalDevice selectedPhysicalDevice{};
+		QueueFamilyIndices currentQueueFamilyIndices{};
 
 		void init(){
 			instance.init();
@@ -48,21 +48,20 @@ export namespace Core::Vulkan{
 			}
 
 			// Check if the best candidate is suitable at all
-			for(const auto& device : candidates
-				| std::views::filter(
-					[&](const decltype(candidates)::value_type& item){
-						return item.first && item.second.isPhysicalDeviceValid(surface);
-					})
-				| std::views::values){
-				selectedDevice = device;
-				break;
+			for(const auto& [score, device] : candidates){
+				if(score && device.isPhysicalDeviceValid(surface)){
+					selectedPhysicalDevice = device;
+					break;
+				}
 			}
 
-			if(!selectedDevice){
+			if(!selectedPhysicalDevice){
 				throw std::runtime_error("Failed to find a suitable GPU!");
 			} else{
-				std::println("[Vulkan] Selected Physical Device: {}", selectedDevice.getName());
+				std::println("[Vulkan] On Physical Device: {}", selectedPhysicalDevice.getName());
 			}
+
+			currentQueueFamilyIndices = QueueFamilyIndices{selectedPhysicalDevice, surface};
 		}
 	};
 }

@@ -2,21 +2,23 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Core.Vulkan.Physical;
+export module Core.Vulkan.PhysicalDevice;
 
 import std;
 import Core.Vulkan.Util;
+import Core.Vulkan.SwapChainInfo;
 import ext.MetaProgramming;
 
 
 export namespace Core::Vulkan{
-	const std::vector<const char*> DeviceExtensions{
-			VK_KHR_SWAPCHAIN_EXTENSION_NAME
-		};
+	constexpr std::array DeviceExtensions{
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+	};
 
 	struct QueueFamilyIndices{
 		static constexpr auto InvalidFamily = std::numeric_limits<std::uint32_t>::max();
 
+		// 0 by default
 		std::uint32_t graphicsFamily{};
 		std::uint32_t presentFamily{};
 
@@ -54,28 +56,6 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	struct SwapChainInfo{
-		VkSurfaceCapabilitiesKHR capabilities{};
-		std::vector<VkSurfaceFormatKHR> formats{};
-		std::vector<VkPresentModeKHR> presentModes{};
-
-		[[nodiscard]] SwapChainInfo() = default;
-
-		[[nodiscard]] SwapChainInfo(VkPhysicalDevice device, VkSurfaceKHR surface){
-			vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &capabilities);
-
-			auto [formats, rst1] = Util::enumerate(vkGetPhysicalDeviceSurfaceFormatsKHR, device, surface);
-			this->formats = std::move(formats);
-
-			auto [presents, rst2] = Util::enumerate(vkGetPhysicalDeviceSurfacePresentModesKHR, device, surface);
-			this->presentModes = std::move(presents);
-		}
-
-		[[nodiscard]] bool isValid() const noexcept{
-			return !formats.empty() && !presentModes.empty();
-		}
-	};
-
 	struct PhysicalDevice{
 		VkPhysicalDevice device{}; // = VK_NULL_HANDLE;
 
@@ -100,7 +80,7 @@ export namespace Core::Vulkan{
 			return score;
 		}
 
-		[[nodiscard]] bool checkDeviceExtensionSupport(auto& requiredExtensions) const{
+		[[nodiscard]] bool checkDeviceExtensionSupport(const auto& requiredExtensions) const{
 			auto [availableExtensions, rst] = Util::enumerate(vkEnumerateDeviceExtensionProperties, device, nullptr);
 
 			return Util::checkSupport(requiredExtensions, availableExtensions, &VkExtensionProperties::extensionName);
@@ -148,7 +128,7 @@ export namespace Core::Vulkan{
 		}
 
 		bool isPhysicalDeviceValid(VkSurfaceKHR surface = nullptr) const{
-			const bool extensionsSupported = checkDeviceExtensionSupport(DeviceExtensions);
+			const bool extensionsSupported = this->checkDeviceExtensionSupport(DeviceExtensions);
 
 			const bool featuresMeet = meetFeatures(&VkPhysicalDeviceFeatures::samplerAnisotropy);
 
