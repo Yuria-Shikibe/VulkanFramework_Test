@@ -212,7 +212,7 @@ export namespace Core::Vulkan{
 	) {
 		Graphic::Pixmap pixmap{OS::File{R"(D:\projects\vulkan_framework\properties\texture\src.png)"}};
 
-		Vulkan::DataBuffer buffer(physicalDevice, device, pixmap.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		Vulkan::ExclusiveBuffer buffer(physicalDevice, device, pixmap.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 		void* data = buffer.map();
 		std::memcpy(data, pixmap.data(), pixmap.size());

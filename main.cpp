@@ -8,8 +8,10 @@ import Core.Vulkan.Instance;
 
 import Core;
 
+import OS.File;
 
 int main(){
+
 	Core::Vulkan::ShaderCompileTask{
 		Core::Vulkan::DefaultCompilerPath,
 		Core::Vulkan::DefaultSrcPath / "test.frag",
@@ -36,4 +38,9 @@ int main(){
 	vkDeviceWaitIdle(Core::vulkanManager->device);
 
 	Core::terminate();
+	Core::GLFW::terminate();
+	Core::GLFW::terminate();
+	Core::GLFW::terminate();
+	Core::GLFW::terminate();
+	Core::GLFW::terminate();
 }

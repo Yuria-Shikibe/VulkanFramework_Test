@@ -7,6 +7,7 @@ module;
 export module Core.Vulkan.Manager;
 
 import ext.MetaProgramming;
+
 import Core.Window;
 import Core.Vulkan.Uniform;
 import Core.Vulkan.Shader;
@@ -17,45 +18,14 @@ import std;
 import Core.Vulkan.Core;
 import Core.Vulkan.Validation;
 import Core.Vulkan.SwapChain;
+import Core.Vulkan.PhysicalDevice;
 import Core.Vulkan.LogicalDevice;
+import Core.Vulkan.DescriptorSet;
 
 
 export namespace Core::Vulkan{
 	constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
-
-	VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats){
-		static constexpr VkFormat TARGET_FORMAT = VK_FORMAT_R8G8B8A8_UNORM;
-		static constexpr VkColorSpaceKHR TARGET_VK_COLOR_SPACE = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-		if(availableFormats.size() == 1 && availableFormats.front().format == VK_FORMAT_UNDEFINED){
-			return {TARGET_FORMAT, TARGET_VK_COLOR_SPACE};
-		}
-
-		for(const auto& availableFormat : availableFormats){
-			if(availableFormat.format == TARGET_FORMAT && availableFormat.colorSpace == TARGET_VK_COLOR_SPACE){
-				return availableFormat;
-			}
-		}
-
-		return availableFormats.front();
-	}
-
-	VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes){
-		static constexpr VkPresentModeKHR TARGET_MODE = VK_PRESENT_MODE_MAILBOX_KHR;
-
-		VkPresentModeKHR fallBack = VK_PRESENT_MODE_FIFO_KHR;
-
-		for(const auto& availablePresentMode : availablePresentModes){
-			if(availablePresentMode == TARGET_MODE){
-				return availablePresentMode;
-			}
-
-			if(availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR){
-				fallBack = availablePresentMode;
-			}
-		}
-		return fallBack;
-	}
 
 	class VulkanManager{
 	public:
@@ -68,31 +38,29 @@ export namespace Core::Vulkan{
 		}
 
 
-		VkPhysicalContext vkCore{};
+		PhysicalContext vkCore{};
 		LogicalDevice device{};
 
 		SwapChain swapChain{};
 
 		VkPipelineLayout pipelineLayout{};
 
-		VkDescriptorSetLayout descriptorSetLayout{};
-		VkPipeline graphicsPipeline{};
+		DescriptorSetLayout descriptorSetLayout{};
 
+		VkPipeline graphicsPipeline{};
 
 		VkCommandPool commandPool{};
 		std::vector<VkCommandBuffer> commandBuffers{};
 
-
 		std::vector<VkFence> inFlightFences{};
-		// std::vector<VkFence> imagesInFlight{};
 
 		std::size_t currentFrame = 0;
 		std::vector<VkSemaphore> imageAvailableSemaphores;
 		std::vector<VkSemaphore> renderFinishedSemaphores;
 
-		DataBuffer vertexBuffer{};
-		DataBuffer indexBuffer{};
-		std::vector<DataBuffer> uniformBuffers{};
+		ExclusiveBuffer vertexBuffer{};
+		ExclusiveBuffer indexBuffer{};
+		std::vector<ExclusiveBuffer> uniformBuffers{};
 
 		VkDescriptorPool descriptorPool{};
 		std::vector<VkDescriptorSet> descriptorSets{};
@@ -196,7 +164,11 @@ export namespace Core::Vulkan{
 
 			swapChain.createSwapChain(vkCore.selectedPhysicalDevice, device);
 
-			descriptorSetLayout = createDescriptorSetLayout(device);
+			DescriptorSetLayoutBuilder builder{};
+			builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+			builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+
+			descriptorSetLayout = DescriptorSetLayout{device, builder.exportBindings()};
 
 			createGraphicsPipeline();
 
@@ -311,7 +283,7 @@ export namespace Core::Vulkan{
 
 			for (auto& buffer : uniformBuffers) {
 
-				buffer = DataBuffer{
+				buffer = ExclusiveBuffer{
 					vkCore.selectedPhysicalDevice, device, bufferSize,
 					VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
@@ -354,27 +326,6 @@ export namespace Core::Vulkan{
 					vkCreateFence(device, &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS){
 					throw std::runtime_error("failed to create synchronization objects for a frame!");
 				}
-			}
-		}
-
-		VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities){
-			if(capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()){
-				return capabilities.currentExtent;
-			} else{
-				int width, height;
-				glfwGetFramebufferSize(swapChain.getTargetWindow()->getHandle(), &width, &height);
-
-				VkExtent2D actualExtent = {
-					static_cast<std::uint32_t>(width),
-					static_cast<std::uint32_t>(height)
-				};
-
-				actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width,
-												capabilities.maxImageExtent.width);
-				actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height,
-												 capabilities.maxImageExtent.height);
-
-				return actualExtent;
 			}
 		}
 
@@ -458,11 +409,10 @@ export namespace Core::Vulkan{
 		}
 
 		void createCommandPool(){
-			QueueFamilyIndices queueFamilyIndices(vkCore.selectedPhysicalDevice, swapChain.getSurface());
 
 			VkCommandPoolCreateInfo poolInfo = {};
 			poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-			poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily;
+			poolInfo.queueFamilyIndex = vkCore.currentQueueFamilyIndices.graphicsFamily;
 			poolInfo.flags = 0; // Optional
 
 			if(vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS){
@@ -474,23 +424,15 @@ export namespace Core::Vulkan{
 			ShaderModule vertShaderModule{
 					device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
 				};
+
 			ShaderModule fragShaderModule{
 					device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
 				};
 
-			VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
-			vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-			vertShaderStageInfo.module = vertShaderModule;
-			vertShaderStageInfo.pName = "main";
+			auto vertShaderStageInfo = vertShaderModule.createInfo();
+			auto fragShaderStageInfo = fragShaderModule.createInfo();
 
-			VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
-			fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-			fragShaderStageInfo.module = fragShaderModule;
-			fragShaderStageInfo.pName = "main";
-
-			VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+			std::array shaderStages{vertShaderStageInfo, fragShaderStageInfo};
 
 			VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 
@@ -502,18 +444,15 @@ export namespace Core::Vulkan{
 			vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
 			vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
 
-			VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
-			inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			VkPipelineInputAssemblyStateCreateInfo inputAssembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
 			inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			inputAssembly.primitiveRestartEnable = VK_FALSE;
+			inputAssembly.primitiveRestartEnable = false;
 
-			VkPipelineViewportStateCreateInfo viewportState{};
-			viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			VkPipelineViewportStateCreateInfo viewportState{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
 			viewportState.viewportCount = 1;
 			viewportState.scissorCount = 1;
 
-			VkPipelineRasterizationStateCreateInfo rasterizer{};
-			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			VkPipelineRasterizationStateCreateInfo rasterizer{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
 			rasterizer.depthClampEnable = VK_FALSE;
 			rasterizer.rasterizerDiscardEnable = VK_FALSE;
 			rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
@@ -545,29 +484,27 @@ export namespace Core::Vulkan{
 			colorBlending.blendConstants[2] = 0.0f;
 			colorBlending.blendConstants[3] = 0.0f;
 
-			std::vector<VkDynamicState> dynamicStates = {
-					VK_DYNAMIC_STATE_VIEWPORT,
-					VK_DYNAMIC_STATE_SCISSOR
-				};
-			VkPipelineDynamicStateCreateInfo dynamicState{};
-			dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-			dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
-			dynamicState.pDynamicStates = dynamicStates.data();
+			std::vector dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
+			VkPipelineDynamicStateCreateInfo dynamicState{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size()),
+				.pDynamicStates = dynamicStates.data()
+			};
 
-			VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-			pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
 			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout;
+			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout.get();
 
 			if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS){
 				throw std::runtime_error("failed to create pipeline layout!");
 			}
 
-			VkGraphicsPipelineCreateInfo pipelineInfo{};
-			pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-			pipelineInfo.stageCount = 2;
-			pipelineInfo.pStages = shaderStages;
+			VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+			pipelineInfo.stageCount = shaderStages.size();
+			pipelineInfo.pStages = shaderStages.data();
 			pipelineInfo.pVertexInputState = &vertexInputInfo;
 			pipelineInfo.pInputAssemblyState = &inputAssembly;
 			pipelineInfo.pViewportState = &viewportState;
@@ -606,13 +543,6 @@ export namespace Core::Vulkan{
 			//swapChain.cleanupSwapChain();
 
 			vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-			vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
-
-			indexBuffer.free();
-			vertexBuffer.free();
-			uniformBuffers.clear();
-			textureSampler.free();
 
 			vkDestroyImageView(device, textureImageView, nullptr);
 			vkDestroyImage(device, textureImage, nullptr);

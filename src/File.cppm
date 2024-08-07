@@ -18,15 +18,19 @@ namespace OS{
 
 		File() = default;
 
-		explicit File(const decltype(rawPath)::string_type& p) : rawPath{p}{}
+		File(const decltype(rawPath)::string_type& p) : rawPath{p}{}
 
-		explicit File(decltype(rawPath)::string_type&& p) : rawPath{std::move(p)}{}
+		File(decltype(rawPath)::string_type&& p) : rawPath{std::move(p)}{}
 
-		explicit File(const fs::path& p) : rawPath{p}{}
+		File(const char* p) : rawPath{p}{}
 
-		explicit File(fs::path&& p) : rawPath{std::move(p)}{}
+		File(const std::string_view p) : rawPath{p}{}
 
-		explicit File(const fs::directory_entry& p) : rawPath(p){}
+		File(const fs::path& p) : rawPath{p}{}
+
+		File(fs::path&& p) : rawPath{std::move(p)}{}
+
+		File(const fs::directory_entry& p) : rawPath(p){}
 
 		File& operator=(const fs::path& other){
 			rawPath = other;
@@ -321,10 +325,16 @@ namespace OS{
 			std::ifstream file_stream(getPath(), std::ios::binary | std::ios::ate);
 			if(!file_stream.is_open()) return "";
 
-			auto length = file_stream.tellg();
+			const auto length = file_stream.tellg();
 			file_stream.seekg(std::ios::beg);
-			std::string str(length, 0);
-			file_stream.read(str.data(), length);
+
+			std::string str{};
+
+			str.resize_and_overwrite(length, [&file_stream](char* buf, const std::size_t buf_size) noexcept{
+				file_stream.read(buf, static_cast<std::streamsize>(buf_size));
+				return buf_size;
+			});
+
 			return str;
 		}
 

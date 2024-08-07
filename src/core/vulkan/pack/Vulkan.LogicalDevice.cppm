@@ -4,13 +4,14 @@ module;
 
 export module Core.Vulkan.LogicalDevice;
 
+export import Core.Vulkan.LogicalDevice.Dependency;
 import Core.Vulkan.Validation;
 import Core.Vulkan.PhysicalDevice;
 import std;
 
 export namespace Core::Vulkan{
 	class LogicalDevice{
-		VkDevice device{};
+		DeviceDependency device{};
 		VkQueue graphicsQueue{};
 		VkQueue presentQueue{};
 
@@ -21,26 +22,6 @@ export namespace Core::Vulkan{
 			vkDestroyDevice(device, nullptr);
 		}
 
-		LogicalDevice(const LogicalDevice& other) = delete;
-
-		LogicalDevice(LogicalDevice&& other) noexcept
-			: device{other.device},
-			  graphicsQueue{other.graphicsQueue},
-			  presentQueue{other.presentQueue}{
-			other.device = nullptr;
-		}
-
-		LogicalDevice& operator=(const LogicalDevice& other) = delete;
-
-		LogicalDevice& operator=(LogicalDevice&& other) noexcept{
-			if(this == &other) return *this;
-			device = other.device;
-			graphicsQueue = other.graphicsQueue;
-			presentQueue = other.presentQueue;
-			other.device = nullptr;
-			return *this;
-		}
-
 		[[nodiscard]] operator VkDevice() const noexcept{ return device; }
 
 		[[nodiscard]] VkDevice getDevice() const noexcept{ return device; }
@@ -48,6 +29,14 @@ export namespace Core::Vulkan{
 		[[nodiscard]] VkQueue getGraphicsQueue() const noexcept{ return graphicsQueue; }
 
 		[[nodiscard]] VkQueue getPresentQueue() const noexcept{ return presentQueue; }
+
+		LogicalDevice(const LogicalDevice& other) = delete;
+
+		LogicalDevice(LogicalDevice&& other) noexcept = default;
+
+		LogicalDevice& operator=(const LogicalDevice& other) = delete;
+
+		LogicalDevice& operator=(LogicalDevice&& other) noexcept = default;
 
 
 		LogicalDevice(VkPhysicalDevice physicalDevice, const QueueFamilyIndices& indices){
@@ -82,7 +71,7 @@ export namespace Core::Vulkan{
 				createInfo.enabledLayerCount = 0;
 			}
 
-			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &device) != VK_SUCCESS){
+			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &device.handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create logical device!");
 			}
 

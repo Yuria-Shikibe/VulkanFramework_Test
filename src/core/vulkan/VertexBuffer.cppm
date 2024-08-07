@@ -4,6 +4,7 @@ module;
 
 export module Core.Vulkan.Buffer;
 
+import Core.Vulkan.LogicalDevice.Dependency;
 import Geom.Vector2D;
 import Graphic.Color;
 import std;
@@ -70,8 +71,11 @@ export namespace Core::Vulkan{
 
 
 
-	class DataBuffer{
-		VkDevice device{};
+	/**
+	 * @brief owns the whole memory
+	 */
+	class ExclusiveBuffer{
+		DeviceDependency device{};
 		VkBuffer handler{};
 		VkDeviceMemory memory{};
 
@@ -86,21 +90,21 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] constexpr std::size_t size() const noexcept{ return capacity; }
 
-		[[nodiscard]] constexpr DataBuffer() = default;
+		[[nodiscard]] constexpr ExclusiveBuffer() = default;
 
-		[[nodiscard]] explicit DataBuffer(VkDevice device)
+		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device)
 			: device{device}{}
 
-		[[nodiscard]] DataBuffer(VkDevice device, VkBuffer hander)
+		[[nodiscard]] ExclusiveBuffer(VkDevice device, VkBuffer hander)
 			: device{device},
 			  handler{hander}{}
 
-		template <std::invocable<VkDevice, DataBuffer&> InitFunc>
-		[[nodiscard]] explicit DataBuffer(VkDevice device, InitFunc initFunc) : device{device}{
+		template <std::invocable<VkDevice, ExclusiveBuffer&> InitFunc>
+		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device, InitFunc initFunc) : device{device}{
 			initFunc(device, *this);
 		}
 
-		[[nodiscard]] DataBuffer(
+		[[nodiscard]] ExclusiveBuffer(
 			VkPhysicalDevice physicalDevice, VkDevice device,
 			VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties
 		) : device{device}, capacity{size} {
@@ -129,11 +133,7 @@ export namespace Core::Vulkan{
 			vkBindBufferMemory(device, handler, memory, 0);
 		}
 
-		~DataBuffer(){
-			free();
-		}
-
-		void free(){
+		~ExclusiveBuffer(){
 			if(device){
 				if(handler)vkDestroyBuffer(device, handler, nullptr);
 				if(memory)vkFreeMemory(device, memory, nullptr);
@@ -171,6 +171,19 @@ export namespace Core::Vulkan{
 			unmap();
 		}
 
+		template <typename T, typename ...Args>
+		void emplace(Args&& ...args) const{
+			static constexpr std::size_t dataSize = sizeof(T);
+
+			if(dataSize > capacity){
+				throw std::runtime_error("Insufficient buffer capacity!");
+			}
+
+			const auto pdata  = map();
+			new (pdata) T(std::forward<Args>(args)...);
+			unmap();
+		}
+
 		template <typename T>
 			requires (std::is_trivially_copyable_v<T>)
 		void loadData(const T* data) const{
@@ -191,27 +204,13 @@ export namespace Core::Vulkan{
 			return handler;
 		}
 
-		DataBuffer(const DataBuffer& other) = delete;
+		ExclusiveBuffer(const ExclusiveBuffer& other) = delete;
 
-		DataBuffer& operator=(const DataBuffer& other) = delete;
+		ExclusiveBuffer(ExclusiveBuffer&& other) noexcept = default;
 
-		DataBuffer(DataBuffer&& other) noexcept : device{other.device}, handler{other.handler}, memory{other.memory}, capacity{other.capacity} {
-			other.handler = nullptr;
-			other.memory = nullptr;
-		}
+		ExclusiveBuffer& operator=(const ExclusiveBuffer& other) = delete;
 
-		DataBuffer& operator=(DataBuffer&& other) noexcept{
-			if(this == &other)return *this;
-			device = other.device;
-			handler = other.handler;
-			memory = other.memory;
-			capacity = other.capacity;
-
-			other.handler = nullptr;
-			other.memory = nullptr;
-
-			return *this;
-		}
+		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept = default;
 	};
 
 	VkCommandBuffer beginSingleTimeCommands(VkCommandPool commandPool, VkDevice device) {
@@ -261,16 +260,16 @@ export namespace Core::Vulkan{
 		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
-	DataBuffer createIndexBuffer(VkPhysicalDevice physicalDevice, VkDevice device,
+	ExclusiveBuffer createIndexBuffer(VkPhysicalDevice physicalDevice, VkDevice device,
 		VkCommandPool commandPool, VkQueue queue) {
 		VkDeviceSize bufferSize = sizeof(decltype(test_indices)::value_type) * test_indices.size();
 
-		DataBuffer stagingBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		ExclusiveBuffer stagingBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 		stagingBuffer.loadData(test_indices);
 
-		DataBuffer buffer(physicalDevice, device, bufferSize,
+		ExclusiveBuffer buffer(physicalDevice, device, bufferSize,
 		                     VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
 		                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
@@ -279,13 +278,13 @@ export namespace Core::Vulkan{
 		return buffer;
 	}
 
-	[[nodiscard]] DataBuffer createVertexBuffer(
+	[[nodiscard]] ExclusiveBuffer createVertexBuffer(
 		VkPhysicalDevice physicalDevice, VkDevice device,
 		VkCommandPool commandPool, VkQueue queue
 		) {
 		VkDeviceSize bufferSize = sizeof(decltype(test_vertices)::value_type) * test_vertices.size();
 
-		DataBuffer stagingBuffer{
+		ExclusiveBuffer stagingBuffer{
 				physicalDevice, device, bufferSize,
 				VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
@@ -296,7 +295,7 @@ export namespace Core::Vulkan{
 		std::memcpy(dataPtr, test_vertices.data(), stagingBuffer.size());
 		stagingBuffer.unmap();
 
-		DataBuffer buffer{
+		ExclusiveBuffer buffer{
 				physicalDevice, device, bufferSize,
 				VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT

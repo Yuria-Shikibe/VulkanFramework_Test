@@ -25,7 +25,7 @@ namespace Core::Vulkan::Util{
 	};
 
 	template <typename T>
-	struct RstPair{
+	struct InvokeResultPair{
 		std::vector<T> Result{};
 		VkResult Code{VK_SUCCESS};
 	};
@@ -44,7 +44,7 @@ namespace Core::Vulkan::Util{
 
 		if constexpr(!std::is_void_v<T>){
 
-			RstPair<std::remove_pointer_t<get_last_t<Prms...>>> result{};
+			InvokeResultPair<std::remove_pointer_t<get_last_t<Prms...>>> result{};
 
 			::uint32_t nums;
 			if((result.Code = fn(args..., &nums, nullptr)) != VK_SUCCESS) return result;

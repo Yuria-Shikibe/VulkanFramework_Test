@@ -16,7 +16,7 @@ import std;
 
 
 export namespace Core::Vulkan{
-	class VkPhysicalContext{
+	class PhysicalContext{
 	public:
 		Instance instance{};
 		ValidationEntry validationEntry{};
