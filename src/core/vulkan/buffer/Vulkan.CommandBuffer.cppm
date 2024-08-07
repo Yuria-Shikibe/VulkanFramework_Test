@@ -37,18 +37,26 @@ export namespace Core::Vulkan{
 		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return commandBuffer; }
 
 		~CommandBuffer(){
-			if(device && pool && commandBuffer)
-				vkFreeCommandBuffers(
-					device, pool, 1, &commandBuffer);
+			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
 		}
 
 		CommandBuffer(const CommandBuffer& other) = delete;
 
-		CommandBuffer(CommandBuffer&& other) noexcept = default;
-
 		CommandBuffer& operator=(const CommandBuffer& other) = delete;
 
-		CommandBuffer& operator=(CommandBuffer&& other) noexcept = default;
+		CommandBuffer(CommandBuffer&& other) noexcept
+			: device{std::move(other.device)},
+			  pool{std::move(other.pool)},
+			  commandBuffer{other.commandBuffer}{}
+
+		CommandBuffer& operator=(CommandBuffer&& other) noexcept{
+			if(this == &other) return *this;
+			this->~CommandBuffer();
+			device = std::move(other.device);
+			pool = std::move(other.pool);
+			commandBuffer = other.commandBuffer;
+			return *this;
+		}
 
 		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, const VkCommandBufferInheritanceInfo* inheritance = nullptr) const{
 			VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};

@@ -7,7 +7,7 @@ import std;
 
 export namespace Core::Vulkan{
 	/**
-	 * @brief Make move constructor/assignment default declerable
+	 * @brief Make move constructor default declarable
 	 * @tparam T Dependency Type
 	 */
 	template <typename T>
@@ -15,14 +15,17 @@ export namespace Core::Vulkan{
 	struct Dependency{
 		T handler{};
 
-		[[nodiscard]] constexpr Dependency() = default;
+		[[nodiscard]] constexpr Dependency() noexcept = default;
 
-		[[nodiscard]] constexpr Dependency(T device)
-			: handler{device}{}
+		[[nodiscard]] constexpr Dependency(T device) noexcept : handler{device}{}
 
-		~Dependency() = default;
+		constexpr ~Dependency() = default;
 
 		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
+
+		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handler; }
+
+		[[nodiscard]] constexpr T* operator->() noexcept{ return &handler; }
 
 		Dependency(const Dependency& other) = delete;
 
@@ -31,9 +34,9 @@ export namespace Core::Vulkan{
 			other.handler = nullptr;
 		}
 
-		Dependency& operator=(const Dependency& other) = delete;
+		constexpr Dependency& operator=(const Dependency& other) = delete;
 
-		Dependency& operator=(Dependency&& other) noexcept{
+		constexpr Dependency& operator=(Dependency&& other) noexcept{
 			if(this == &other) return *this;
 			handler = other.handler;
 			other.handler = nullptr;

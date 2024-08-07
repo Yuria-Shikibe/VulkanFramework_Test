@@ -59,6 +59,11 @@ export namespace Core{
 			glfwPollEvents();
 		}
 
+
+		void waitEvent() const{
+			glfwWaitEvents();
+		}
+
 		[[nodiscard]] VkSurfaceKHR createSurface(VkInstance instance) const{
 			VkSurfaceKHR surface{};
 			if(glfwCreateWindowSurface(instance, handle, nullptr, &surface) != VK_SUCCESS){

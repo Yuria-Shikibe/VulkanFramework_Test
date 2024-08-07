@@ -58,6 +58,17 @@ export namespace Core::Vulkan{
 			.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
 		};
 
+		static VkPipelineVertexInputStateCreateInfo createInfo() noexcept{
+			return {
+					.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+					.pNext = nullptr,
+					.flags = 0,
+					.vertexBindingDescriptionCount = 1,
+					.pVertexBindingDescriptions = &bindDesc,
+					.vertexAttributeDescriptionCount = attrDesc.size(),
+					.pVertexAttributeDescriptions = attrDesc.data()
+				};
+		}
 
 		inline const static AttributeDesc attrDesc{getAttrInfo()};
 	};

@@ -135,11 +135,8 @@ export namespace Core::Vulkan{
 
 		~ExclusiveBuffer(){
 			if(device){
-				if(handler) vkDestroyBuffer(device, handler, nullptr);
-				if(memory) vkFreeMemory(device, memory, nullptr);
-				handler = nullptr;
-				memory = nullptr;
-				capacity = 0;
+				vkDestroyBuffer(device, handler, nullptr);
+				vkFreeMemory(device, memory, nullptr);
 			}
 		}
 
@@ -210,6 +207,14 @@ export namespace Core::Vulkan{
 
 		ExclusiveBuffer& operator=(const ExclusiveBuffer& other) = delete;
 
-		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept = default;
+		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept{
+			if(this == &other) return *this;
+			this->~ExclusiveBuffer();
+			device = std::move(other.device);
+			handler = other.handler;
+			memory = other.memory;
+			capacity = other.capacity;
+			return *this;
+		}
 	};
 }

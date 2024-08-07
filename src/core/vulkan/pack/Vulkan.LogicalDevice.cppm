@@ -36,7 +36,14 @@ export namespace Core::Vulkan{
 
 		LogicalDevice& operator=(const LogicalDevice& other) = delete;
 
-		LogicalDevice& operator=(LogicalDevice&& other) noexcept = default;
+		LogicalDevice& operator=(LogicalDevice&& other) noexcept{
+			if(this == &other) return *this;
+			this->~LogicalDevice();
+			device = std::move(other.device);
+			graphicsQueue = other.graphicsQueue;
+			presentQueue = other.presentQueue;
+			return *this;
+		}
 
 
 		LogicalDevice(VkPhysicalDevice physicalDevice, const QueueFamilyIndices& indices){

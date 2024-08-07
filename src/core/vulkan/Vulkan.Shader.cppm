@@ -85,7 +85,14 @@ export namespace Core::Vulkan{
 
 		ShaderModule& operator=(const ShaderModule& other) = delete;
 
-		ShaderModule& operator=(ShaderModule&& other) noexcept = default;
+		ShaderModule& operator=(ShaderModule&& other) noexcept{
+			if(this == &other) return *this;
+			this->~ShaderModule();
+			device = std::move(other.device);
+			module = other.module;
+			declStage = other.declStage;
+			return *this;
+		}
 
 	private:
 		void declShaderStage(const OS::File& path){
@@ -118,11 +125,11 @@ export namespace Core::Vulkan{
 	struct ShaderChain{
 		std::vector<VkPipelineShaderStageCreateInfo> chain{};
 
-		void push(const std::initializer_list<ShaderModule> args){
+		void push(const std::initializer_list<const ShaderModule*> args){
 			chain.reserve(args.size());
 
 			for (const auto & arg : args){
-				chain.push_back(arg.createInfo());
+				chain.push_back(arg->createInfo());
 			}
 		}
 
@@ -132,7 +139,7 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] ShaderChain() = default;
 
-		[[nodiscard]] ShaderChain(const std::initializer_list<ShaderModule> args){
+		[[nodiscard]] ShaderChain(const std::initializer_list<const ShaderModule*> args){
 			push(args);
 		}
 

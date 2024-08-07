@@ -18,7 +18,7 @@ export namespace Core::Vulkan{
 		[[nodiscard]] CommandPool() = default;
 
 		~CommandPool(){
-			if(commandPool && device)vkDestroyCommandPool(device, commandPool, nullptr);
+			if(device)vkDestroyCommandPool(device, commandPool, nullptr);
 		}
 
 		[[nodiscard]] operator VkCommandPool() const noexcept{ return commandPool; }
@@ -29,7 +29,13 @@ export namespace Core::Vulkan{
 
 		CommandPool& operator=(const CommandPool& other) = delete;
 
-		CommandPool& operator=(CommandPool&& other) noexcept = default;
+		CommandPool& operator=(CommandPool&& other) noexcept{
+			if(this == &other) return *this;
+			this->~CommandPool();
+			commandPool = other.commandPool;
+			device = std::move(other.device);
+			return *this;
+		}
 
 		CommandPool(VkDevice device, const std::uint32_t queueFamilyIndex, const VkCommandPoolCreateFlags flags = 0) : device{device}{
 			VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};

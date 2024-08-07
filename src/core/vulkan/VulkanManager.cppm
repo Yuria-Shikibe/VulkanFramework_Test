@@ -21,6 +21,7 @@ import Core.Vulkan.SwapChain;
 import Core.Vulkan.PhysicalDevice;
 import Core.Vulkan.LogicalDevice;
 import Core.Vulkan.DescriptorSet;
+import Core.Vulkan.PipelineLayout;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 
 import Core.Vulkan.Preinstall;
@@ -39,35 +40,30 @@ export namespace Core::Vulkan{
 			initVulkan(window);
 		}
 
-		~VulkanManager(){
-			cleanup();
-		}
-
+		~VulkanManager(){cleanup();}
 
 		Context context{};
 
 		SwapChain swapChain{};
-
-		VkPipelineLayout pipelineLayout{};
-
-		DescriptorSetLayout descriptorSetLayout{};
-
-		VkPipeline graphicsPipeline{};
-
-		CommandPool commandPool{};
-		std::vector<CommandBuffer> commandBuffers{};
-
 		std::vector<VkFence> inFlightFences{};
 
 		std::size_t currentFrame = 0;
 		std::vector<VkSemaphore> imageAvailableSemaphores;
 		std::vector<VkSemaphore> renderFinishedSemaphores;
 
+		DescriptorSetLayout descriptorSetLayout{};
+		DescriptorSetPool descriptorPool{};
+
+		PipelineLayout pipelineLayout{};
+		VkPipeline graphicsPipeline{};
+
+		CommandPool commandPool{};
+		std::vector<CommandBuffer> commandBuffers{};
+
 		ExclusiveBuffer vertexBuffer{};
 		ExclusiveBuffer indexBuffer{};
 		std::vector<ExclusiveBuffer> uniformBuffers{};
 
-		VkDescriptorPool descriptorPool{};
 		std::vector<VkDescriptorSet> descriptorSets{};
 
 		std::uint32_t mipLevels{};
@@ -169,11 +165,12 @@ export namespace Core::Vulkan{
 
 			swapChain.createSwapChain(context.physicalDevice, context.device);
 
-			DescriptorSetLayoutBuilder builder{};
-			builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-			builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+			descriptorSetLayout = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+			}};
 
-			descriptorSetLayout = DescriptorSetLayout{context.device, builder.exportBindings()};
+			descriptorPool = DescriptorSetPool{context.device, descriptorSetLayout.builder, swapChain.size()};
 
 			createGraphicsPipeline();
 
@@ -186,7 +183,6 @@ export namespace Core::Vulkan{
 			textureImageView = createImageView(context.device, textureImage, swapChain.getFormat(), mipLevels);
 			textureSampler = createTextureSampler(context.device, mipLevels);
 
-			createDescriptorPool();
 			createUniformBuffer();
 			createDescriptorSets();
 
@@ -262,25 +258,6 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createDescriptorPool() {
-
-			std::array<VkDescriptorPoolSize, 2> poolSizes{};
-			poolSizes[0] = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, swapChain.size()};
-			poolSizes[1] = {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, swapChain.size()};
-
-			VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-			poolInfo.poolSizeCount = poolSizes.size();
-			poolInfo.pPoolSizes = poolSizes.data();
-			poolInfo.maxSets = swapChain.size();
-
-
-			if (vkCreateDescriptorPool(context.device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
-				throw std::runtime_error("failed to create descriptor pool!");
-			}
-
-
-		}
-
 		void createUniformBuffer() {
 			VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
@@ -297,10 +274,8 @@ export namespace Core::Vulkan{
 		}
 
 		void recreateSwapChain() {
-			int width = 0, height = 0; //Block when minimal
-			while (width == 0 || height == 0) {
-				glfwGetFramebufferSize(swapChain.getTargetWindow()->getHandle(), &width, &height);
-				glfwWaitEvents();
+			while (swapChain.getTargetWindow()->getSize().area() == 0) {
+				swapChain.getTargetWindow()->waitEvent();
 			}
 
 			vkDeviceWaitIdle(context.device);
@@ -385,52 +360,28 @@ export namespace Core::Vulkan{
 		}
 
 		void createGraphicsPipeline(){
+			pipelineLayout = PipelineLayout{context.device, std::array{static_cast<VkDescriptorSetLayout>(descriptorSetLayout)}};
+
 			ShaderModule vertShaderModule{
-					context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
-				};
+				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
+			};
 
 			ShaderModule fragShaderModule{
-					context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
-				};
+				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
+			};
 
-			auto vertShaderStageInfo = vertShaderModule.createInfo();
-			auto fragShaderStageInfo = fragShaderModule.createInfo();
 
-			std::array shaderStages{vertShaderStageInfo, fragShaderStageInfo};
+			ShaderChain shaderChain{&vertShaderModule, &fragShaderModule};
 
-			VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-
-			auto bindingDescription = BindInfo::bindDesc;
-			auto attributeDescriptions = BindInfo::attrDesc;
-
-			vertexInputInfo.vertexBindingDescriptionCount = 1;
-			vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-
-			vertexInputInfo.vertexAttributeDescriptionCount = attributeDescriptions.size();
-			vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
+			const auto vertexInputInfo = BindInfo::createInfo();
 
 			std::vector dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
 
-			VkPipelineDynamicStateCreateInfo dynamicState{
-				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.pNext = nullptr,
-				.flags = 0,
-				.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size()),
-				.pDynamicStates = dynamicStates.data()
-			};
-
-			VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout.get();
-
-			if(vkCreatePipelineLayout(context.device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS){
-				throw std::runtime_error("failed to create pipeline layout!");
-			}
+			const auto dynamicState = Util::createDynamicState(dynamicStates);
 
 			VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-			pipelineInfo.stageCount = shaderStages.size();
-			pipelineInfo.pStages = shaderStages.data();
+			pipelineInfo.stageCount = shaderChain.size();
+			pipelineInfo.pStages = shaderChain.data();
 			pipelineInfo.pVertexInputState = &vertexInputInfo;
 			pipelineInfo.pInputAssemblyState = &Default::InputAssembly;
 			pipelineInfo.pViewportState = &Default::DynamicViewportState<1>;
@@ -451,7 +402,8 @@ export namespace Core::Vulkan{
 
 		void cleanupSwapChain() {
 			vkDestroyPipeline(context.device, graphicsPipeline, nullptr);
-			vkDestroyPipelineLayout(context.device, pipelineLayout, nullptr);
+
+			pipelineLayout = {};
 
 			commandBuffers.clear();
 
@@ -460,11 +412,7 @@ export namespace Core::Vulkan{
 
 		void cleanup(){
 			vkDestroyPipeline(context.device, graphicsPipeline, nullptr);
-			vkDestroyPipelineLayout(context.device, pipelineLayout, nullptr);
 
-			//swapChain.cleanupSwapChain();
-
-			vkDestroyDescriptorPool(context.device, descriptorPool, nullptr);
 
 			vkDestroyImageView(context.device, textureImageView, nullptr);
 			vkDestroyImage(context.device, textureImage, nullptr);
