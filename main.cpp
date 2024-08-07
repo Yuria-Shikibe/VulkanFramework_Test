@@ -35,7 +35,7 @@ int main(){
 		Core::vulkanManager->drawFrame();
 	}
 
-	vkDeviceWaitIdle(Core::vulkanManager->device);
+	vkDeviceWaitIdle(Core::vulkanManager->context.device);
 
 	Core::terminate();
 	Core::GLFW::terminate();

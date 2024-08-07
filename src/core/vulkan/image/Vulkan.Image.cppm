@@ -7,7 +7,7 @@ export module Core.Vulkan.Image;
 import Graphic.Pixmap;
 import OS.File;
 
-import Core.Vulkan.Buffer;
+import Core.Vulkan.Buffer.ExclusiveBuffer;
 import std;
 
 export namespace Core::Vulkan{

@@ -3,34 +3,43 @@ module;
 #include <vulkan/vulkan.h>
 
 export module Core.Vulkan.LogicalDevice.Dependency;
+import std;
 
 export namespace Core::Vulkan{
-	struct DeviceDependency{
-		VkDevice handler{};
+	/**
+	 * @brief Make move constructor/assignment default declerable
+	 * @tparam T Dependency Type
+	 */
+	template <typename T>
+		requires std::is_pointer_v<T>
+	struct Dependency{
+		T handler{};
 
-		[[nodiscard]] constexpr DeviceDependency() = default;
+		[[nodiscard]] constexpr Dependency() = default;
 
-		[[nodiscard]] constexpr DeviceDependency(VkDevice device)
+		[[nodiscard]] constexpr Dependency(T device)
 			: handler{device}{}
 
-		~DeviceDependency() = default;
+		~Dependency() = default;
 
-		[[nodiscard]] constexpr operator VkDevice() const noexcept{ return handler; }
+		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
 
-		DeviceDependency(const DeviceDependency& other) = delete;
+		Dependency(const Dependency& other) = delete;
 
-		DeviceDependency(DeviceDependency&& other) noexcept
+		Dependency(Dependency&& other) noexcept
 			: handler{other.handler}{
 			other.handler = nullptr;
 		}
 
-		DeviceDependency& operator=(const DeviceDependency& other) = delete;
+		Dependency& operator=(const Dependency& other) = delete;
 
-		DeviceDependency& operator=(DeviceDependency&& other) noexcept{
+		Dependency& operator=(Dependency&& other) noexcept{
 			if(this == &other) return *this;
 			handler = other.handler;
 			other.handler = nullptr;
 			return *this;
 		}
 	};
+
+	using DeviceDependency = Dependency<VkDevice>;
 }

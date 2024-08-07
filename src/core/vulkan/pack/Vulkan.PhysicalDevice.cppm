@@ -59,6 +59,19 @@ export namespace Core::Vulkan{
 	struct PhysicalDevice{
 		VkPhysicalDevice device{}; // = VK_NULL_HANDLE;
 
+		QueueFamilyIndices queues{};
+		VkPhysicalDeviceMemoryProperties deviceMemoryProperties{};
+
+		[[nodiscard]] constexpr std::uint32_t findMemoryType(const std::uint32_t typeFilter, VkMemoryPropertyFlags properties) const{
+			for(std::uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; i++){
+				if(typeFilter & (1u << i) && (deviceMemoryProperties.memoryTypes[i].propertyFlags & properties) == properties){
+					return i;
+				}
+			}
+
+			throw std::runtime_error("failed to find suitable memory type!");
+		}
+
 		[[nodiscard]] explicit operator bool() const noexcept{
 			return device != nullptr;
 		}
@@ -86,14 +99,12 @@ export namespace Core::Vulkan{
 			return Util::checkSupport(requiredExtensions, availableExtensions, &VkExtensionProperties::extensionName);
 		}
 
-
 		[[nodiscard]] std::string getName() const{
 			VkPhysicalDeviceProperties deviceProperties;
 			vkGetPhysicalDeviceProperties(device, &deviceProperties);
 
 			return std::string{deviceProperties.deviceName};
 		}
-
 
 		template <typename... Args>
 			requires requires(VkPhysicalDeviceFeatures features, Args... args){
@@ -143,6 +154,11 @@ export namespace Core::Vulkan{
 			}
 
 			return indices.isComplete() && swapChainAdequate && featuresMeet;
+		}
+
+		void cacheProperties(VkSurfaceKHR surface){
+			vkGetPhysicalDeviceMemoryProperties(device, &deviceMemoryProperties);
+			queues = QueueFamilyIndices{device, surface};
 		}
 	};
 }

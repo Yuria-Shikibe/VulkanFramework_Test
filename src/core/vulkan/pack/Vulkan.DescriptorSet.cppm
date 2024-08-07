@@ -49,6 +49,8 @@ export namespace Core::Vulkan{
 	public:
 		operator VkDescriptorSetLayout() const noexcept{return descriptorSetLayout;}
 
+		const VkDescriptorSetLayout* operator->() const noexcept{return &descriptorSetLayout; }
+
 		[[nodiscard]] const VkDescriptorSetLayout& get() const{ return descriptorSetLayout; }
 
 		[[nodiscard]] DescriptorSetLayout() = default;
