@@ -4,11 +4,17 @@ module;
 
 export module Core.Vulkan.DescriptorSet;
 
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import std;
 import ext.RuntimeException;
 
 export namespace Core::Vulkan{
+	class DescriptorSet : public Wrapper<VkDescriptorSet>{
+
+	};
+
+	static_assert(std::is_standard_layout_v<DescriptorSet>);
+	static_assert(sizeof(DescriptorSet) == sizeof(VkDescriptorSet));
 
 	class DescriptorSetLayoutBuilder{
 		struct VkDescriptorSetLayoutBinding_Mapper{
@@ -41,23 +47,16 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	class DescriptorSetLayout{
-		VkDescriptorSetLayout descriptorSetLayout{};
-		DeviceDependency device{};
+	class DescriptorSetLayout : public Wrapper<VkDescriptorSetLayout>{
+		Dependency<VkDevice> device{};
 
 	public:
 		DescriptorSetLayoutBuilder builder{};
 
-		operator VkDescriptorSetLayout() const noexcept{return descriptorSetLayout;}
-
-		const VkDescriptorSetLayout* operator->() const noexcept{return &descriptorSetLayout; }
-
-		[[nodiscard]] const VkDescriptorSetLayout& get() const{ return descriptorSetLayout; }
-
 		[[nodiscard]] DescriptorSetLayout() = default;
 
 		~DescriptorSetLayout(){
-			if(device)vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+			if(device)vkDestroyDescriptorSetLayout(device, handler, nullptr);
 		}
 
 		DescriptorSetLayout(const DescriptorSetLayout& other) = delete;
@@ -68,9 +67,9 @@ export namespace Core::Vulkan{
 
 		DescriptorSetLayout& operator=(DescriptorSetLayout&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+			if(device)vkDestroyDescriptorSetLayout(device, handler, nullptr);
 
-			descriptorSetLayout = other.descriptorSetLayout;
+			Wrapper::operator=(std::move(other));
 			builder = std::move(other.builder);
 			device = std::move(other.device);
 			return *this;
@@ -94,25 +93,20 @@ export namespace Core::Vulkan{
 					.pBindings = bindings.data()
 				};
 
-			if(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS){
+			if(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create descriptor set layout!");
 			}
 		}
 	};
 
-	class DescriptorSetPool{
+	class DescriptorSetPool : public Wrapper<VkDescriptorPool>{
 		Dependency<VkDevice> device{};
-		VkDescriptorPool descriptorPool{};
 
 	public:
-		operator VkDescriptorPool() const noexcept{ return descriptorPool; }
-
-		[[nodiscard]] VkDescriptorPool& get() noexcept{ return descriptorPool; }
-
 		[[nodiscard]] DescriptorSetPool() = default;
 
 		~DescriptorSetPool(){
-			if(device)vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+			if(device)vkDestroyDescriptorPool(device, handler, nullptr);
 		}
 
 		DescriptorSetPool(const DescriptorSetPool& other) = delete;
@@ -124,8 +118,8 @@ export namespace Core::Vulkan{
 		DescriptorSetPool& operator=(DescriptorSetPool&& other) noexcept{
 			if(this == &other) return *this;
 			this->~DescriptorSetPool();
+			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
-			descriptorPool = other.descriptorPool;
 			return *this;
 		}
 
@@ -143,9 +137,95 @@ export namespace Core::Vulkan{
 			poolInfo.pPoolSizes = poolSizes.data();
 			poolInfo.maxSets = size;
 
-			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &handler) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor pool!");
 			}
+		}
+
+		[[nodiscard]] DescriptorSet obtain(const DescriptorSetLayout& descriptorSetLayout) const{
+			DescriptorSet descriptors{};
+
+			VkDescriptorSetAllocateInfo allocInfo{
+					.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+					.pNext = nullptr,
+					.descriptorPool = handler,
+					.descriptorSetCount = 1,
+					.pSetLayouts = descriptorSetLayout.operator->()
+				};
+
+			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.operator->()) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to allocate descriptor sets!");
+			}
+
+			return descriptors;
+		}
+
+		[[nodiscard]] std::vector<DescriptorSet> obtain(const std::size_t size, const DescriptorSetLayout& descriptorSetLayout) const{
+			std::vector<DescriptorSet> descriptors(size);
+			std::vector layouts(size, descriptorSetLayout.get());
+
+			VkDescriptorSetAllocateInfo allocInfo{
+				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+				.pNext = nullptr,
+				.descriptorPool = handler,
+				.descriptorSetCount = static_cast<std::uint32_t>(size),
+				.pSetLayouts = layouts.data()
+			};
+
+			if (vkAllocateDescriptorSets(device, &allocInfo, reinterpret_cast<VkDescriptorSet*>(descriptors.data())) != VK_SUCCESS) {
+				throw std::runtime_error("Failed to allocate descriptor sets!");
+			}
+
+			return descriptors;
+		}
+	};
+
+	class DescriptorSetUpdator{
+		static constexpr VkWriteDescriptorSet DefaultSet{
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.pNext = nullptr,
+			.dstSet = nullptr,
+			.dstBinding = 0,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_MAX_ENUM,
+			.pImageInfo = nullptr,
+			.pBufferInfo = nullptr,
+			.pTexelBufferView = nullptr
+		};
+
+		Dependency<VkDevice> device{};
+		DescriptorSet& descriptorSets;
+		std::vector<VkWriteDescriptorSet> descriptorWrites{};
+
+	public:
+
+		[[nodiscard]] explicit DescriptorSetUpdator(VkDevice device, DescriptorSet& descriptorSets)
+			: device{device}, descriptorSets{descriptorSets}{
+		}
+
+		void push(VkDescriptorBufferInfo& uniformBufferInfo){
+			const auto index = descriptorWrites.size();
+
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			current.pBufferInfo = &uniformBufferInfo;
+		}
+
+		void push(VkDescriptorImageInfo& imageInfo){
+			const auto index = descriptorWrites.size();
+
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			current.pImageInfo = &imageInfo;
+		}
+
+		void update() const{
+			vkUpdateDescriptorSets(device, descriptorWrites.size(), descriptorWrites.data(), 0, nullptr);
 		}
 	};
 }

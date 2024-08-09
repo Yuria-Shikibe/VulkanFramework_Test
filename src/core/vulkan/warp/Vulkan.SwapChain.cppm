@@ -12,6 +12,8 @@ import Core.Vulkan.SwapChainInfo;
 import Core.Vulkan.PhysicalDevice;
 import Core.Vulkan.Image;
 import Core.Vulkan.LogicalDevice;
+import Core.Vulkan.Buffer.CommandBuffer;
+import Core.Vulkan.Buffer.FrameBuffer;
 
 export namespace Core::Vulkan{
 	class SwapChain{
@@ -21,28 +23,34 @@ export namespace Core::Vulkan{
 	private:
 		Window* targetWindow{};
 		VkInstance instance{};
+
+		VkPhysicalDevice physicalDevice{};
 		VkDevice device{};
+
 		VkSurfaceKHR surface{};
 
 		VkSwapchainKHR swapChain{};
+
+		mutable VkSwapchainKHR oldSwapChain{};
 
 		VkFormat swapChainImageFormat{};
 
 		VkRenderPass renderPass{};
 
-		struct SwapChainImage{
+		struct SwapChainFrameData{
 			VkImage image{};
 			VkImageView imageView{};
-			VkFramebuffer framebuffer{};
+			FrameBuffer framebuffer{};
+			CommandBuffer commandBuffer{};
 		};
 
-		std::vector<SwapChainImage> swapChainImages{};
-		// std::vector<VkImage> swapChainImages{};
-		// std::vector<VkImageView> swapChainImageViews{};
-		// std::vector<VkFramebuffer> swapChainFramebuffers{};
+		std::vector<SwapChainFrameData> swapChainImages{};
 
+		mutable bool resized{};
 
 	public:
+		VkQueue presentQueue{};
+
 		void attachWindow(Window* window){
 			if(targetWindow) throw std::runtime_error("Target window already set!");
 
@@ -52,6 +60,8 @@ export namespace Core::Vulkan{
 				this->resize(event.size.x, event.size.y);
 			});
 		}
+
+
 
 		void detachWindow(){
 			if(!targetWindow) return;
@@ -73,7 +83,7 @@ export namespace Core::Vulkan{
 		}
 
 		void destroySurface(){
-			if(surface && instance) vkDestroySurfaceKHR(instance, surface, nullptr);
+			if(instance)vkDestroySurfaceKHR(instance, surface, nullptr);
 
 			instance = nullptr;
 			surface = nullptr;
@@ -87,10 +97,6 @@ export namespace Core::Vulkan{
 		void cleanupSwapChain() {
 			if(!device)return;
 
-			for (const auto& framebuffer : getFrameBuffers()) {
-				vkDestroyFramebuffer(device, framebuffer, nullptr);
-			}
-
 			vkDestroyRenderPass(device, renderPass, nullptr);
 
 			for (const auto view : getImageViews()) {
@@ -98,8 +104,23 @@ export namespace Core::Vulkan{
 			}
 
 			vkDestroySwapchainKHR(device, swapChain, nullptr);
+			destroyOldSwapChain();
 
 			device = nullptr;
+		}
+
+		void recreate(){
+			vkDestroyRenderPass(device, renderPass, nullptr);
+
+			for (const auto view : getImageViews()) {
+				vkDestroyImageView(device, view, nullptr);
+			}
+
+			destroyOldSwapChain();
+
+			oldSwapChain = swapChain;
+
+			createSwapChain(physicalDevice, device);
 		}
 
 		[[nodiscard]] Window* getTargetWindow() const{ return targetWindow; }
@@ -110,18 +131,24 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] operator VkSwapchainKHR() const noexcept{return swapChain;}
 
-		void resize(int w, int h){}
+		void resize(int w, int h){
+			resized = true;
+		}
 
-		void createSwapChain(VkPhysicalDevice vkPhysicalDevice, VkDevice device){
-			const SwapChainInfo swapChainSupport(vkPhysicalDevice, surface);
+		void createSwapChain(VkPhysicalDevice physicalDevice, VkDevice device){
+			this->device = device;
+			this->physicalDevice = physicalDevice;
+
+			const SwapChainInfo swapChainSupport(physicalDevice, surface);
 
 			const VkSurfaceFormatKHR surfaceFormat = SwapChainInfo::chooseSwapSurfaceFormat(swapChainSupport.formats);
 
 			const VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
 			std::uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-			if(swapChainSupport.capabilities.maxImageCount && imageCount > swapChainSupport.capabilities.maxImageCount){
-				imageCount = swapChainSupport.capabilities.maxImageCount;
+
+			if(swapChainSupport.capabilities.maxImageCount){
+				imageCount = std::min(imageCount, swapChainSupport.capabilities.maxImageCount);
 			}
 
 			VkSwapchainCreateInfoKHR createInfo{
@@ -135,7 +162,7 @@ export namespace Core::Vulkan{
 					.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 				};
 
-			const QueueFamilyIndices indices(vkPhysicalDevice, surface);
+			const QueueFamilyIndices indices(physicalDevice, surface);
 			const std::array queueFamilyIndices{indices.graphicsFamily, indices.presentFamily};
 
 			if(indices.graphicsFamily != indices.presentFamily){
@@ -149,6 +176,8 @@ export namespace Core::Vulkan{
 			}
 
 			createInfo.preTransform = swapChainSupport.capabilities.currentTransform;
+			
+			createInfo.oldSwapchain = this->oldSwapChain;
 
 			//Set Window Alpha Blend Mode
 			createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -156,15 +185,18 @@ export namespace Core::Vulkan{
 			createInfo.presentMode = SwapChainInfo::chooseSwapPresentMode(swapChainSupport.presentModes);
 			createInfo.clipped = true;
 
-			createInfo.oldSwapchain = nullptr;
-
 			if(vkCreateSwapchainKHR(device, &createInfo, nullptr, &swapChain) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create swap chain!");
 			}
 
 			swapChainImageFormat = surfaceFormat.format;
-			this->device = device;
 
+			createImageViews();
+			createRenderPass();
+			createSwapChainFramebuffers();
+		}
+
+		void createImageViews(){
 			auto [images, rst] = Util::enumerate(vkGetSwapchainImagesKHR, device, swapChain);
 			swapChainImages.resize(images.size());
 
@@ -172,9 +204,6 @@ export namespace Core::Vulkan{
 				imageGroup.image = images[index];
 				imageGroup.imageView = createImageView(device, imageGroup.image, swapChainImageFormat, 1);
 			}
-
-			createRenderPass();
-			createSwapChainFramebuffers();
 		}
 
 		[[nodiscard]] VkExtent2D getExtent() const noexcept{
@@ -188,40 +217,45 @@ export namespace Core::Vulkan{
 		[[nodiscard]] VkFormat getFormat() const noexcept{ return swapChainImageFormat; }
 
 		[[nodiscard]] decltype(auto) getSwapChainImages() const noexcept{
-			return swapChainImages | std::views::transform(&SwapChainImage::image);
+			return swapChainImages | std::views::transform(&SwapChainFrameData::image);
 		}
 
 		[[nodiscard]] decltype(auto) getImageViews() const noexcept{
-			return swapChainImages | std::views::transform(&SwapChainImage::imageView);
+			return swapChainImages | std::views::transform(&SwapChainFrameData::imageView);
 		}
 
 		[[nodiscard]] decltype(auto) getFrameBuffers() const noexcept{
-			return swapChainImages | std::views::transform(&SwapChainImage::framebuffer);
+			return swapChainImages | std::views::transform(&SwapChainFrameData::framebuffer);
+		}
+
+		[[nodiscard]] decltype(auto) getCommandBuffers() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::commandBuffer);
 		}
 
 		[[nodiscard]] VkRenderPass getRenderPass() const noexcept{ return renderPass; }
 
 		[[nodiscard]] std::uint32_t size() const noexcept{ return swapChainImages.size(); }
 
+		std::pair<std::uint32_t, VkResult> acquireNextImage(VkSemaphore semaphore, const std::uint64_t timeout = std::numeric_limits<std::uint64_t>::max()) const{
+			std::uint32_t imageIndex{};
+			const auto rst = vkAcquireNextImageKHR(device, swapChain, timeout, semaphore, nullptr, &imageIndex);
+			return {imageIndex, rst};
+		}
+
+		[[nodiscard]] VkResult postImage(const VkPresentInfoKHR& presentInfo) const{
+			destroyOldSwapChain();
+			return vkQueuePresentKHR(presentQueue, &presentInfo);
+		}
+
 	private:
+		void destroyOldSwapChain() const{
+			if(oldSwapChain)vkDestroySwapchainKHR(device, oldSwapChain, nullptr);
+			oldSwapChain = nullptr;
+		}
 
 		void createSwapChainFramebuffers(){
 			for(const auto& [i, group] : swapChainImages | std::views::enumerate){
-				std::array attachments{group.imageView};
-
-				VkFramebufferCreateInfo framebufferInfo{};
-
-				framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-				framebufferInfo.renderPass = renderPass;
-				framebufferInfo.attachmentCount = attachments.size();
-				framebufferInfo.pAttachments = attachments.data();
-				framebufferInfo.width = targetWindow->getSize().x;
-				framebufferInfo.height = targetWindow->getSize().y;
-				framebufferInfo.layers = 1;
-
-				if(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &group.framebuffer) != VK_SUCCESS){
-					throw std::runtime_error("Failed to create framebuffer!");
-				}
+				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), renderPass, std::array{group.imageView}};
 			}
 		}
 
@@ -271,7 +305,7 @@ export namespace Core::Vulkan{
 				return capabilities.currentExtent;
 			}
 
-			auto size = targetWindow->getSize().as<std::uint32_t>();
+			auto size = targetWindow->getSize();
 
 			size.clampX(capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
 			size.clampY(capabilities.minImageExtent.height, capabilities.maxImageExtent.height);

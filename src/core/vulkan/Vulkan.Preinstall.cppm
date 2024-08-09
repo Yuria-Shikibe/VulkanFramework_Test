@@ -86,6 +86,7 @@ export namespace Core::Vulkan{
 				.alphaToOneEnable = false
 			};
 
+		template <const VkPipelineColorBlendAttachmentState* ColorBlendAttachments>
 		constexpr VkPipelineColorBlendStateCreateInfo ColorBlending{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 				.pNext = nullptr,
@@ -93,7 +94,7 @@ export namespace Core::Vulkan{
 				.logicOpEnable = false,
 				.logicOp = VK_LOGIC_OP_COPY,
 				.attachmentCount = 1,
-				.pAttachments = &Blending::Overwrite,
+				.pAttachments = ColorBlendAttachments,
 				.blendConstants = {}
 			};
 	}
@@ -109,5 +110,6 @@ export namespace Core::Vulkan{
 					.pDynamicStates = std::ranges::data(states),
 				};
 		}
+
 	}
 }

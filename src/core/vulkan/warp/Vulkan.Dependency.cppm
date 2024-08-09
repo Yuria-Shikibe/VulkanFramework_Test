@@ -2,10 +2,38 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Core.Vulkan.LogicalDevice.Dependency;
+export module Core.Vulkan.Dependency;
 import std;
 
 export namespace Core::Vulkan{
+	template <typename T>
+		requires std::is_pointer_v<T>
+	struct Wrapper{
+	protected:
+		T handler{};
+
+	public:
+		[[nodiscard]] Wrapper() = default;
+
+		[[nodiscard]] explicit Wrapper(const T handler)
+			: handler{handler}{}
+
+		T release(){
+			T result = handler;
+			handler = nullptr;
+			return result;
+		}
+
+		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
+
+		[[nodiscard]] constexpr operator bool() const noexcept{ return handler != nullptr; }
+
+		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handler; }
+
+		[[nodiscard]] constexpr T* operator->() noexcept{ return &handler; }
+
+		[[nodiscard]] constexpr T get() const noexcept{ return handler; }
+	};
 	/**
 	 * @brief Make move constructor default declarable
 	 * @tparam T Dependency Type
@@ -22,6 +50,8 @@ export namespace Core::Vulkan{
 		constexpr ~Dependency() = default;
 
 		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
+
+		[[nodiscard]] constexpr operator bool() const noexcept{ return handler != nullptr; }
 
 		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handler; }
 

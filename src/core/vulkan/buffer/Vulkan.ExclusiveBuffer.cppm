@@ -4,111 +4,41 @@ module;
 
 export module Core.Vulkan.Buffer.ExclusiveBuffer;
 
-import Core.Vulkan.LogicalDevice.Dependency;
+export import Core.Vulkan.Buffer;
+import Core.Vulkan.Dependency;
+import Core.Vulkan.Buffer.CommandBuffer;
 import std;
 
 export namespace Core::Vulkan{
-	std::uint32_t findMemoryType(const std::uint32_t typeFilter, VkPhysicalDevice physicalDevice,
-	                             VkMemoryPropertyFlags properties){
-		VkPhysicalDeviceMemoryProperties memProperties;
-		vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
-
-		for(std::uint32_t i = 0; i < memProperties.memoryTypeCount; i++){
-			if(typeFilter & (1u << i) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties){
-
-				return i;
-			}
-		}
-
-		throw std::runtime_error("failed to find suitable memory type!");
-	}
-
-	VkCommandBuffer beginSingleTimeCommands(VkCommandPool commandPool, VkDevice device){
-		VkCommandBufferAllocateInfo allocInfo = {};
-		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandPool = commandPool;
-		allocInfo.commandBufferCount = 1;
-
-		VkCommandBuffer commandBuffer;
-		vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
-
-		VkCommandBufferBeginInfo beginInfo = {};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-
-		vkBeginCommandBuffer(commandBuffer, &beginInfo);
-
-		return commandBuffer;
-	}
-
-	void endSingleTimeCommands(VkCommandBuffer commandBuffer, VkCommandPool commandPool, VkDevice device,
-	                           VkQueue queue){
-		vkEndCommandBuffer(commandBuffer);
-
-		VkSubmitInfo submitInfo = {};
-		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submitInfo.commandBufferCount = 1;
-		submitInfo.pCommandBuffers = &commandBuffer;
-
-		vkQueueSubmit(queue, 1, &submitInfo, nullptr);
-		vkQueueWaitIdle(queue);
-
-		vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
-	}
-
-
 	void copyBuffer(
 		VkCommandPool commandPool, VkDevice device, VkQueue queue,
 		VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size
 	){
-		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
+		TransientCommand commandBuffer{device, commandPool, queue};
 
-		VkBufferCopy copyRegion = {};
-		copyRegion.size = size;
+		VkBufferCopy copyRegion{.size = size};
 		vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
 	/**
 	 * @brief owns the whole memory
 	 */
-	class ExclusiveBuffer{
-		DeviceDependency device{};
-
-		VkBuffer handler{};
-		VkDeviceMemory memory{};
-
-		std::size_t capacity{};
+	class ExclusiveBuffer : public BasicBuffer{
 
 	public:
-		[[nodiscard]] constexpr VkDevice getDevice() const noexcept{ return device; }
+		using BasicBuffer::BasicBuffer;
 
-		[[nodiscard]] constexpr VkBuffer getHandler() const noexcept{ return handler; }
 
-		[[nodiscard]] constexpr VkDeviceMemory getMemory() const noexcept{ return memory; }
-
-		[[nodiscard]] constexpr std::size_t size() const noexcept{ return capacity; }
-
-		[[nodiscard]] constexpr ExclusiveBuffer() = default;
-
-		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device)
-			: device{device}{}
-
-		[[nodiscard]] ExclusiveBuffer(VkDevice device, VkBuffer hander)
-			: device{device},
-			  handler{hander}{}
 
 		template <std::invocable<VkDevice, ExclusiveBuffer&> InitFunc>
-		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device, InitFunc initFunc) : device{device}{
+		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device, InitFunc initFunc) : BasicBuffer{device}{
 			initFunc(device, *this);
 		}
 
 		[[nodiscard]] ExclusiveBuffer(
 			VkPhysicalDevice physicalDevice, VkDevice device,
 			VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties
-		) : device{device}, capacity{size}{
+		) : BasicBuffer{device, nullptr, size}{
 			VkBufferCreateInfo bufferInfo = {};
 			bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 			bufferInfo.size = size;
@@ -126,7 +56,7 @@ export namespace Core::Vulkan{
 			allocInfo.allocationSize = memRequirements.size;
 			allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, physicalDevice, properties);
 
-			if(vkAllocateMemory(device, &allocInfo, nullptr, &memory) != VK_SUCCESS){
+			if(vkAllocateMemory(device, &allocInfo, nullptr, &memory.handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to allocate buffer memory!");
 			}
 
@@ -134,71 +64,7 @@ export namespace Core::Vulkan{
 		}
 
 		~ExclusiveBuffer(){
-			if(device){
-				vkDestroyBuffer(device, handler, nullptr);
-				vkFreeMemory(device, memory, nullptr);
-			}
-		}
-
-		template <std::ranges::contiguous_range T>
-			requires (std::ranges::sized_range<T>)
-		void loadData(const T& range) const{
-			const std::size_t dataSize = std::ranges::size(range) * sizeof(std::ranges::range_value_t<T>);
-
-			if(dataSize > capacity){
-				throw std::runtime_error("Insufficient buffer capacity!");
-			}
-
-			const auto pdata = map();
-			std::memcpy(pdata, std::ranges::data(range), dataSize);
-			unmap();
-		}
-
-		template <typename T>
-			requires (std::is_trivially_copyable_v<T>)
-		void loadData(const T& data) const{
-			static constexpr std::size_t dataSize = sizeof(T);
-
-			if(dataSize > capacity){
-				throw std::runtime_error("Insufficient buffer capacity!");
-			}
-
-			const auto pdata = map();
-			std::memcpy(pdata, &data, dataSize);
-			unmap();
-		}
-
-		template <typename T, typename... Args>
-		void emplace(Args&&... args) const{
-			static constexpr std::size_t dataSize = sizeof(T);
-
-			if(dataSize > capacity){
-				throw std::runtime_error("Insufficient buffer capacity!");
-			}
-
-			const auto pdata = map();
-			new(pdata) T(std::forward<Args>(args)...);
-			unmap();
-		}
-
-		template <typename T>
-			requires (std::is_trivially_copyable_v<T>)
-		void loadData(const T* data) const{
-			this->loadData(*data);
-		}
-
-		[[nodiscard]] void* map() const{
-			void* data{};
-			vkMapMemory(device, memory, 0, capacity, 0, &data);
-			return data;
-		}
-
-		void unmap() const{
-			vkUnmapMemory(device, memory);
-		}
-
-		[[nodiscard]] constexpr operator VkBuffer() const noexcept{
-			return handler;
+			if(device)vkFreeMemory(device, memory, nullptr);
 		}
 
 		ExclusiveBuffer(const ExclusiveBuffer& other) = delete;
@@ -209,12 +75,11 @@ export namespace Core::Vulkan{
 
 		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept{
 			if(this == &other) return *this;
-			this->~ExclusiveBuffer();
-			device = std::move(other.device);
-			handler = other.handler;
-			memory = other.memory;
-			capacity = other.capacity;
+			if(device)vkFreeMemory(device, memory, nullptr);
+			BasicBuffer::operator=(std::move(other));
+
 			return *this;
 		}
+
 	};
 }

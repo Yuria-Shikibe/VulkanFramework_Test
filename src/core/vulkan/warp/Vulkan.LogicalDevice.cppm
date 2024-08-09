@@ -4,31 +4,35 @@ module;
 
 export module Core.Vulkan.LogicalDevice;
 
-export import Core.Vulkan.LogicalDevice.Dependency;
+export import Core.Vulkan.Dependency;
 import Core.Vulkan.Validation;
 import Core.Vulkan.PhysicalDevice;
 import std;
 
 export namespace Core::Vulkan{
-	class LogicalDevice{
-		DeviceDependency device{};
+	class LogicalDevice : public Wrapper<VkDevice>{
 		VkQueue graphicsQueue{};
 		VkQueue presentQueue{};
+		VkQueue computeQueue{};
 
 	public:
+		static constexpr VkPhysicalDeviceFeatures RequiredFeatures{
+			.samplerAnisotropy = true
+		};
+
 		[[nodiscard]] LogicalDevice() = default;
 
 		~LogicalDevice(){
-			vkDestroyDevice(device, nullptr);
+			vkDestroyDevice(handler, nullptr);
 		}
 
-		[[nodiscard]] operator VkDevice() const noexcept{ return device; }
-
-		[[nodiscard]] VkDevice getDevice() const noexcept{ return device; }
 
 		[[nodiscard]] VkQueue getGraphicsQueue() const noexcept{ return graphicsQueue; }
 
 		[[nodiscard]] VkQueue getPresentQueue() const noexcept{ return presentQueue; }
+
+		[[nodiscard]] VkQueue getComputeQueue() const noexcept{ return computeQueue; }
+
 
 		LogicalDevice(const LogicalDevice& other) = delete;
 
@@ -38,17 +42,17 @@ export namespace Core::Vulkan{
 
 		LogicalDevice& operator=(LogicalDevice&& other) noexcept{
 			if(this == &other) return *this;
-			this->~LogicalDevice();
-			device = std::move(other.device);
+			std::swap(handler, other.handler);
 			graphicsQueue = other.graphicsQueue;
 			presentQueue = other.presentQueue;
+			computeQueue = other.computeQueue;
 			return *this;
 		}
 
 
 		LogicalDevice(VkPhysicalDevice physicalDevice, const QueueFamilyIndices& indices){
 			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
-			const std::unordered_set uniqueQueueFamilies{indices.graphicsFamily, indices.presentFamily};
+			const std::unordered_set uniqueQueueFamilies{indices.graphicsFamily, indices.presentFamily, indices.computeFamily};
 
 			constexpr float queuePriority = 1.0f;
 			for(const std::uint32_t queueFamily : uniqueQueueFamilies){
@@ -59,11 +63,8 @@ export namespace Core::Vulkan{
 				queueCreateInfos.push_back(queueCreateInfo);
 			}
 
-			VkPhysicalDeviceFeatures deviceFeatures{};
-			deviceFeatures.samplerAnisotropy = true;
-
 			VkDeviceCreateInfo createInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-			createInfo.pEnabledFeatures = &deviceFeatures;
+			createInfo.pEnabledFeatures = &RequiredFeatures;
 
 			createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueCreateInfos.size());
 			createInfo.pQueueCreateInfos = queueCreateInfos.data();
@@ -78,12 +79,13 @@ export namespace Core::Vulkan{
 				createInfo.enabledLayerCount = 0;
 			}
 
-			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &device.handler) != VK_SUCCESS){
+			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create logical device!");
 			}
 
-			vkGetDeviceQueue(device, indices.graphicsFamily, 0, &graphicsQueue);
-			vkGetDeviceQueue(device, indices.presentFamily, 0, &presentQueue);
+			vkGetDeviceQueue(handler, indices.graphicsFamily, 0, &graphicsQueue);
+			vkGetDeviceQueue(handler, indices.presentFamily, 0, &presentQueue);
+			vkGetDeviceQueue(handler, indices.computeFamily, 0, &computeQueue);
 		}
 	};
 }

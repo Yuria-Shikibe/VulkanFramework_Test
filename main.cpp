@@ -12,17 +12,17 @@ import OS.File;
 
 int main(){
 
-	Core::Vulkan::ShaderCompileTask{
-		Core::Vulkan::DefaultCompilerPath,
-		Core::Vulkan::DefaultSrcPath / "test.frag",
-		Core::Vulkan::TargetCompilerPath
-	}.compile();
-
-	Core::Vulkan::ShaderCompileTask{
-		Core::Vulkan::DefaultCompilerPath,
-		Core::Vulkan::DefaultSrcPath / "test.vert",
-		Core::Vulkan::TargetCompilerPath
-	}.compile();
+	// Core::Vulkan::ShaderCompileTask{
+	// 	Core::Vulkan::DefaultCompilerPath,
+	// 	Core::Vulkan::DefaultSrcPath / "test.frag",
+	// 	Core::Vulkan::TargetCompilerPath
+	// }.compile();
+	//
+	// Core::Vulkan::ShaderCompileTask{
+	// 	Core::Vulkan::DefaultCompilerPath,
+	// 	Core::Vulkan::DefaultSrcPath / "test.vert",
+	// 	Core::Vulkan::TargetCompilerPath
+	// }.compile();
 
 	Core::init();
 	// Core::GLFW::init();

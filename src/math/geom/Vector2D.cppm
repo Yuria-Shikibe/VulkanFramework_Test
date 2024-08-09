@@ -696,6 +696,7 @@ export namespace Geom{
 	using Point2U = Vector2D<unsigned int>;
 	using Point2S = Vector2D<short>;
 	using Point2US = Vector2D<unsigned short>;
+	using USize2 = Vector2D<std::uint32_t>;
 
 	template <typename N>
 	constexpr Vector2D<N> norBaseVec2{1, 1};

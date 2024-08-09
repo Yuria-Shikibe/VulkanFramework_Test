@@ -96,8 +96,8 @@ target_sources(${PROJECT_NAME}
         ${FAST_MODULES}      #[[Modules]]
 )
 
-set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
-add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
-    COMMAND ${CMAKE_COMMAND} -E remove ${FILE_TO_DELETE}
-    COMMENT "Deleting ${FILE_TO_DELETE}"
-)
+#set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
+#add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+#    COMMAND ${CMAKE_COMMAND} -E remove ${FILE_TO_DELETE}
+#    COMMENT "Deleting ${FILE_TO_DELETE}"
+#)

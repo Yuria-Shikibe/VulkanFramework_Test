@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Pipeline;
 
 import Core.Vulkan.Shader;
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import std;
 
 export namespace Core::Vulkan{

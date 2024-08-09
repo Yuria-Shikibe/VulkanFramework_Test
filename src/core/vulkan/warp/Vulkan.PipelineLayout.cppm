@@ -4,7 +4,7 @@ module;
 
 export module Core.Vulkan.PipelineLayout;
 
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import Core.Vulkan.Concepts;
 import std;
 

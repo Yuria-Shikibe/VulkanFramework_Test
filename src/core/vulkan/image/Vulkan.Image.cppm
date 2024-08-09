@@ -8,6 +8,7 @@ import Graphic.Pixmap;
 import OS.File;
 
 import Core.Vulkan.Buffer.ExclusiveBuffer;
+import Core.Vulkan.Buffer.CommandBuffer;
 import std;
 
 export namespace Core::Vulkan{
@@ -55,7 +56,7 @@ export namespace Core::Vulkan{
 		VkImage image, VkFormat format,
 		VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels){
 
-		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
+		TransientCommand commandBuffer(device, commandPool, queue);
 
 		VkImageMemoryBarrier barrier{};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -97,15 +98,14 @@ export namespace Core::Vulkan{
 			0, nullptr,
 			1, &barrier
 		);
-
-		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
 	void copyBufferToImage(
 		VkCommandPool commandPool, VkDevice device, VkQueue queue,
 		VkBuffer buffer, VkImage image,
 		uint32_t width, uint32_t height) {
-		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
+
+		TransientCommand commandBuffer(device, commandPool, queue);
 
 		VkBufferImageCopy region{};
 		region.bufferOffset = 0;
@@ -121,8 +121,6 @@ export namespace Core::Vulkan{
 		region.imageExtent = { width, height, 1};
 
 		vkCmdCopyBufferToImage( commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
 	void generateMipmaps(
@@ -137,7 +135,7 @@ export namespace Core::Vulkan{
 		// }
 
 
-		VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool, device);
+		TransientCommand commandBuffer(device, commandPool, queue);
 
 		VkImageMemoryBarrier barrier = {};
 		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -201,8 +199,6 @@ export namespace Core::Vulkan{
 		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 		vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-		endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 	}
 
 
@@ -316,6 +312,14 @@ export namespace Core::Vulkan{
 			sampler = other.sampler;
 			other.sampler = nullptr;
 			return *this;
+		}
+
+		[[nodiscard]] constexpr VkDescriptorImageInfo getDescriptorInfo_ShaderRead(VkImageView imageView) const noexcept{
+			return {
+				.sampler = sampler,
+				.imageView = imageView,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
 		}
 	};
 

@@ -4,7 +4,7 @@ module;
 
 export module Core.Vulkan.CommandPool;
 
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import Core.Vulkan.Buffer.CommandBuffer;
 import std;
 
@@ -37,7 +37,7 @@ export namespace Core::Vulkan{
 			return *this;
 		}
 
-		CommandPool(VkDevice device, const std::uint32_t queueFamilyIndex, const VkCommandPoolCreateFlags flags = 0) : device{device}{
+		CommandPool(VkDevice device, const std::uint32_t queueFamilyIndex, const VkCommandPoolCreateFlags flags) : device{device}{
 			VkCommandPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO};
 			poolInfo.queueFamilyIndex = queueFamilyIndex;
 			poolInfo.flags = flags; // Optional

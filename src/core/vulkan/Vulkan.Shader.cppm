@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Shader;
 
 import std;
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import OS.File;
 
 export namespace Core::Vulkan{
@@ -126,7 +126,7 @@ export namespace Core::Vulkan{
 		std::vector<VkPipelineShaderStageCreateInfo> chain{};
 
 		void push(const std::initializer_list<const ShaderModule*> args){
-			chain.reserve(args.size());
+			chain.reserve(chain.size() + args.size());
 
 			for (const auto & arg : args){
 				chain.push_back(arg->createInfo());

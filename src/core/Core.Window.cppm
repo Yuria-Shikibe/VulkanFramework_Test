@@ -51,6 +51,10 @@ export namespace Core{
 			}
 		}
 
+		[[nodiscard]] bool iconified() const{
+			return glfwGetWindowAttrib(handle, GLFW_ICONIFIED) || size.area() == 0;
+		}
+
 		[[nodiscard]] bool shouldClose() const{
 			return glfwWindowShouldClose(handle);
 		}
@@ -75,7 +79,7 @@ export namespace Core{
 
 		[[nodiscard]] GLFWwindow* getHandle() const{ return handle; }
 
-		[[nodiscard]] Geom::Vector2D<int> getSize() const{ return size; }
+		[[nodiscard]] Geom::USize2 getSize() const{ return size.as<std::uint32_t>(); }
 
 		void resize(const int w, const int h){
 			if(w == size.x && h == size.y)return;

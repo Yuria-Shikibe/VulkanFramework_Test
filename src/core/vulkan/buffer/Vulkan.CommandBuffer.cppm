@@ -4,17 +4,15 @@ module;
 
 export module Core.Vulkan.Buffer.CommandBuffer;
 
-import Core.Vulkan.LogicalDevice.Dependency;
+import Core.Vulkan.Dependency;
 import std;
 
 export namespace Core::Vulkan{
-	class CommandBuffer{
+	class CommandBuffer : public Wrapper<VkCommandBuffer>{
+	protected:
 		Dependency<VkDevice> device{};
 		Dependency<VkCommandPool> pool{};
-
-		VkCommandBuffer commandBuffer{};
-
-
+	
 	public:
 		[[nodiscard]] CommandBuffer() = default;
 
@@ -27,50 +25,47 @@ export namespace Core::Vulkan{
 			allocInfo.commandPool = commandPool;
 			allocInfo.commandBufferCount = 1;
 
-			if(vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer) != VK_SUCCESS){
+			if(vkAllocateCommandBuffers(device, &allocInfo, &handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to allocate command buffers!");
 			}
 		}
 
-		operator VkCommandBuffer() const noexcept{ return commandBuffer; };
+		operator VkCommandBuffer() const noexcept{ return handler; };
 
-		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return commandBuffer; }
+		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return handler; }
 
 		~CommandBuffer(){
-			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &commandBuffer);
+			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handler);
 		}
 
 		CommandBuffer(const CommandBuffer& other) = delete;
 
 		CommandBuffer& operator=(const CommandBuffer& other) = delete;
 
-		CommandBuffer(CommandBuffer&& other) noexcept
-			: device{std::move(other.device)},
-			  pool{std::move(other.pool)},
-			  commandBuffer{other.commandBuffer}{}
+		CommandBuffer(CommandBuffer&& other) noexcept = default;
 
 		CommandBuffer& operator=(CommandBuffer&& other) noexcept{
 			if(this == &other) return *this;
-			this->~CommandBuffer();
+			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handler);
+			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
 			pool = std::move(other.pool);
-			commandBuffer = other.commandBuffer;
 			return *this;
 		}
 
-		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, const VkCommandBufferInheritanceInfo* inheritance = nullptr) const{
+		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, const VkCommandBufferInheritanceInfo* inheritance = nullptr) const{
 			VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 
 			beginInfo.flags = flags;
 			beginInfo.pInheritanceInfo = inheritance; // Optional
 
-			if(vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS){
+			if(vkBeginCommandBuffer(handler, &beginInfo) != VK_SUCCESS){
 				throw std::runtime_error("Failed to begin recording command buffer!");
 			}
 		}
 
 		void end() const{
-			if(vkEndCommandBuffer(commandBuffer) != VK_SUCCESS){
+			if(vkEndCommandBuffer(handler) != VK_SUCCESS){
 				throw std::runtime_error("Failed to record command buffer!");
 			}
 		}
@@ -78,28 +73,74 @@ export namespace Core::Vulkan{
 		template <typename T, typename... Args>
 			requires std::invocable<T, VkCommandBuffer, const Args&...>
 		void push(T fn, const Args& ...args) const{
-			std::invoke(fn, commandBuffer, args...);
+			std::invoke(fn, handler, args...);
 		}
 
 		void setViewport(const VkViewport& viewport) const{
-			vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+			vkCmdSetViewport(handler, 0, 1, &viewport);
 		}
 
 		void setScissor(const VkRect2D& scissor) const{
-			vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+			vkCmdSetScissor(handler, 0, 1, &scissor);
 		}
 	};
 
 	struct [[jetbrains::guard]] ScopedCommand{
-		CommandBuffer& commandBuffer;
+		CommandBuffer& handler;
 
-		[[nodiscard]] explicit ScopedCommand(CommandBuffer& commandBuffer)
-			: commandBuffer{commandBuffer}{
-			commandBuffer.begin();
+		[[nodiscard]] explicit ScopedCommand(CommandBuffer& handler, const VkCommandBufferUsageFlags flags)
+			: handler{handler}{
+			handler.begin(flags);
 		}
 
 		~ScopedCommand() noexcept(false) {
-			commandBuffer.end();
+			handler.end();
 		}
+	};
+
+	struct [[jetbrains::guard]] TransientCommand : CommandBuffer{
+		VkQueue targetQueue{};
+
+		[[nodiscard]] TransientCommand() = default;
+
+		[[nodiscard]] TransientCommand(VkDevice device, VkCommandPool commandPool,
+			VkQueue targetQueue)
+			: CommandBuffer{device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY},
+			  targetQueue{targetQueue}{
+			static constexpr VkCommandBufferBeginInfo beginInfo{
+					VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+					nullptr,
+					VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+				};
+
+			vkBeginCommandBuffer(handler, &beginInfo);
+		}
+
+		~TransientCommand() noexcept(false) {
+			vkEndCommandBuffer(handler);
+
+			const VkSubmitInfo submitInfo{
+					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+					.pNext = nullptr,
+					.waitSemaphoreCount = 0,
+					.pWaitSemaphores = nullptr,
+					.pWaitDstStageMask = nullptr,
+					.commandBufferCount = 1,
+					.pCommandBuffers = &handler,
+					.signalSemaphoreCount = 0,
+					.pSignalSemaphores = nullptr
+				};
+
+			vkQueueSubmit(targetQueue, 1, &submitInfo, nullptr);
+			vkQueueWaitIdle(targetQueue);
+		}
+
+		TransientCommand(const TransientCommand& other) = delete;
+
+		TransientCommand(TransientCommand&& other) noexcept = delete;
+
+		TransientCommand& operator=(const TransientCommand& other) = delete;
+
+		TransientCommand& operator=(TransientCommand&& other) noexcept = delete;
 	};
 }

@@ -21,9 +21,10 @@ export namespace Core::Vulkan{
 		// 0 by default
 		std::uint32_t graphicsFamily{};
 		std::uint32_t presentFamily{};
+		std::uint32_t computeFamily{InvalidFamily};
 
 		[[nodiscard]] constexpr bool isComplete() const noexcept{
-			return graphicsFamily != InvalidFamily && presentFamily != InvalidFamily;
+			return graphicsFamily != InvalidFamily && presentFamily != InvalidFamily && computeFamily != InvalidFamily;
 		}
 
 		[[nodiscard]] explicit operator bool() const noexcept{
@@ -40,6 +41,10 @@ export namespace Core::Vulkan{
 
 				if(queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT){
 					graphicsFamily = index;
+				}
+
+				if(queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT){
+					computeFamily = index;
 				}
 
 				//Obtain present queue
