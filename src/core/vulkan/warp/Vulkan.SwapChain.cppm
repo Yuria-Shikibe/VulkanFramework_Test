@@ -2,7 +2,6 @@ module;
 
 #include <vulkan/vulkan.h>
 
-
 export module Core.Vulkan.SwapChain;
 
 import std;
@@ -11,11 +10,12 @@ import Core.Vulkan.Util.Invoker;
 import Core.Vulkan.SwapChainInfo;
 import Core.Vulkan.PhysicalDevice;
 import Core.Vulkan.Image;
-import Core.Vulkan.LogicalDevice;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
 
 export namespace Core::Vulkan{
+	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+
 	class SwapChain{
 	public:
 		static constexpr std::string_view SwapChainName{"SwapChain"};
@@ -48,8 +48,17 @@ export namespace Core::Vulkan{
 
 		mutable bool resized{};
 
+		void resize(int w, int h){
+			resized = true;
+		}
+
+		std::uint32_t currentFrame{};
+
 	public:
+		std::function<void(SwapChain&)>  recreateCallback{};
 		VkQueue presentQueue{};
+
+		[[nodiscard]] SwapChain() = default;
 
 		void attachWindow(Window* window){
 			if(targetWindow) throw std::runtime_error("Target window already set!");
@@ -61,8 +70,7 @@ export namespace Core::Vulkan{
 			});
 		}
 
-
-
+		
 		void detachWindow(){
 			if(!targetWindow) return;
 
@@ -90,11 +98,14 @@ export namespace Core::Vulkan{
 		}
 
 		~SwapChain(){
+			if(device)vkDestroySwapchainKHR(device, swapChain, nullptr);
+
 			cleanupSwapChain();
 			detachWindow();
+			destroySurface();
 		}
 
-		void cleanupSwapChain() {
+		void cleanupSwapChain() const{
 			if(!device)return;
 
 			vkDestroyRenderPass(device, renderPass, nullptr);
@@ -103,24 +114,24 @@ export namespace Core::Vulkan{
 				vkDestroyImageView(device, view, nullptr);
 			}
 
-			vkDestroySwapchainKHR(device, swapChain, nullptr);
 			destroyOldSwapChain();
-
-			device = nullptr;
 		}
 
 		void recreate(){
-			vkDestroyRenderPass(device, renderPass, nullptr);
-
-			for (const auto view : getImageViews()) {
-				vkDestroyImageView(device, view, nullptr);
+			while (getTargetWindow()->iconified() || getTargetWindow()->getSize().area() == 0){
+				getTargetWindow()->waitEvent();
 			}
 
-			destroyOldSwapChain();
+			vkDeviceWaitIdle(device);
+			
+			cleanupSwapChain();
 
 			oldSwapChain = swapChain;
 
 			createSwapChain(physicalDevice, device);
+
+			recreateCallback(*this);
+			resized = false;
 		}
 
 		[[nodiscard]] Window* getTargetWindow() const{ return targetWindow; }
@@ -131,8 +142,8 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] operator VkSwapchainKHR() const noexcept{return swapChain;}
 
-		void resize(int w, int h){
-			resized = true;
+		auto getCurrentRenderingImage() const noexcept{
+			return currentFrame;
 		}
 
 		void createSwapChain(VkPhysicalDevice physicalDevice, VkDevice device){
@@ -236,15 +247,30 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] std::uint32_t size() const noexcept{ return swapChainImages.size(); }
 
-		std::pair<std::uint32_t, VkResult> acquireNextImage(VkSemaphore semaphore, const std::uint64_t timeout = std::numeric_limits<std::uint64_t>::max()) const{
+		std::uint32_t acquireNextImage(VkSemaphore semaphore, const std::uint64_t timeout = std::numeric_limits<std::uint64_t>::max()){
 			std::uint32_t imageIndex{};
-			const auto rst = vkAcquireNextImageKHR(device, swapChain, timeout, semaphore, nullptr, &imageIndex);
-			return {imageIndex, rst};
+
+			const auto result = vkAcquireNextImageKHR(device, swapChain, timeout, semaphore, nullptr, &imageIndex);
+
+			if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+				recreate();
+			} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+				throw std::runtime_error("failed to acquire swap chain image!");
+			}
+
+			return imageIndex;
 		}
 
-		[[nodiscard]] VkResult postImage(const VkPresentInfoKHR& presentInfo) const{
-			destroyOldSwapChain();
-			return vkQueuePresentKHR(presentQueue, &presentInfo);
+		void postImage(const VkPresentInfoKHR& presentInfo){
+			auto result = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized) {
+				recreate();
+			} else if (result != VK_SUCCESS) {
+				throw std::runtime_error("failed to present swap chain image!");
+			}
+
+			currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		}
 
 	private:
@@ -312,5 +338,14 @@ export namespace Core::Vulkan{
 
 			return std::bit_cast<VkExtent2D>(size);
 		}
+
+	public:
+		SwapChain(const SwapChain& other) = delete;
+
+		SwapChain(SwapChain&& other) noexcept = delete;
+
+		SwapChain& operator=(const SwapChain& other) = delete;
+
+		SwapChain& operator=(SwapChain&& other) noexcept = delete;
 	};
 }

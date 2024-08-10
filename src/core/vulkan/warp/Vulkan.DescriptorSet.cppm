@@ -56,7 +56,7 @@ export namespace Core::Vulkan{
 		[[nodiscard]] DescriptorSetLayout() = default;
 
 		~DescriptorSetLayout(){
-			if(device)vkDestroyDescriptorSetLayout(device, handler, nullptr);
+			if(device)vkDestroyDescriptorSetLayout(device, handle, nullptr);
 		}
 
 		DescriptorSetLayout(const DescriptorSetLayout& other) = delete;
@@ -67,7 +67,7 @@ export namespace Core::Vulkan{
 
 		DescriptorSetLayout& operator=(DescriptorSetLayout&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyDescriptorSetLayout(device, handler, nullptr);
+			if(device)vkDestroyDescriptorSetLayout(device, handle, nullptr);
 
 			Wrapper::operator=(std::move(other));
 			builder = std::move(other.builder);
@@ -93,7 +93,7 @@ export namespace Core::Vulkan{
 					.pBindings = bindings.data()
 				};
 
-			if(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create descriptor set layout!");
 			}
 		}
@@ -106,7 +106,7 @@ export namespace Core::Vulkan{
 		[[nodiscard]] DescriptorSetPool() = default;
 
 		~DescriptorSetPool(){
-			if(device)vkDestroyDescriptorPool(device, handler, nullptr);
+			if(device)vkDestroyDescriptorPool(device, handle, nullptr);
 		}
 
 		DescriptorSetPool(const DescriptorSetPool& other) = delete;
@@ -137,7 +137,7 @@ export namespace Core::Vulkan{
 			poolInfo.pPoolSizes = poolSizes.data();
 			poolInfo.maxSets = size;
 
-			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &handler) != VK_SUCCESS) {
+			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &handle) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor pool!");
 			}
 		}
@@ -148,7 +148,7 @@ export namespace Core::Vulkan{
 			VkDescriptorSetAllocateInfo allocInfo{
 					.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 					.pNext = nullptr,
-					.descriptorPool = handler,
+					.descriptorPool = handle,
 					.descriptorSetCount = 1,
 					.pSetLayouts = descriptorSetLayout.operator->()
 				};
@@ -167,7 +167,7 @@ export namespace Core::Vulkan{
 			VkDescriptorSetAllocateInfo allocInfo{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
 				.pNext = nullptr,
-				.descriptorPool = handler,
+				.descriptorPool = handle,
 				.descriptorSetCount = static_cast<std::uint32_t>(size),
 				.pSetLayouts = layouts.data()
 			};
@@ -203,6 +203,8 @@ export namespace Core::Vulkan{
 		[[nodiscard]] explicit DescriptorSetUpdator(VkDevice device, DescriptorSet& descriptorSets)
 			: device{device}, descriptorSets{descriptorSets}{
 		}
+
+		//TODO manually spec binding index
 
 		void push(VkDescriptorBufferInfo& uniformBufferInfo){
 			const auto index = descriptorWrites.size();

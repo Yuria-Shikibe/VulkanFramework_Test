@@ -23,7 +23,7 @@ export namespace Core::Vulkan{
 		[[nodiscard]] LogicalDevice() = default;
 
 		~LogicalDevice(){
-			vkDestroyDevice(handler, nullptr);
+			vkDestroyDevice(handle, nullptr);
 		}
 
 
@@ -42,7 +42,7 @@ export namespace Core::Vulkan{
 
 		LogicalDevice& operator=(LogicalDevice&& other) noexcept{
 			if(this == &other) return *this;
-			std::swap(handler, other.handler);
+			std::swap(handle, other.handle);
 			graphicsQueue = other.graphicsQueue;
 			presentQueue = other.presentQueue;
 			computeQueue = other.computeQueue;
@@ -79,13 +79,13 @@ export namespace Core::Vulkan{
 				createInfo.enabledLayerCount = 0;
 			}
 
-			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create logical device!");
 			}
 
-			vkGetDeviceQueue(handler, indices.graphicsFamily, 0, &graphicsQueue);
-			vkGetDeviceQueue(handler, indices.presentFamily, 0, &presentQueue);
-			vkGetDeviceQueue(handler, indices.computeFamily, 0, &computeQueue);
+			vkGetDeviceQueue(handle, indices.graphicsFamily, 0, &graphicsQueue);
+			vkGetDeviceQueue(handle, indices.presentFamily, 0, &presentQueue);
+			vkGetDeviceQueue(handle, indices.computeFamily, 0, &computeQueue);
 		}
 	};
 }

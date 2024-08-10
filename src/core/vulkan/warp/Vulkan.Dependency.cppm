@@ -6,33 +6,45 @@ export module Core.Vulkan.Dependency;
 import std;
 
 export namespace Core::Vulkan{
-	template <typename T>
+	template <typename T, bool enableCopy = false>
 		requires std::is_pointer_v<T>
 	struct Wrapper{
 	protected:
-		T handler{};
+		T handle{};
 
 	public:
+		using WrappedType = T;
+
 		[[nodiscard]] Wrapper() = default;
 
 		[[nodiscard]] explicit Wrapper(const T handler)
-			: handler{handler}{}
+			: handle{handler}{}
 
 		T release(){
-			T result = handler;
-			handler = nullptr;
+			T result = handle;
+			handle = nullptr;
 			return result;
 		}
 
-		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
+		Wrapper(const Wrapper& other) requires (enableCopy) = default;
 
-		[[nodiscard]] constexpr operator bool() const noexcept{ return handler != nullptr; }
+		Wrapper(Wrapper&& other) noexcept = default;
 
-		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handler; }
+		Wrapper& operator=(const Wrapper& other) requires (enableCopy) = default;
 
-		[[nodiscard]] constexpr T* operator->() noexcept{ return &handler; }
+		Wrapper& operator=(Wrapper&& other) noexcept = default;
 
-		[[nodiscard]] constexpr T get() const noexcept{ return handler; }
+		[[nodiscard]] constexpr operator T() const noexcept{ return handle; }
+
+		[[nodiscard]] constexpr operator bool() const noexcept{ return handle != nullptr; }
+
+		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handle; }
+
+		[[nodiscard]] constexpr T* operator->() noexcept{ return &handle; }
+
+		[[nodiscard]] constexpr T get() const noexcept{ return handle; }
+
+		[[nodiscard]] constexpr std::array<T, 1> asSeq() const noexcept{ return std::array{handle}; }
 	};
 	/**
 	 * @brief Make move constructor default declarable

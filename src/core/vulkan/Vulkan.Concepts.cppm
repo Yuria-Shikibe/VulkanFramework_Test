@@ -67,5 +67,12 @@ namespace Core::Vulkan{
 		requires std::same_as<Value, std::ranges::range_value_t<Rng>>;
 	};
 
+	export
+	template <typename Rng, typename Value>
+	concept RangeOf = requires{
+		requires std::ranges::range<Rng>;
+		requires std::same_as<Value, std::ranges::range_value_t<Rng>>;
+	};
+
 	static_assert(ContigiousRange<EmptyRange<int>, int>);
 }

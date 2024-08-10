@@ -51,6 +51,10 @@ export namespace Core::Vulkan{
 			return {device, commandPool, level};
 		}
 
+		void resetAll(const VkCommandPoolResetFlags resetFlags) const{
+			vkResetCommandPool(device, commandPool, resetFlags);
+		}
+
 		[[nodiscard]] std::vector<CommandBuffer> obtainArray(const std::size_t count, const VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY) const{
 			std::vector<CommandBuffer> arr{};
 			arr.reserve(count);

@@ -65,7 +65,6 @@ export namespace Core::Vulkan{
 			physicalDevice.cacheProperties(surface);
 		}
 
-		//该函数用于将命令缓冲区提交到用于图形的队列
 		VkResult commandSubmit_Graphics(VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 			VkResult result = vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, fence);
@@ -74,7 +73,6 @@ export namespace Core::Vulkan{
 			return result;
 		}
 
-		//该函数用于在渲染循环中将命令缓冲区提交到图形队列的常见情形
 		VkResult commandSubmit_Graphics(VkCommandBuffer commandBuffer,
 		                                VkSemaphore semaphore_imageIsAvailable = nullptr,
 		                                VkSemaphore semaphore_renderingIsOver = nullptr,
@@ -95,13 +93,11 @@ export namespace Core::Vulkan{
 			return commandSubmit_Graphics(submitInfo, fence);
 		}
 
-		//该函数用于将命令缓冲区提交到用于图形的队列，且只使用栅栏的常见情形
 		VkResult commandSubmit_Graphics(VkCommandBuffer commandBuffer, VkFence fence = nullptr) const{
 			VkSubmitInfo submitInfo{.commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
 			return commandSubmit_Graphics(submitInfo, fence);
 		}
 
-		//该函数用于将命令缓冲区提交到用于计算的队列
 		VkResult commandSubmit_Compute(VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 			VkResult result = vkQueueSubmit(device.getComputeQueue(), 1, &submitInfo, fence);
@@ -109,7 +105,6 @@ export namespace Core::Vulkan{
 			return result;
 		}
 
-		//该函数用于将命令缓冲区提交到用于计算的队列，且只使用栅栏的常见情形
 		VkResult commandSubmit_Compute(VkCommandBuffer commandBuffer, VkFence fence = nullptr) const{
 			VkSubmitInfo submitInfo{.commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
 			return commandSubmit_Compute(submitInfo, fence);

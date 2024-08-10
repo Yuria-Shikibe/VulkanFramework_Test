@@ -19,9 +19,9 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] constexpr VkDescriptorBufferInfo getDescriptorInfo() const & noexcept{
 			return {
-					.buffer = handler,
+					.buffer = handle,
 					.offset = 0,
-					.range = capacity
+					.range = memory.size()
 				};
 		}
 	};

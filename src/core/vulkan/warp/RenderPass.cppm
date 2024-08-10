@@ -68,13 +68,13 @@ export namespace Core::Vulkan{
 			renderPassInfo.dependencyCount = 1;
 			renderPassInfo.pDependencies = &dependency;
 
-			if(vkCreateRenderPass(device, &renderPassInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateRenderPass(device, &renderPassInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("failed to create render pass!");
 			}
 		}
 
 		~RenderPass(){
-			if(device)vkDestroyRenderPass(device, handler, nullptr);
+			if(device)vkDestroyRenderPass(device, handle, nullptr);
 		}
 
 		RenderPass(const RenderPass& other) = delete;
@@ -85,7 +85,7 @@ export namespace Core::Vulkan{
 
 		RenderPass& operator=(RenderPass&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyRenderPass(device, handler, nullptr);
+			if(device)vkDestroyRenderPass(device, handle, nullptr);
 
 			Wrapper<VkRenderPass>::operator =(std::move(other));
 			device = std::move(other.device);

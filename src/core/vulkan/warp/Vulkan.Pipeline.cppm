@@ -4,115 +4,191 @@ module;
 
 export module Core.Vulkan.Pipeline;
 
+import Core.Vulkan.Concepts;
 import Core.Vulkan.Shader;
 import Core.Vulkan.Dependency;
+import Core.Vulkan.Preinstall;
+import Core.Vulkan.PipelineLayout;
 import std;
 
 export namespace Core::Vulkan{
-	struct GraphicPipeline{
+	struct PipelineTemplate : VkGraphicsPipelineCreateInfo{
+	private:
+		struct MutexWrapper{
+			std::mutex mutex{};
+			operator std::mutex&() noexcept{return mutex;}
+			[[nodiscard]] MutexWrapper() = default;
+			MutexWrapper(const MutexWrapper&) {}
+			MutexWrapper(MutexWrapper&&) noexcept {}
+			MutexWrapper& operator=(const MutexWrapper&){return *this;}
+			MutexWrapper& operator=(MutexWrapper&&) noexcept{return *this;}
+		} mutex{};
+
+	public:
+		ShaderChain shaderChain{};
+
+		std::vector<VkDynamicState> dynamicStates{};
+		VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+
+		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+		VkPipelineViewportStateCreateInfo viewportState{};
+
+		std::uint32_t dynamicViewportSize{};
+		std::vector<VkViewport> staticViewports{};
+		std::vector<VkRect2D> staticScissors{};
+
+		[[nodiscard]] std::uint32_t viewportSize() const{
+			return dynamicViewportSize > 0 ? dynamicViewportSize : staticViewports.size();
+		}
+
+		[[nodiscard]] PipelineTemplate() : VkGraphicsPipelineCreateInfo{
+				VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO
+			}{}
+
+		PipelineTemplate& useDefaultFixedStages(){
+			viewportState = Default::DynamicViewportState<1>;
+
+			pInputAssemblyState = &Default::InputAssembly;
+			pRasterizationState = &Default::Rasterizer;
+			pMultisampleState = &Default::Multisampling;
+			pColorBlendState = &Default::ColorBlending<std::array{Blending::AlphaBlend}>;
+
+			return *this;
+		}
+
+		PipelineTemplate& setColorBlend(const VkPipelineColorBlendStateCreateInfo* info){
+			pColorBlendState = info;
+			return *this;
+		}
+
+		PipelineTemplate& setStaticViewport(const RangeOf<VkViewport> auto& viewports){
+			staticViewports = std::vector<VkViewport>{std::ranges::begin(viewports), std::ranges::end(viewports)};
+
+			viewportState.viewportCount = staticViewports.size();
+			dynamicViewportSize = 0;
+
+			return *this;
+		}
+
+		PipelineTemplate& setStaticScissors(const RangeOf<VkRect2D> auto& viewports){
+			staticScissors = std::vector<VkRect2D>{std::ranges::begin(viewports), std::ranges::end(viewports)};
+
+			viewportState.scissorCount = staticScissors.size();
+			dynamicViewportSize = 0;
+
+			return *this;
+		}
+
+		PipelineTemplate& setDynamicViewportCount(const std::uint32_t size){
+			dynamicViewportSize = size;
+			viewportState.scissorCount = viewportState.viewportCount = size;
+			viewportState.pScissors = nullptr;
+			viewportState.pViewports = nullptr;
+
+			return *this;
+		}
+
+		PipelineTemplate& autoFetchStaticScissors(){
+			staticScissors.resize(staticViewports.size());
+
+			for (const auto& [index, staticScissor] : staticScissors | std::views::enumerate){
+				staticScissor.offset = {};
+				staticScissor.extent.width = static_cast<std::uint32_t>(std::round(staticViewports[index].width));
+				staticScissor.extent.height = static_cast<std::uint32_t>(std::round(staticViewports[index].height));
+			}
+			dynamicViewportSize = 0;
+
+			return *this;
+		}
+
+		PipelineTemplate& setShaderChain(ShaderChain&& shaderChain){
+			this->shaderChain = std::move(shaderChain);
+
+			stageCount = shaderChain.size();
+			pStages = shaderChain.data();
+
+			return *this;
+		}
+
+		PipelineTemplate& setDynamicStates(const std::initializer_list<VkDynamicState> states){
+			this->dynamicStates = states;
+			dynamicStateInfo = Util::createDynamicState(dynamicStates);
+
+			return *this;
+		}
+
+		template <Util::VertexInfo Prov>
+		PipelineTemplate& setVertexInputInfo(){
+			vertexInputInfo = Util::getVertexInfo<Prov>();
+
+			return *this;
+		}
+
+		PipelineTemplate& setVertexInputInfo(const VkPipelineVertexInputStateCreateInfo& info){
+			vertexInputInfo = info;
+
+			return *this;
+		}
+
+		[[nodiscard]] auto create(VkDevice device,
+			VkPipelineLayout layout, VkRenderPass renderPass, std::uint32_t subpassIndex = 0){
+			std::lock_guard lg{mutex.mutex};
+
+			this->layout = layout;
+			this->renderPass = renderPass;
+			this->subpass = subpassIndex;
+
+			this->stageCount = shaderChain.size();
+			this->pStages = shaderChain.data();
+
+			this->pVertexInputState = &vertexInputInfo;
+
+			this->pDynamicState = &dynamicStateInfo;
+
+			this->pViewportState = &viewportState;
+
+			VkPipeline pipeline{};
+			auto rst = vkCreateGraphicsPipelines(device, nullptr, 1, this, nullptr, &pipeline);
+			return std::make_pair(pipeline, rst);
+		}
+	};
+
+	struct GraphicPipeline : Wrapper<VkPipeline>{
 		DeviceDependency device{};
 
-		/*void createGraphicsPipeline(){
-			ShaderModule vertShaderModule{
-					device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
-				};
+		[[nodiscard]] GraphicPipeline() = default;
 
-			ShaderModule fragShaderModule{
-					device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
-				};
+		[[nodiscard]] GraphicPipeline(VkDevice device, VkPipeline pipeline) : Wrapper{pipeline}, device{device}{}
 
-			auto vertShaderStageInfo = vertShaderModule.createInfo();
-			auto fragShaderStageInfo = fragShaderModule.createInfo();
+		[[nodiscard]] GraphicPipeline(
+			VkDevice device,
+			PipelineTemplate& pipelineTemplate,
+			VkPipelineLayout layout, VkRenderPass renderPass, std::uint32_t subpassIndex = 0) : device{device}{
+			auto [p, rst] = pipelineTemplate.create(device, layout, renderPass, subpassIndex);
 
-			std::array shaderStages{vertShaderStageInfo, fragShaderStageInfo};
-
-			VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
-
-			auto bindingDescription = Vertex::getBindingDescription();
-			auto attributeDescriptions = Vertex::getAttributeDescriptions();
-
-			vertexInputInfo.vertexBindingDescriptionCount = 1;
-			vertexInputInfo.vertexAttributeDescriptionCount = static_cast<std::uint32_t>(attributeDescriptions.size());
-			vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-			vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
-
-			VkPipelineInputAssemblyStateCreateInfo inputAssembly{VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
-			inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-			inputAssembly.primitiveRestartEnable = false;
-
-			VkPipelineViewportStateCreateInfo viewportState{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
-			viewportState.viewportCount = 1;
-			viewportState.scissorCount = 1;
-
-			VkPipelineRasterizationStateCreateInfo rasterizer{VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
-			rasterizer.depthClampEnable = VK_FALSE;
-			rasterizer.rasterizerDiscardEnable = VK_FALSE;
-			rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-			rasterizer.lineWidth = 1.0f;
-
-			rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-			rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
-
-			rasterizer.depthBiasEnable = VK_FALSE;
-
-			VkPipelineMultisampleStateCreateInfo multisampling{};
-			multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-			multisampling.sampleShadingEnable = VK_FALSE;
-			multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
-			VkPipelineColorBlendAttachmentState colorBlendAttachment{};
-			colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-				VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-			colorBlendAttachment.blendEnable = VK_FALSE;
-
-			VkPipelineColorBlendStateCreateInfo colorBlending{};
-			colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-			colorBlending.logicOpEnable = VK_FALSE;
-			colorBlending.logicOp = VK_LOGIC_OP_COPY;
-			colorBlending.attachmentCount = 1;
-			colorBlending.pAttachments = &colorBlendAttachment;
-			colorBlending.blendConstants[0] = 0.0f;
-			colorBlending.blendConstants[1] = 0.0f;
-			colorBlending.blendConstants[2] = 0.0f;
-			colorBlending.blendConstants[3] = 0.0f;
-
-			std::vector dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-
-			VkPipelineDynamicStateCreateInfo dynamicState{
-				.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-				.pNext = nullptr,
-				.flags = 0,
-				.dynamicStateCount = static_cast<std::uint32_t>(dynamicStates.size()),
-				.pDynamicStates = dynamicStates.data()
-			};
-
-			VkPipelineLayoutCreateInfo pipelineLayoutInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-			pipelineLayoutInfo.setLayoutCount = 1;
-			pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout.get();
-
-			if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS){
-				throw std::runtime_error("failed to create pipeline layout!");
+			if(rst){
+				throw std::runtime_error("Failed to create pipeline");
 			}
 
-			VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-			pipelineInfo.stageCount = shaderStages.size();
-			pipelineInfo.pStages = shaderStages.data();
-			pipelineInfo.pVertexInputState = &vertexInputInfo;
-			pipelineInfo.pInputAssemblyState = &inputAssembly;
-			pipelineInfo.pViewportState = &viewportState;
-			pipelineInfo.pRasterizationState = &rasterizer;
-			pipelineInfo.pMultisampleState = &multisampling;
-			pipelineInfo.pColorBlendState = &colorBlending;
-			pipelineInfo.pDynamicState = &dynamicState;
-			pipelineInfo.layout = pipelineLayout;
-			pipelineInfo.renderPass = swapChain.getRenderPass();
-			pipelineInfo.subpass = 0;
-			pipelineInfo.basePipelineHandle = nullptr;
+			handle = p;
+		}
 
-			if(vkCreateGraphicsPipelines(device, nullptr, 1, &pipelineInfo, nullptr, &graphicsPipeline) !=
-				VK_SUCCESS){
-				throw std::runtime_error("failed to create graphics pipeline!");
-			}
-		}*/
+		~GraphicPipeline(){
+			if(device)vkDestroyPipeline(device, handle, nullptr);
+		}
+
+		GraphicPipeline(const GraphicPipeline& other) = delete;
+
+		GraphicPipeline(GraphicPipeline&& other) noexcept = default;
+
+		GraphicPipeline& operator=(const GraphicPipeline& other) = delete;
+
+		GraphicPipeline& operator=(GraphicPipeline&& other) noexcept{
+			if(this == &other) return *this;
+			if(device)vkDestroyPipeline(device, handle, nullptr);
+			Wrapper<VkPipeline>::operator =(std::move(other));
+			device = std::move(other.device);
+			return *this;
+		}
 	};
 }

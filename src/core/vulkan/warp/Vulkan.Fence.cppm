@@ -26,17 +26,17 @@ export namespace Core::Vulkan{
 				.flags = VkFenceCreateFlags{std::to_underlying(flags)}
 			};
 
-			if(vkCreateFence(device, &fenceInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateFence(device, &fenceInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create fence!");
 			}
 		}
 
 		void reset() const{
-			vkResetFences(device, 1, &handler);
+			vkResetFences(device, 1, &handle);
 		}
 
 		void wait(const std::uint64_t timeout = std::numeric_limits<std::uint64_t>::max()) const{
-			vkWaitForFences(device, 1, &handler, true, timeout);
+			vkWaitForFences(device, 1, &handle, true, timeout);
 		}
 
 		void waitAndReset(const std::uint64_t timeout = std::numeric_limits<std::uint64_t>::max()) const{
@@ -47,7 +47,7 @@ export namespace Core::Vulkan{
 		Fence(const Fence& other) = delete;
 
 		Fence(Fence&& other) noexcept
-			: Wrapper{other.handler},
+			: Wrapper{other.handle},
 			  device{std::move(other.device)}{}
 
 		Fence& operator=(const Fence& other) = delete;
@@ -55,14 +55,14 @@ export namespace Core::Vulkan{
 
 		Fence& operator=(Fence&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyFence(device, handler, nullptr);
+			if(device)vkDestroyFence(device, handle, nullptr);
 			Wrapper::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
 		}
 
 		~Fence(){
-			if(device)vkDestroyFence(device, handler, nullptr);
+			if(device)vkDestroyFence(device, handle, nullptr);
 		}
 	};
 }

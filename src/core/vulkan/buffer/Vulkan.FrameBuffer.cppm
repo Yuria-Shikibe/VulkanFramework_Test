@@ -18,7 +18,7 @@ export namespace Core::Vulkan{
 
 	public:
 		~FrameBuffer(){
-			if(device)vkDestroyFramebuffer(device, handler, nullptr);
+			if(device)vkDestroyFramebuffer(device, handle, nullptr);
 		}
 
 		[[nodiscard]] FrameBuffer() = default;
@@ -31,7 +31,7 @@ export namespace Core::Vulkan{
 
 		FrameBuffer& operator=(FrameBuffer&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyFramebuffer(device, handler, nullptr);
+			if(device)vkDestroyFramebuffer(device, handle, nullptr);
 			Wrapper<VkFramebuffer>::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
@@ -55,7 +55,7 @@ export namespace Core::Vulkan{
 					.layers = layers
 				};
 
-			if(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateFramebuffer(device, &framebufferInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create framebuffer!");
 			}
 		}

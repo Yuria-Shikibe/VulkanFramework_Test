@@ -25,17 +25,17 @@ export namespace Core::Vulkan{
 			allocInfo.commandPool = commandPool;
 			allocInfo.commandBufferCount = 1;
 
-			if(vkAllocateCommandBuffers(device, &allocInfo, &handler) != VK_SUCCESS){
+			if(vkAllocateCommandBuffers(device, &allocInfo, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to allocate command buffers!");
 			}
 		}
 
-		operator VkCommandBuffer() const noexcept{ return handler; };
+		operator VkCommandBuffer() const noexcept{ return handle; };
 
-		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return handler; }
+		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return handle; }
 
 		~CommandBuffer(){
-			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handler);
+			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handle);
 		}
 
 		CommandBuffer(const CommandBuffer& other) = delete;
@@ -46,7 +46,7 @@ export namespace Core::Vulkan{
 
 		CommandBuffer& operator=(CommandBuffer&& other) noexcept{
 			if(this == &other) return *this;
-			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handler);
+			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handle);
 			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
 			pool = std::move(other.pool);
@@ -59,13 +59,13 @@ export namespace Core::Vulkan{
 			beginInfo.flags = flags;
 			beginInfo.pInheritanceInfo = inheritance; // Optional
 
-			if(vkBeginCommandBuffer(handler, &beginInfo) != VK_SUCCESS){
+			if(vkBeginCommandBuffer(handle, &beginInfo) != VK_SUCCESS){
 				throw std::runtime_error("Failed to begin recording command buffer!");
 			}
 		}
 
 		void end() const{
-			if(vkEndCommandBuffer(handler) != VK_SUCCESS){
+			if(vkEndCommandBuffer(handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to record command buffer!");
 			}
 		}
@@ -73,15 +73,15 @@ export namespace Core::Vulkan{
 		template <typename T, typename... Args>
 			requires std::invocable<T, VkCommandBuffer, const Args&...>
 		void push(T fn, const Args& ...args) const{
-			std::invoke(fn, handler, args...);
+			std::invoke(fn, handle, args...);
 		}
 
 		void setViewport(const VkViewport& viewport) const{
-			vkCmdSetViewport(handler, 0, 1, &viewport);
+			vkCmdSetViewport(handle, 0, 1, &viewport);
 		}
 
 		void setScissor(const VkRect2D& scissor) const{
-			vkCmdSetScissor(handler, 0, 1, &scissor);
+			vkCmdSetScissor(handle, 0, 1, &scissor);
 		}
 	};
 
@@ -113,11 +113,11 @@ export namespace Core::Vulkan{
 					VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 				};
 
-			vkBeginCommandBuffer(handler, &beginInfo);
+			vkBeginCommandBuffer(handle, &beginInfo);
 		}
 
 		~TransientCommand() noexcept(false) {
-			vkEndCommandBuffer(handler);
+			vkEndCommandBuffer(handle);
 
 			const VkSubmitInfo submitInfo{
 					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -126,7 +126,7 @@ export namespace Core::Vulkan{
 					.pWaitSemaphores = nullptr,
 					.pWaitDstStageMask = nullptr,
 					.commandBufferCount = 1,
-					.pCommandBuffers = &handler,
+					.pCommandBuffers = &handle,
 					.signalSemaphoreCount = 0,
 					.pSignalSemaphores = nullptr
 				};

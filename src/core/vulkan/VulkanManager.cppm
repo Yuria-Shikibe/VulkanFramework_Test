@@ -29,21 +29,25 @@ import Core.Vulkan.Buffer.UniformBuffer;
 
 import Core.Vulkan.Preinstall;
 
+import Core.Vulkan.Pipeline;
+
 import Core.Vulkan.CommandPool;
 import Core.Vulkan.Buffer.CommandBuffer;
+import Core.Vulkan.Sampler;
 
 
 export namespace Core::Vulkan{
-	constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-
-
 	class VulkanManager{
 	public:
 		[[nodiscard]] explicit VulkanManager(Window* window){
 			initVulkan(window);
 		}
 
-		~VulkanManager(){cleanup();}
+		~VulkanManager(){
+			vkDestroyImageView(context.device, textureImageView, nullptr);
+			vkDestroyImage(context.device, textureImage, nullptr);
+			vkFreeMemory(context.device, textureImageMemory, nullptr);
+		}
 
 		Context context{};
 
@@ -53,14 +57,13 @@ export namespace Core::Vulkan{
 		SwapChain swapChain{};
 
 		std::vector<Fence> inFlightFences{};
-		std::size_t currentFrame = 0;
-		std::vector<Semaphore> imageAvailableSemaphores;
-		std::vector<Semaphore> renderFinishedSemaphores;
+		std::vector<Semaphore> imageAvailableSemaphores{};
+		std::vector<Semaphore> renderFinishedSemaphores{};
 
 		DescriptorSetLayout descriptorSetLayout{};
 
 		PipelineLayout pipelineLayout{};
-		VkPipeline graphicsPipeline{};
+		GraphicPipeline graphicsPipeline{};
 
 
 		ExclusiveBuffer vertexBuffer{};
@@ -84,30 +87,23 @@ export namespace Core::Vulkan{
 			float time = std::chrono::duration<float>(currentTime - startTime).count();
 
 
-			auto data = uniformBuffers[currentImage].map();
+			auto data = uniformBuffers[currentImage].memory.map();
 			Geom::Matrix3D matrix3D{};
 			matrix3D.setToRotation(time * 5);
 			new (data) UniformBufferObject{matrix3D, 0.1f};
-			uniformBuffers[currentImage].unmap();
+			uniformBuffers[currentImage].memory.unmap();
 		}
 
 		void drawFrame(){
+			auto currentFrame = swapChain.getCurrentRenderingImage();
+
 			inFlightFences[currentFrame].wait();
 			inFlightFences[currentFrame].reset();
 
-			auto [imageIndex, result] = swapChain.acquireNextImage(imageAvailableSemaphores[currentFrame]);
-
-			if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-				recreateSwapChain();
-				return;
-			} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-				throw std::runtime_error("failed to acquire swap chain image!");
-			}
+			const auto imageIndex = swapChain.acquireNextImage(imageAvailableSemaphores[currentFrame]);
 
 			updateUniformBuffer(imageIndex);
 
-
-			const std::array waitSemaphores{imageAvailableSemaphores[currentFrame].get()};
 			const std::array signalSemaphores{renderFinishedSemaphores[currentFrame].get()};
 
 			inFlightFences[currentFrame].reset();
@@ -130,16 +126,7 @@ export namespace Core::Vulkan{
 			presentInfo.pImageIndices = &imageIndex;
 			presentInfo.pResults = nullptr; // Optional
 
-			result = swapChain.postImage(presentInfo);
-
-			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized) {
-				framebufferResized = false;
-				recreateSwapChain();
-			} else if (result != VK_SUCCESS) {
-				throw std::runtime_error("failed to present swap chain image!");
-			}
-
-			currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+			swapChain.postImage(presentInfo);
 		}
 
 
@@ -155,6 +142,11 @@ export namespace Core::Vulkan{
 
 			swapChain.createSwapChain(context.physicalDevice, context.device);
 			swapChain.presentQueue = context.device.getPresentQueue();
+
+			swapChain.recreateCallback = [this](SwapChain&){
+				createGraphicsPipeline();
+				createCommandBuffers();
+			};
 
 			descriptorSetLayout = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
@@ -206,21 +198,6 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void recreateSwapChain() {
-			while (swapChain.getTargetWindow()->iconified() || swapChain.getTargetWindow()->getSize().area() == 0){
-				swapChain.getTargetWindow()->waitEvent();
-			}
-
-			vkDeviceWaitIdle(context.device);
-
-			vkDestroyPipeline(context.device, graphicsPipeline, nullptr);
-
-			swapChain.recreate();
-
-			createGraphicsPipeline();
-			createCommandBuffers();
-		}
-
 		void createSyncObjects(){
 			imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 			renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -261,19 +238,18 @@ export namespace Core::Vulkan{
 					.minDepth = 0.0f, .maxDepth = 1.f
 				});
 
-				commandBuffer.setScissor({ {}, swapChain.getExtent(),});
+				commandBuffer.setScissor({ {}, swapChain.getExtent()});
 
-				const VkBuffer vertexBuffers[]{vertexBuffer.getHandler()};
+				const VkBuffer vertexBuffers[]{vertexBuffer.get()};
 
-				const VkDeviceSize offsets[]{0};
-
-				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, Default::NoOffset);
 
 				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
 
 				vkCmdBindDescriptorSets(commandBuffer,
-                        VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, descriptorSets[i].operator->(), 0,
-                        nullptr);
+                        VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
+                        1, descriptorSets[i].operator->(),
+                        0, nullptr);
 
 
 				vkCmdDrawIndexed(commandBuffer,
@@ -285,7 +261,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createGraphicsPipeline(){
-			pipelineLayout = PipelineLayout{context.device, std::array{static_cast<VkDescriptorSetLayout>(descriptorSetLayout)}};
+			pipelineLayout = PipelineLayout{context.device, descriptorSetLayout.asSeq()};
 
 			ShaderModule vertShaderModule{
 				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
@@ -295,46 +271,16 @@ export namespace Core::Vulkan{
 				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
 			};
 
-
-			ShaderChain shaderChain{&vertShaderModule, &fragShaderModule};
-
-			const auto vertexInputInfo = BindInfo::createInfo();
-
-			std::array dynamicStates{VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-
-			const auto dynamicState = Util::createDynamicState(dynamicStates);
-
-			VkGraphicsPipelineCreateInfo pipelineInfo{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
-
-			pipelineInfo.stageCount = shaderChain.size();
-			pipelineInfo.pStages = shaderChain.data();
-
-			pipelineInfo.pVertexInputState = &vertexInputInfo;
-			pipelineInfo.pInputAssemblyState = &Default::InputAssembly;
-			pipelineInfo.pViewportState = &Default::DynamicViewportState<1>;
-			pipelineInfo.pRasterizationState = &Default::Rasterizer;
-			pipelineInfo.pMultisampleState = &Default::Multisampling;
-			pipelineInfo.pColorBlendState = &Default::ColorBlending<&Blending::Overwrite>;
-			pipelineInfo.pDynamicState = &dynamicState;
-			pipelineInfo.layout = pipelineLayout;
-			pipelineInfo.renderPass = swapChain.getRenderPass();
-			pipelineInfo.subpass = 0;
-			pipelineInfo.basePipelineHandle = nullptr;
-
-			if(vkCreateGraphicsPipelines(context.device, nullptr, 1, &pipelineInfo, nullptr, &graphicsPipeline) !=
-				VK_SUCCESS){
-				throw std::runtime_error("Failed to create graphics pipeline!");
-			}
+			PipelineTemplate pipelineTemplate{};
+			pipelineTemplate
+				.useDefaultFixedStages()
+				.setVertexInputInfo<BindInfo>()
+				.setShaderChain({&vertShaderModule, &fragShaderModule})
+				.setDynamicStates({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
+				.setDynamicViewportCount(1);
+			graphicsPipeline =
+				GraphicPipeline{context.device, pipelineTemplate, pipelineLayout, swapChain.getRenderPass()};
 		}
-
-		void cleanup(){
-			vkDestroyPipeline(context.device, graphicsPipeline, nullptr);
-
-			vkDestroyImageView(context.device, textureImageView, nullptr);
-			vkDestroyImage(context.device, textureImage, nullptr);
-			vkFreeMemory(context.device, textureImageMemory, nullptr);
-		}
-
 	};
 }
 

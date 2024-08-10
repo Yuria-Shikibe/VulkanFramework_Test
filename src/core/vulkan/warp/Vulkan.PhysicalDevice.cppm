@@ -5,8 +5,10 @@ module;
 export module Core.Vulkan.PhysicalDevice;
 
 import std;
+
 import Core.Vulkan.Util;
 import Core.Vulkan.SwapChainInfo;
+
 import ext.MetaProgramming;
 
 
@@ -81,9 +83,14 @@ export namespace Core::Vulkan{
 			return device != nullptr;
 		}
 
-		[[nodiscard]] std::uint32_t rateDeviceSuitability() const{
+		[[nodiscard]] VkPhysicalDeviceProperties getPhysicalDeviceProperties() const{
 			VkPhysicalDeviceProperties deviceProperties;
 			vkGetPhysicalDeviceProperties(device, &deviceProperties);
+			return deviceProperties;
+		}
+
+		[[nodiscard]] std::uint32_t rateDeviceSuitability() const{
+			VkPhysicalDeviceProperties deviceProperties = getPhysicalDeviceProperties();
 
 			std::uint32_t score = 0;
 
@@ -154,7 +161,7 @@ export namespace Core::Vulkan{
 
 			bool swapChainAdequate = false;
 			if(extensionsSupported){
-				const SwapChainInfo swapChainSupport(device, surface);
+				const Core::Vulkan::SwapChainInfo swapChainSupport(device, surface);
 				swapChainAdequate = swapChainSupport.isValid();
 			}
 

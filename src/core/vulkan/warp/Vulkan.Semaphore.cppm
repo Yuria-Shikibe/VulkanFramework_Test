@@ -22,7 +22,7 @@ export namespace Core::Vulkan{
 				};
 
 
-			if(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &handler) != VK_SUCCESS){
+			if(vkCreateSemaphore(device, &semaphoreInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create Semaphore!");
 			}
 		}
@@ -38,21 +38,21 @@ export namespace Core::Vulkan{
 		Semaphore(const Semaphore& other) = delete;
 
 		Semaphore(Semaphore&& other) noexcept
-			: Wrapper{other.handler},
+			: Wrapper{other.handle},
 			  device{std::move(other.device)}{}
 
 		Semaphore& operator=(const Semaphore& other) = delete;
 
 		Semaphore& operator=(Semaphore&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroySemaphore(device, handler, nullptr);
+			if(device)vkDestroySemaphore(device, handle, nullptr);
 			Wrapper::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
 		}
 
 		~Semaphore(){
-			if(device)vkDestroySemaphore(device, handler, nullptr);
+			if(device)vkDestroySemaphore(device, handle, nullptr);
 		}
 	};
 }

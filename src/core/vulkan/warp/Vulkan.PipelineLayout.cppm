@@ -9,12 +9,10 @@ import Core.Vulkan.Concepts;
 import std;
 
 export namespace Core::Vulkan{
-	struct PipelineLayout{
+	struct PipelineLayout : public Wrapper<VkPipelineLayout>{
 		Dependency<VkDevice> device{};
-		VkPipelineLayout pipelineLayout{};
 
 		[[nodiscard]] PipelineLayout() = default;
-
 
 		PipelineLayout(const PipelineLayout& other) = delete;
 
@@ -24,17 +22,15 @@ export namespace Core::Vulkan{
 
 		PipelineLayout& operator=(PipelineLayout&& other) noexcept{
 			if(this == &other) return *this;
-			this->~PipelineLayout();
+			if(device)vkDestroyPipelineLayout(device, handle, nullptr);
+			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
-			pipelineLayout = other.pipelineLayout;
 			return *this;
 		}
 
 		~PipelineLayout(){
-			if(device)vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+			if(device)vkDestroyPipelineLayout(device, handle, nullptr);
 		}
-
-		[[nodiscard]] constexpr operator VkPipelineLayout() const noexcept{return pipelineLayout;}
 
 		template<ContigiousRange<VkDescriptorSetLayout> R1, ContigiousRange<VkPushConstantRange> R2 = EmptyRange<VkPushConstantRange>>
 		[[nodiscard]] PipelineLayout(VkDevice device,
@@ -48,7 +44,7 @@ export namespace Core::Vulkan{
 					.pPushConstantRanges = std::ranges::data(constantRange)
 				};
 
-			if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS){
+			if(vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create pipeline layout!");
 			}
 		}

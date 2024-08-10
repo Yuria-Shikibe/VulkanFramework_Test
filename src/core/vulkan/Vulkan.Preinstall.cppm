@@ -6,6 +6,7 @@ export module Core.Vulkan.Preinstall;
 
 import std;
 import Core.Vulkan.Concepts;
+import ext.Concepts;
 
 export namespace Core::Vulkan{
 	namespace Blending{
@@ -24,19 +25,26 @@ export namespace Core::Vulkan{
 		constexpr VkPipelineColorBlendAttachmentState AlphaBlend{
 				.blendEnable = true,
 
-				.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+				.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
 				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 				.colorBlendOp = VK_BLEND_OP_ADD,
 				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 				.alphaBlendOp = VK_BLEND_OP_ADD,
 
 				.colorWriteMask = DefaultMask
 			};
 	}
 
-
 	namespace Default{
+		// template <VkDeviceSize offset = 0>
+		// constexpr VkDeviceSize Offset[1]{offset};
+
+		template <VkDeviceSize ...offset>
+		constexpr VkDeviceSize Offset[sizeof...(offset)]{offset...};
+
+		constexpr auto NoOffset = Offset<0>;
+
 		constexpr VkPipelineInputAssemblyStateCreateInfo InputAssembly{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				.pNext = nullptr,
@@ -55,6 +63,18 @@ export namespace Core::Vulkan{
 				.scissorCount = ViewportSize,
 				.pScissors = nullptr
 			};
+
+		constexpr VkPipelineViewportStateCreateInfo staticViewportState(const std::uint32_t size, VkViewport* viewportData, VkRect2D* scissorData) noexcept{
+			return VkPipelineViewportStateCreateInfo{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.viewportCount = size,
+				.pViewports = viewportData,
+				.scissorCount = size,
+				.pScissors = scissorData
+			};
+		}
 
 		constexpr VkPipelineRasterizationStateCreateInfo Rasterizer{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
@@ -86,21 +106,105 @@ export namespace Core::Vulkan{
 				.alphaToOneEnable = false
 			};
 
-		template <const VkPipelineColorBlendAttachmentState* ColorBlendAttachments>
+		// template <const VkPipelineColorBlendAttachmentState* ColorBlendAttachments>
+		// constexpr VkPipelineColorBlendStateCreateInfo ColorBlending{
+		// 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+		// 		.pNext = nullptr,
+		// 		.flags = 0,
+		// 		.logicOpEnable = false,
+		// 		.logicOp = VK_LOGIC_OP_COPY,
+		// 		.attachmentCount = 1,
+		// 		.pAttachments = ColorBlendAttachments,
+		// 		.blendConstants = {}
+		// 	};
+
+		template <std::ranges::sized_range auto R>
 		constexpr VkPipelineColorBlendStateCreateInfo ColorBlending{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 				.pNext = nullptr,
 				.flags = 0,
 				.logicOpEnable = false,
 				.logicOp = VK_LOGIC_OP_COPY,
-				.attachmentCount = 1,
-				.pAttachments = ColorBlendAttachments,
+				.attachmentCount = static_cast<std::uint32_t>(std::ranges::size(R)),
+				.pAttachments = std::ranges::data(R),
 				.blendConstants = {}
 			};
 	}
 
 
 	namespace Util{
+		/**
+		 * @brief Only works for 4 Byte members!
+		 * @tparam Vertex Target Vertex
+		 * @tparam bindingIndex corresponding index
+		 * @tparam attributes attribute list
+		 */
+		template <typename Vertex, std::uint32_t bindingIndex, auto ... attributes>
+			requires requires{
+				requires std::is_trivially_copy_assignable_v<Vertex>;
+				// requires (std::same_as<Vertex, typename ext::GetMemberPtrInfo<typename decltype(attributes)::first_type>::ClassType> && ...);
+				// requires (std::same_as<VkFormat, std::tuple_element_t<1, decltype(attributes)>> && ...);
+			}
+		struct VertexBindInfo{
+		private:
+			static constexpr std::uint32_t stride = sizeof(Vertex);
+			static constexpr std::uint32_t binding = bindingIndex;
+
+			static constexpr std::size_t attributeSize = sizeof...(attributes);
+
+			using AttributeDesc = std::array<VkVertexInputAttributeDescription, attributeSize>;
+
+			static constexpr auto getAttrInfo(){
+				AttributeDesc bindings{};
+
+				[&]<std::size_t... I>(std::index_sequence<I...>){
+					(VertexBindInfo::bind(bindings[I], attributes, static_cast<std::uint32_t>(I)), ...);
+				}(std::make_index_sequence<attributeSize>{});
+
+				return bindings;
+			}
+
+			template <typename V>
+			static constexpr void bind(VkVertexInputAttributeDescription& description,
+			                           const std::pair<V Vertex::*, VkFormat>& attr, const std::uint32_t index){
+				description.binding = binding;
+				description.format = attr.second;
+				description.location = index;
+				description.offset = std::bit_cast<std::uint32_t, V Vertex::*>(attr.first); //...
+			}
+
+		public:
+			static constexpr VkVertexInputBindingDescription bindDesc{
+					.binding = binding,
+					.stride = stride,
+					.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+				};
+
+			static VkPipelineVertexInputStateCreateInfo createInfo() noexcept{
+				return {
+						.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+						.pNext = nullptr,
+						.flags = 0,
+						.vertexBindingDescriptionCount = 1,
+						.pVertexBindingDescriptions = &bindDesc,
+						.vertexAttributeDescriptionCount = attrDesc.size(),
+						.pVertexAttributeDescriptions = attrDesc.data()
+					};
+			}
+
+			inline const static AttributeDesc attrDesc{getAttrInfo()};
+		};
+
+		template <typename T>
+		concept VertexInfo = requires{
+			{ T::createInfo() } -> std::same_as<VkPipelineVertexInputStateCreateInfo>;
+		};
+
+		template <VertexInfo Prov>
+		VkPipelineVertexInputStateCreateInfo getVertexInfo(){
+			return Prov::createInfo();
+		}
+
 		VkPipelineDynamicStateCreateInfo createDynamicState(ContigiousRange<VkDynamicState> auto& states){
 			return {
 					.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -110,6 +214,5 @@ export namespace Core::Vulkan{
 					.pDynamicStates = std::ranges::data(states),
 				};
 		}
-
 	}
 }
