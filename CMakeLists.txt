@@ -41,6 +41,7 @@ add_compile_options("/wd4458")
 add_compile_options("/wd4267")
 add_compile_options("/wd4189")
 add_compile_options("/permissive-")
+add_compile_options("/constexpr:steps4194304")
 add_link_options("/NODEFAULTLIB:library")
 
 message(STATUS "Loading...")

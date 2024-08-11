@@ -5,8 +5,6 @@ module;
 export module Core.Window.Callback;
 
 namespace Core::GLFW{
-	constexpr bool NullptrCheck{DEBUG_CHECK};
-
 	void framebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 	void windowRefreshCallback(GLFWwindow* window){}

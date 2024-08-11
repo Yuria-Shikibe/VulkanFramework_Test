@@ -45,6 +45,8 @@ export namespace Core::Vulkan{
 		[[nodiscard]] constexpr T get() const noexcept{ return handle; }
 
 		[[nodiscard]] constexpr std::array<T, 1> asSeq() const noexcept{ return std::array{handle}; }
+
+		[[nodiscard]] constexpr const T* asData() const noexcept{ return &handle; }
 	};
 	/**
 	 * @brief Make move constructor default declarable

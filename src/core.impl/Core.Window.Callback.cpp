@@ -9,12 +9,6 @@ import Core.Global;
 import std;
 
 void Core::GLFW::framebufferResizeCallback(GLFWwindow* window, int width, int height){
-	if constexpr (NullptrCheck){
-		if(!vulkanManager)throw std::runtime_error("Null Vulkan Manager");
-	}
-
-	vulkanManager->framebufferResized = true;
-
 	const auto app = static_cast<Window*>(glfwGetWindowUserPointer(window));
 
 	app->resize(width, height);

@@ -36,14 +36,73 @@ export namespace Core::Vulkan{
 			};
 	}
 
-	namespace Default{
-		// template <VkDeviceSize offset = 0>
-		// constexpr VkDeviceSize Offset[1]{offset};
-
+	namespace Seq{
 		template <VkDeviceSize ...offset>
 		constexpr VkDeviceSize Offset[sizeof...(offset)]{offset...};
 
 		constexpr auto NoOffset = Offset<0>;
+
+		template <VkPipelineStageFlagBits ...mask>
+		constexpr unsigned StageFlagBits[sizeof...(mask)]{mask...};
+	}
+
+	namespace Default{
+		// template <VkDeviceSize offset = 0>
+		// constexpr VkDeviceSize Offset[1]{offset};
+
+		constexpr VkImageCreateInfo ImageCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.imageType = VK_IMAGE_TYPE_2D,
+			.format = VK_FORMAT_R8G8B8A8_UNORM,
+			.extent = {0, 0, 1},
+			.mipLevels = 1,
+			.arrayLayers = 1,
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.tiling = VK_IMAGE_TILING_OPTIMAL,
+			.usage = 0,
+			.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = 0,
+			.pQueueFamilyIndices = nullptr,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+		};
+
+		template <VkImageAspectFlags aspectMask>
+		constexpr VkImageViewCreateInfo ImageViewCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.pNext = nullptr,
+			.flags = 0,
+			.image = nullptr,
+			.viewType = VK_IMAGE_VIEW_TYPE_2D,
+			.format = VK_FORMAT_R8G8B8A8_UNORM,
+			.components = {},
+			.subresourceRange = {
+				.aspectMask = aspectMask,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			}
+		};
+
+		constexpr VkImageViewCreateInfo ImageViewCreateInfo_Color = ImageViewCreateInfo<VK_IMAGE_ASPECT_COLOR_BIT>;
+
+		constexpr VkImageViewCreateInfo ImageViewCreateInfo_Depth{[]() constexpr {
+			auto info = ImageViewCreateInfo<VK_IMAGE_ASPECT_DEPTH_BIT>;
+
+			info.format = VK_FORMAT_D32_SFLOAT;
+
+			return info;
+		}()};
+
+		constexpr VkImageViewCreateInfo ImageViewCreateInfo_Stencil{[]() constexpr {
+			auto info = ImageViewCreateInfo<VK_IMAGE_ASPECT_STENCIL_BIT>;
+
+			info.format = VK_FORMAT_S8_UINT;
+
+			return info;
+		}()};
 
 		constexpr VkPipelineInputAssemblyStateCreateInfo InputAssembly{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,

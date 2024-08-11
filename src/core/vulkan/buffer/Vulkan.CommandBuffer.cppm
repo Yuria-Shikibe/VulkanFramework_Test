@@ -30,9 +30,9 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		operator VkCommandBuffer() const noexcept{ return handle; };
-
-		[[nodiscard]] const VkCommandBuffer& get() const noexcept { return handle; }
+		[[nodiscard]] VkDevice getDevice() const noexcept{
+			return device;
+		}
 
 		~CommandBuffer(){
 			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handle);
@@ -88,32 +88,47 @@ export namespace Core::Vulkan{
 	struct [[jetbrains::guard]] ScopedCommand{
 		CommandBuffer& handler;
 
-		[[nodiscard]] explicit ScopedCommand(CommandBuffer& handler, const VkCommandBufferUsageFlags flags)
+		[[nodiscard]] explicit ScopedCommand(CommandBuffer& handler,
+			const VkCommandBufferUsageFlags flags,
+			const VkCommandBufferInheritanceInfo& inheritance = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO})
 			: handler{handler}{
-			handler.begin(flags);
+			handler.begin(flags, &inheritance);
 		}
 
 		~ScopedCommand() noexcept(false) {
 			handler.end();
 		}
+
+		operator VkCommandBuffer() const noexcept{return handler.get();}
 	};
 
 	struct [[jetbrains::guard]] TransientCommand : CommandBuffer{
+		static constexpr VkCommandBufferBeginInfo BeginInfo{
+			VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			nullptr,
+			VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
+
 		VkQueue targetQueue{};
 
+		std::vector<VkSemaphore> toWait{};
+		std::vector<VkSemaphore> toSingal{};
+
 		[[nodiscard]] TransientCommand() = default;
+
+		[[nodiscard]] TransientCommand(CommandBuffer&& commandBuffer, VkQueue targetQueue) : CommandBuffer{
+				std::move(commandBuffer)
+			}, targetQueue{targetQueue}{
+			vkBeginCommandBuffer(handle, &BeginInfo);
+		}
 
 		[[nodiscard]] TransientCommand(VkDevice device, VkCommandPool commandPool,
 			VkQueue targetQueue)
 			: CommandBuffer{device, commandPool, VK_COMMAND_BUFFER_LEVEL_PRIMARY},
 			  targetQueue{targetQueue}{
-			static constexpr VkCommandBufferBeginInfo beginInfo{
-					VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-					nullptr,
-					VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-				};
 
-			vkBeginCommandBuffer(handle, &beginInfo);
+
+			vkBeginCommandBuffer(handle, &BeginInfo);
 		}
 
 		~TransientCommand() noexcept(false) {
@@ -122,8 +137,8 @@ export namespace Core::Vulkan{
 			const VkSubmitInfo submitInfo{
 					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 					.pNext = nullptr,
-					.waitSemaphoreCount = 0,
-					.pWaitSemaphores = nullptr,
+					.waitSemaphoreCount = static_cast<std::uint32_t>(toWait.size()),
+					.pWaitSemaphores = toWait.data(),
 					.pWaitDstStageMask = nullptr,
 					.commandBufferCount = 1,
 					.pCommandBuffers = &handle,

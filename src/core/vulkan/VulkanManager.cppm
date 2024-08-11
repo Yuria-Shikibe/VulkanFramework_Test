@@ -13,7 +13,7 @@ import Core.Vulkan.Image;
 import Core.Vulkan.Vertex;
 import std;
 
-import Core.Vulkan.Core;
+import Core.Vulkan.Context;
 import Core.Vulkan.Validation;
 import Core.Vulkan.SwapChain;
 import Core.Vulkan.PhysicalDevice;
@@ -33,6 +33,8 @@ import Core.Vulkan.Pipeline;
 
 import Core.Vulkan.CommandPool;
 import Core.Vulkan.Buffer.CommandBuffer;
+import Core.Vulkan.Buffer.IndexBuffer;
+import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Sampler;
 
 
@@ -43,11 +45,6 @@ export namespace Core::Vulkan{
 			initVulkan(window);
 		}
 
-		~VulkanManager(){
-			vkDestroyImageView(context.device, textureImageView, nullptr);
-			vkDestroyImage(context.device, textureImage, nullptr);
-			vkFreeMemory(context.device, textureImageMemory, nullptr);
-		}
 
 		Context context{};
 
@@ -56,77 +53,111 @@ export namespace Core::Vulkan{
 
 		SwapChain swapChain{};
 
-		std::vector<Fence> inFlightFences{};
-		std::vector<Semaphore> imageAvailableSemaphores{};
-		std::vector<Semaphore> renderFinishedSemaphores{};
+		struct InFlightData{
+			Fence inFlightFence{};
+			Semaphore imageAvailableSemaphore{};
+			Semaphore renderFinishedSemaphore{};
+			Semaphore vertexFlushSemaphore{};
+
+			CommandBuffer vertexFlushCommandBuffer{};
+		};
+
+		std::array<InFlightData, MAX_FRAMES_IN_FLIGHT> frameDataArr{};
 
 		DescriptorSetLayout descriptorSetLayout{};
 
 		PipelineLayout pipelineLayout{};
 		GraphicPipeline graphicsPipeline{};
 
+		// ExclusiveBuffer vertexBuffer{};
+		IndexBuffer indexBuffer{};
+		DynamicVertexBuffer<Vertex> dyVertexBuffer{};
 
-		ExclusiveBuffer vertexBuffer{};
-		ExclusiveBuffer indexBuffer{};
 		std::vector<UniformBuffer> uniformBuffers{};
 
 		std::vector<DescriptorSet> descriptorSets{};
 
 		std::uint32_t mipLevels{};
-		VkImage textureImage{};
-		VkDeviceMemory textureImageMemory{};
-		VkImageView textureImageView{};
+
+		Image textureImage{};
+		ImageView textureImageView{};
+
 		Sampler textureSampler{};
 
-		bool framebufferResized = false;
-
-		void updateUniformBuffer(const std::uint32_t currentImage) {
-			static auto startTime = std::chrono::high_resolution_clock::now();
-
-			auto currentTime = std::chrono::high_resolution_clock::now();
-			float time = std::chrono::duration<float>(currentTime - startTime).count();
-
-
+		void updateUniformBuffer(const std::uint32_t currentImage) const{
 			auto data = uniformBuffers[currentImage].memory.map();
 			Geom::Matrix3D matrix3D{};
-			matrix3D.setToRotation(time * 5);
+			matrix3D.setOrthogonal(swapChain.getTargetWindow()->getSize().as<float>());
 			new (data) UniformBufferObject{matrix3D, 0.1f};
+
 			uniformBuffers[currentImage].memory.unmap();
 		}
 
+		void submitVertexPost(const InFlightData& currentFrameData) const{
+			auto& frameCmd = currentFrameData.vertexFlushCommandBuffer;
+
+			frameCmd.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
+
+			dyVertexBuffer.cmdFlushToDevice(frameCmd);
+
+			frameCmd.end();
+
+			context.commandSubmit_Graphics(frameCmd,
+				nullptr,
+				currentFrameData.vertexFlushSemaphore,
+				nullptr,
+				0
+			);
+		}
+
 		void drawFrame(){
+			if (auto [p, failed] = dyVertexBuffer.acquireSegment(); !failed){
+				std::memcpy(p, test_vertices.data(), decltype(dyVertexBuffer)::UnitOffset);
+			}
+
+
 			auto currentFrame = swapChain.getCurrentRenderingImage();
+			auto& currentFrameData = frameDataArr[currentFrame];
 
-			inFlightFences[currentFrame].wait();
-			inFlightFences[currentFrame].reset();
+			dyVertexBuffer.flush();
 
-			const auto imageIndex = swapChain.acquireNextImage(imageAvailableSemaphores[currentFrame]);
+			currentFrameData.inFlightFence.waitAndReset();
+
+			submitVertexPost(currentFrameData);
+
+			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			updateUniformBuffer(imageIndex);
 
-			const std::array signalSemaphores{renderFinishedSemaphores[currentFrame].get()};
 
-			inFlightFences[currentFrame].reset();
+			const std::array semaphoresToWait{currentFrameData.imageAvailableSemaphore.get(), currentFrameData.vertexFlushSemaphore.get()};
 
-			context.commandSubmit_Graphics(
-				swapChain.getCommandBuffers()[imageIndex],
-				imageAvailableSemaphores[currentFrame],
-				renderFinishedSemaphores[currentFrame],
-				inFlightFences[currentFrame]
-			);
+			// currentFrameData.inFlightFence.reset();
 
-			VkPresentInfoKHR presentInfo{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};
+			context.commandSubmit_Graphics(VkSubmitInfo{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.waitSemaphoreCount = static_cast<std::uint32_t>(semaphoresToWait.size()),
+				.pWaitSemaphores = semaphoresToWait.data(),
+				.pWaitDstStageMask = Seq::StageFlagBits<VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT>,
+				.commandBufferCount = 1u,
+				.pCommandBuffers = swapChain.getCommandBuffers()[imageIndex].asData(),
+				.signalSemaphoreCount = 1u,
+				.pSignalSemaphores = currentFrameData.renderFinishedSemaphore.asData(),
+			}, currentFrameData.inFlightFence);
+
+
+			VkPresentInfoKHR presentInfo{};
+			const auto signalSemaphores = currentFrameData.renderFinishedSemaphore.asSeq();
 
 			presentInfo.waitSemaphoreCount = signalSemaphores.size();
 			presentInfo.pWaitSemaphores = signalSemaphores.data();
 
-			const std::array swapChains{VkSwapchainKHR(swapChain)};
-			presentInfo.swapchainCount = swapChains.size();
-			presentInfo.pSwapchains = swapChains.data();
 			presentInfo.pImageIndices = &imageIndex;
 			presentInfo.pResults = nullptr; // Optional
 
 			swapChain.postImage(presentInfo);
+
+			dyVertexBuffer.reset();
 		}
 
 
@@ -159,18 +190,22 @@ export namespace Core::Vulkan{
 
 			commandPool = CommandPool{context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
 
-			vertexBuffer = createVertexBuffer(context.physicalDevice, context.device, commandPool, context.device.getGraphicsQueue());
-			indexBuffer = createIndexBuffer(context.physicalDevice, context.device, commandPool, context.device.getGraphicsQueue());
+			// vertexBuffer = createVertexBuffer(context, commandPool);
+			indexBuffer = Util::createIndexBuffer(context, commandPool, Util::BatchIndices);
 
-			createTextureImage(context.physicalDevice, commandPool, context.device, context.device.getGraphicsQueue(), textureImage, textureImageMemory, mipLevels);
-			textureImageView = createImageView(context.device, textureImage, swapChain.getFormat(), mipLevels);
+			dyVertexBuffer = DynamicVertexBuffer<Vertex>{context.physicalDevice, context.device, Util::BatchIndices.size() / Util::PrimitiveVertCount};
+			dyVertexBuffer.map();
+
+			createTextureImage(context.physicalDevice, commandPool, context.device, context.device.getGraphicsQueue(), textureImage, mipLevels);
+			textureImageView = ImageView(context.device, textureImage, VK_FORMAT_R8G8B8A8_UNORM, mipLevels);
 			textureSampler = createTextureSampler(context.device, mipLevels);
 
 			createUniformBuffer();
 			createDescriptorSets();
 
 			createCommandBuffers();
-			createSyncObjects();
+
+			createFrameObjects();
 
 			std::cout.flush();
 		}
@@ -198,15 +233,13 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createSyncObjects(){
-			imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-			renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-			inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
-			for(std::size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
-				inFlightFences[i] = Fence{context.device, Fence::CreateFlags::signal};
-				imageAvailableSemaphores[i] = Semaphore{context.device};
-				renderFinishedSemaphores[i] = Semaphore{context.device};
+		void createFrameObjects(){
+			for (auto& frameData : frameDataArr){
+				frameData.inFlightFence = Fence{context.device, Fence::CreateFlags::signal};
+				frameData.imageAvailableSemaphore = Semaphore{context.device};
+				frameData.renderFinishedSemaphore = Semaphore{context.device};
+				frameData.vertexFlushSemaphore = Semaphore{context.device};
+				frameData.vertexFlushCommandBuffer = commandPool.obtain();
 			}
 		}
 
@@ -240,21 +273,19 @@ export namespace Core::Vulkan{
 
 				commandBuffer.setScissor({ {}, swapChain.getExtent()});
 
-				const VkBuffer vertexBuffers[]{vertexBuffer.get()};
+				const VkBuffer vertexBuffers[]{dyVertexBuffer.getVertexBuffer().get()};
 
-				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, Default::NoOffset);
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, Seq::NoOffset);
 
-				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+
+				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, indexBuffer.indexType);
 
 				vkCmdBindDescriptorSets(commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
                         1, descriptorSets[i].operator->(),
                         0, nullptr);
 
-
-				vkCmdDrawIndexed(commandBuffer,
-					static_cast<std::uint32_t>(test_indices.size()), 1, 0, 0, 0);
-
+				vkCmdDrawIndexedIndirect(commandBuffer, dyVertexBuffer.getIndirectCmdBuffer().get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
 
 				vkCmdEndRenderPass(commandBuffer);
 			}

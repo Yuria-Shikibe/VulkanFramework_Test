@@ -63,6 +63,7 @@ export namespace Core::Vulkan{
 			device = std::move(other.device);
 			capacity = other.capacity;
 			properties = other.properties;
+			nonCoherentAtomSize = other.nonCoherentAtomSize;
 			return *this;
 		}
 
@@ -80,6 +81,11 @@ export namespace Core::Vulkan{
 			static constexpr std::size_t dataSize = sizeof(T);
 
 			this->loadData(&data, dataSize);
+		}
+
+		template <typename T, std::size_t size>
+		void loadData(const std::array<T, size>& data) const{
+			this->loadData(&data, size);
 		}
 
 		template <typename T, typename... Args>
@@ -123,37 +129,27 @@ export namespace Core::Vulkan{
 
 		void unmap(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
 			if(!isCoherent()){
-				adjustNonCoherentMemoryRange(size, offset);
-				VkMappedMemoryRange mappedMemoryRange = {
-						.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-						.memory = handle,
-						.offset = offset,
-						.size = size
-					};
-
-				if(vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange)){
-					throw std::runtime_error("Failed to unmap memory!");
-				}
+				flush(size, offset);
 			}
 
 			unmap_noFlush();
 		}
 
-		[[nodiscard]] void* map_noValidation(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
-			void* pData{};
+		void flush(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
+			adjustNonCoherentMemoryRange(size, offset);
+			const VkMappedMemoryRange mappedMemoryRange = {
+				.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+				.memory = handle,
+				.offset = offset,
+				.size = size
+			};
 
-			if(!isCoherent()){
-				 (void)adjustNonCoherentMemoryRange(size, offset);
+			if(vkFlushMappedMemoryRanges(device, 1, &mappedMemoryRange)){
+				throw std::runtime_error("Failed to unmap memory!");
 			}
-
-			if(vkMapMemory(device, handle, offset, size, 0, &pData)){
-				throw std::runtime_error("Failed to map memory!");
-			}
-
-			return pData;
 		}
 
-		[[nodiscard]] void* map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
+		[[nodiscard]] void* map_noInvalidation(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
 			VkDeviceSize inverseDeltaOffset{};
 			void* pData{};
 
@@ -167,19 +163,34 @@ export namespace Core::Vulkan{
 
 			if(!isCoherent()){
 				pData = static_cast<std::uint8_t*>(pData) + inverseDeltaOffset;
-				const VkMappedMemoryRange mappedMemoryRange = {
-						.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-						.memory = handle,
-						.offset = offset,
-						.size = size
-					};
-
-				if(vkInvalidateMappedMemoryRanges(device, 1, &mappedMemoryRange)){
-					throw std::runtime_error("Failed to map memory!");
-				}
 			}
 
 			return pData;
+		}
+
+		[[nodiscard]] void* map(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
+			void* pData = map_noInvalidation(size, offset);
+
+			if(!isCoherent()){
+				invalidate(size, offset);
+			}
+
+			return pData;
+		}
+
+		void invalidate(VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0) const{
+			(void)adjustNonCoherentMemoryRange(size, offset);
+
+			const VkMappedMemoryRange mappedMemoryRange{
+				.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
+				.memory = handle,
+				.offset = offset,
+				.size = size
+			};
+
+			if(vkInvalidateMappedMemoryRanges(device, 1, &mappedMemoryRange)){
+				throw std::runtime_error("Failed to map memory!");
+			}
 		}
 
 		VkResult allocate(VkPhysicalDevice physicalDevice, VkBuffer buffer, VkDeviceSize size) {
@@ -200,15 +211,6 @@ export namespace Core::Vulkan{
 		}
 
 		VkResult allocate(VkPhysicalDevice physicalDevice, const VkMemoryRequirements& memRequirements) {
-			if(!isCoherent()){
-				VkPhysicalDeviceProperties deviceProperties;
-				vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-
-				nonCoherentAtomSize = deviceProperties.limits.nonCoherentAtomSize;
-			}else{
-				nonCoherentAtomSize = 1;
-			}
-
 			VkMemoryAllocateInfo allocInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
 			allocInfo.allocationSize = memRequirements.size;
 			allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, physicalDevice, properties);
@@ -227,19 +229,35 @@ export namespace Core::Vulkan{
 			handle = nullptr;
 		}
 
+		void acquireLimit(VkPhysicalDevice physicalDevice){
+			if(!nonCoherentAtomSize && !isCoherent()){
+				VkPhysicalDeviceProperties deviceProperties;
+				vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+
+				nonCoherentAtomSize = deviceProperties.limits.nonCoherentAtomSize;
+			}else{
+				nonCoherentAtomSize = 1;
+			}
+		}
+
 	protected:
-		VkDeviceSize adjustNonCoherentMemoryRange(VkDeviceSize& size, VkDeviceSize& offset) const {
+
+		constexpr VkDeviceSize adjustNonCoherentMemoryRange(VkDeviceSize& size, VkDeviceSize& offset) const {
 			const VkDeviceSize _offset = offset;
 
-			VkDeviceSize rangeEnd = size + offset;
+			if(size == VK_WHOLE_SIZE){
+				offset = offset / nonCoherentAtomSize * nonCoherentAtomSize;
+			}else{
+				VkDeviceSize rangeEnd = size + offset;
 
-			offset = offset / nonCoherentAtomSize * nonCoherentAtomSize;
+				offset = offset / nonCoherentAtomSize * nonCoherentAtomSize;
 
-			rangeEnd = (rangeEnd + nonCoherentAtomSize - 1) / nonCoherentAtomSize * nonCoherentAtomSize;
+				rangeEnd = (rangeEnd + nonCoherentAtomSize - 1) / nonCoherentAtomSize * nonCoherentAtomSize;
 
-			rangeEnd = std::min(rangeEnd, capacity);
+				rangeEnd = std::min(rangeEnd, capacity);
 
-			size = rangeEnd - offset;
+				size = rangeEnd - offset;
+			}
 
 			return _offset - offset;
 		}

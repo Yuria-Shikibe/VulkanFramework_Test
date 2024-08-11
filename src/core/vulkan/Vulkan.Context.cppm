@@ -2,7 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Core.Vulkan.Core;
+export module Core.Vulkan.Context;
 
 export import Core.Vulkan.Instance;
 export import Core.Vulkan.PhysicalDevice;
@@ -24,6 +24,8 @@ export namespace Core::Vulkan{
 
 		PhysicalDevice physicalDevice{};
 		LogicalDevice device{};
+
+		//TODO globalCommandPool?
 
 		void init(){
 			instance.init();
@@ -65,8 +67,7 @@ export namespace Core::Vulkan{
 			physicalDevice.cacheProperties(surface);
 		}
 
-		VkResult commandSubmit_Graphics(VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
-			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		VkResult commandSubmit_Graphics(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
 			VkResult result = vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, fence);
 			if(result) std::println(std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!",
 			                        static_cast<int>(result));
@@ -74,22 +75,29 @@ export namespace Core::Vulkan{
 		}
 
 		VkResult commandSubmit_Graphics(VkCommandBuffer commandBuffer,
-		                                VkSemaphore semaphore_imageIsAvailable = nullptr,
-		                                VkSemaphore semaphore_renderingIsOver = nullptr,
+		                                VkSemaphore toWait = nullptr,
+		                                VkSemaphore toSignal = nullptr,
 		                                VkFence fence = nullptr,
 		                                VkPipelineStageFlags waitDstStage_imageIsAvailable =
 			                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT) const{
 			VkSubmitInfo submitInfo = {
+					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 					.commandBufferCount = 1,
 					.pCommandBuffers = &commandBuffer
 				};
-			if(semaphore_imageIsAvailable)
-				submitInfo.waitSemaphoreCount = 1,
-					submitInfo.pWaitSemaphores = &semaphore_imageIsAvailable,
-					submitInfo.pWaitDstStageMask = &waitDstStage_imageIsAvailable;
-			if(semaphore_renderingIsOver)
-				submitInfo.signalSemaphoreCount = 1,
-					submitInfo.pSignalSemaphores = &semaphore_renderingIsOver;
+
+			if(toWait){
+				submitInfo.waitSemaphoreCount = toWait ? 1 : 0;
+				submitInfo.pWaitSemaphores = &toWait;
+				submitInfo.pWaitDstStageMask = &waitDstStage_imageIsAvailable;
+			}
+
+
+			if(toSignal){
+				submitInfo.signalSemaphoreCount = toSignal ? 1 : 0;
+				submitInfo.pSignalSemaphores = &toSignal;
+			}
+
 			return commandSubmit_Graphics(submitInfo, fence);
 		}
 
@@ -98,15 +106,14 @@ export namespace Core::Vulkan{
 			return commandSubmit_Graphics(submitInfo, fence);
 		}
 
-		VkResult commandSubmit_Compute(VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
-			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		VkResult commandSubmit_Compute(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
 			VkResult result = vkQueueSubmit(device.getComputeQueue(), 1, &submitInfo, fence);
 			if(result) std::println(std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!", static_cast<int>(result));
 			return result;
 		}
 
 		VkResult commandSubmit_Compute(VkCommandBuffer commandBuffer, VkFence fence = nullptr) const{
-			VkSubmitInfo submitInfo{.commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
+			VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
 			return commandSubmit_Compute(submitInfo, fence);
 		}
 	};

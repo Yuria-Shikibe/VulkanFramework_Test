@@ -9,7 +9,9 @@ import Core.Window;
 import Core.Vulkan.Util.Invoker;
 import Core.Vulkan.SwapChainInfo;
 import Core.Vulkan.PhysicalDevice;
+
 import Core.Vulkan.Image;
+
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
 
@@ -35,11 +37,12 @@ export namespace Core::Vulkan{
 
 		VkFormat swapChainImageFormat{};
 
+		//Move this to other place
 		VkRenderPass renderPass{};
 
 		struct SwapChainFrameData{
 			VkImage image{};
-			VkImageView imageView{};
+			ImageView imageView{};
 			FrameBuffer framebuffer{};
 			CommandBuffer commandBuffer{};
 		};
@@ -109,11 +112,6 @@ export namespace Core::Vulkan{
 			if(!device)return;
 
 			vkDestroyRenderPass(device, renderPass, nullptr);
-
-			for (const auto view : getImageViews()) {
-				vkDestroyImageView(device, view, nullptr);
-			}
-
 			destroyOldSwapChain();
 		}
 
@@ -213,7 +211,7 @@ export namespace Core::Vulkan{
 
 			for(const auto& [index, imageGroup] : swapChainImages | std::ranges::views::enumerate){
 				imageGroup.image = images[index];
-				imageGroup.imageView = createImageView(device, imageGroup.image, swapChainImageFormat, 1);
+				imageGroup.imageView = ImageView(device, imageGroup.image, swapChainImageFormat);
 			}
 		}
 
@@ -261,7 +259,11 @@ export namespace Core::Vulkan{
 			return imageIndex;
 		}
 
-		void postImage(const VkPresentInfoKHR& presentInfo){
+		void postImage(VkPresentInfoKHR& presentInfo){
+			presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+			presentInfo.swapchainCount = 1;
+			presentInfo.pSwapchains = &swapChain;
+
 			auto result = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized) {
@@ -281,7 +283,7 @@ export namespace Core::Vulkan{
 
 		void createSwapChainFramebuffers(){
 			for(const auto& [i, group] : swapChainImages | std::views::enumerate){
-				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), renderPass, std::array{group.imageView}};
+				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), renderPass, std::array{group.imageView.get()}};
 			}
 		}
 

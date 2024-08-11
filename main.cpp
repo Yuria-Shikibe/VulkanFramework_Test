@@ -11,7 +11,6 @@ import Core.InitAndTerminate;
 import OS.File;
 
 int main(){
-
 	Core::Vulkan::ShaderCompileTask{
 		Core::Vulkan::DefaultCompilerPath,
 		Core::Vulkan::DefaultSrcPath / "test.frag",

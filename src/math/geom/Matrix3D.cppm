@@ -8,11 +8,10 @@ import Geom.Transform;
 import Math;
 
 
-export namespace Geom{
-	struct Matrix3D{
+namespace Geom{
+	export struct Matrix3D{
 		using MatRaw = std::array<float, 9>;
 
-	public:
 		static constexpr int M00 = 0;
 		static constexpr int M01 = 3;
 		static constexpr int M02 = 6;
@@ -130,7 +129,9 @@ export namespace Geom{
 			return val[index];
 		}
 
-		constexpr Matrix3D& setOrthogonal(const float x, const float y, const float width, const float height) {
+		constexpr Matrix3D& setOrthogonal(const float x, float y, const float width, float height) {
+			y += height;
+			height *= -1;
 			const float right = x + width, top = y + height;
 
 			const float x_orth = 2.0f / width;
@@ -546,11 +547,11 @@ export namespace Geom{
 			return position;
 		}
 
-		Vec2 getScale() const noexcept{
+		[[nodiscard]] Vec2 getScale() const noexcept{
 			return {std::sqrt(Math::sqr(val[M00]) + Math::sqr(val[M01])), std::sqrt(Math::sqr(val[M10]) + Math::sqr(val[M11]))};
 		}
 
-		Vec2 getOrthoScale() const noexcept{
+		[[nodiscard]] Vec2 getOrthoScale() const noexcept{
 			return {val[M00], val[M11]};
 		}
 

@@ -9,3 +9,7 @@ build/
 
 /_ReSharper.Caches/
 /cmake-build-debug/
+/cmake-build-debug/
+/cmake-build-debug-visual-studio/
+/cmake-build-release/
+/cmake-build-release-visual-studio/

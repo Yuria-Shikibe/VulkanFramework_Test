@@ -21,8 +21,8 @@ export namespace Core::Vulkan{
 			vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
 		}
 
-		void cmdCopyBuffer(
-			const CommandBuffer& commandBuffer,
+		void copyBuffer(
+			VkCommandBuffer commandBuffer,
 			VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size
 		){
 
@@ -61,6 +61,8 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("Failed to create buffer!");
 			}
 
+			memory.acquireLimit(physicalDevice);
+
 			memory.allocate(physicalDevice, handle, size);
 
 			vkBindBufferMemory(device, handle, memory, 0);
@@ -83,6 +85,14 @@ export namespace Core::Vulkan{
 			Wrapper::operator =(std::move(other));
 			memory = std::move(other.memory);
 			return *this;
+		}
+
+		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize size) const{
+			const VkBufferCopy copyRegion{.size = size};
+			vkCmdCopyBuffer(commandBuffer, handle, dstBuffer, 1, &copyRegion);
+		}
+		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer) const{
+			copyBuffer(commandBuffer, dstBuffer, memory.size());
 		}
 	};
 

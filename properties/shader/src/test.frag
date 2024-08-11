@@ -8,7 +8,7 @@ layout(location = 1) in vec2 fragTexCoord;
 
 layout(binding = 1) uniform sampler2D texSampler;
 
-layout (depth_unchanged) out float gl_FragDepth;
+//layout (depth_unchanged) out float gl_FragDepth;
 
 void main() {
     gl_FragDepth = gl_FragCoord.z;

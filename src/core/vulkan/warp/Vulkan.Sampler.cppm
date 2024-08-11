@@ -67,7 +67,7 @@ export namespace Core::Vulkan{
 		samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
 		samplerInfo.anisotropyEnable = true;
-		samplerInfo.maxAnisotropy = 16;
+		samplerInfo.maxAnisotropy = 4;
 
 		samplerInfo.unnormalizedCoordinates = false;
 
