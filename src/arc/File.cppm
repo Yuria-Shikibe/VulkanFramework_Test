@@ -410,6 +410,33 @@ namespace OS{
 			return lhs.rawPath <=> rhs.rawPath;
 		}
 
+		File operator/(const File& file) const{
+			return File{rawPath / file.getPath()};
+		}
+
+		File operator/(const std::string_view path) const{
+			return File{rawPath / path};
+		}
+
+		File operator/(const char* path) const{
+			return File{rawPath / path};
+		}
+
+		File& operator/=(const File& file){
+			rawPath /= file.getPath();
+			return *this;
+		}
+
+		File& operator/=(const std::string_view path){
+			rawPath /= path;
+			return *this;
+		}
+
+		File& operator/=(const char* path){
+			rawPath /= path;
+			return *this;
+		}
+
 	};
 
 	export

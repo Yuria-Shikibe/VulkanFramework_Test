@@ -28,7 +28,7 @@ export namespace Core::Vulkan{
 		ShaderChain shaderChain{};
 
 		std::vector<VkDynamicState> dynamicStates{};
-		VkPipelineDynamicStateCreateInfo dynamicStateInfo{};
+		VkPipelineDynamicStateCreateInfo dynamicStateInfo{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 		VkPipelineViewportStateCreateInfo viewportState{};
@@ -65,18 +65,28 @@ export namespace Core::Vulkan{
 			staticViewports = std::vector<VkViewport>{std::ranges::begin(viewports), std::ranges::end(viewports)};
 
 			viewportState.viewportCount = staticViewports.size();
+			viewportState.pViewports = staticViewports.data();
 			dynamicViewportSize = 0;
 
 			return *this;
+		}
+
+		PipelineTemplate& setStaticViewport(const VkViewport& viewport){
+			return setStaticViewport(std::array{viewport});
 		}
 
 		PipelineTemplate& setStaticScissors(const RangeOf<VkRect2D> auto& viewports){
 			staticScissors = std::vector<VkRect2D>{std::ranges::begin(viewports), std::ranges::end(viewports)};
 
 			viewportState.scissorCount = staticScissors.size();
+			viewportState.pScissors = staticScissors.data();
 			dynamicViewportSize = 0;
 
 			return *this;
+		}
+
+		PipelineTemplate& setStaticScissors(const VkRect2D& viewport){
+			return setStaticScissors(std::array{viewport});
 		}
 
 		PipelineTemplate& setDynamicViewportCount(const std::uint32_t size){

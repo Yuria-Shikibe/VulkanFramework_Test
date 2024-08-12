@@ -114,8 +114,6 @@ export namespace Core::Vulkan{
 		std::vector<VkSemaphore> toWait{};
 		std::vector<VkSemaphore> toSingal{};
 
-		[[nodiscard]] TransientCommand() = default;
-
 		[[nodiscard]] TransientCommand(CommandBuffer&& commandBuffer, VkQueue targetQueue) : CommandBuffer{
 				std::move(commandBuffer)
 			}, targetQueue{targetQueue}{
@@ -132,30 +130,49 @@ export namespace Core::Vulkan{
 		}
 
 		~TransientCommand() noexcept(false) {
-			vkEndCommandBuffer(handle);
-
-			const VkSubmitInfo submitInfo{
-					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-					.pNext = nullptr,
-					.waitSemaphoreCount = static_cast<std::uint32_t>(toWait.size()),
-					.pWaitSemaphores = toWait.data(),
-					.pWaitDstStageMask = nullptr,
-					.commandBufferCount = 1,
-					.pCommandBuffers = &handle,
-					.signalSemaphoreCount = 0,
-					.pSignalSemaphores = nullptr
-				};
-
-			vkQueueSubmit(targetQueue, 1, &submitInfo, nullptr);
-			vkQueueWaitIdle(targetQueue);
+			submit();
 		}
 
 		TransientCommand(const TransientCommand& other) = delete;
 
-		TransientCommand(TransientCommand&& other) noexcept = delete;
-
 		TransientCommand& operator=(const TransientCommand& other) = delete;
 
-		TransientCommand& operator=(TransientCommand&& other) noexcept = delete;
+		TransientCommand(TransientCommand&& other) noexcept
+			: CommandBuffer{std::move(other)},
+			  targetQueue{other.targetQueue},
+			  toWait{std::move(other.toWait)},
+			  toSingal{std::move(other.toSingal)}{}
+
+		TransientCommand& operator=(TransientCommand&& other) noexcept{
+			if(this == &other) return *this;
+			submit();
+			CommandBuffer::operator =(std::move(other));
+			targetQueue = other.targetQueue;
+			toWait = std::move(other.toWait);
+			toSingal = std::move(other.toSingal);
+			return *this;
+		}
+
+	private:
+		void submit(){
+			if(!handle)return;
+
+			vkEndCommandBuffer(handle);
+
+			const VkSubmitInfo submitInfo{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.pNext = nullptr,
+				.waitSemaphoreCount = static_cast<std::uint32_t>(toWait.size()),
+				.pWaitSemaphores = toWait.data(),
+				.pWaitDstStageMask = nullptr,
+				.commandBufferCount = 1,
+				.pCommandBuffers = &handle,
+				.signalSemaphoreCount = 0,
+				.pSignalSemaphores = nullptr
+			};
+
+			vkQueueSubmit(targetQueue, 1, &submitInfo, nullptr);
+			vkQueueWaitIdle(targetQueue);
+		}
 	};
 }

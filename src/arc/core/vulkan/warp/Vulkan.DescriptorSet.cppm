@@ -5,6 +5,8 @@ module;
 export module Core.Vulkan.DescriptorSet;
 
 import Core.Vulkan.Dependency;
+import Core.Vulkan.Concepts;
+
 import std;
 import ext.RuntimeException;
 
@@ -224,6 +226,17 @@ export namespace Core::Vulkan{
 			current.dstBinding = index;
 			current.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			current.pImageInfo = &imageInfo;
+		}
+
+		void push(ContigiousRange<VkDescriptorImageInfo> auto& imageInfos){
+			const auto index = descriptorWrites.size();
+
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			current.pImageInfo = std::ranges::data(imageInfos);
+			current.descriptorCount = std::ranges::size(imageInfos);
 		}
 
 		void update() const{

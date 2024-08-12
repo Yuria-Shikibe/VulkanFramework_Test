@@ -8,8 +8,8 @@ import std;
 import Core.Vulkan.Concepts;
 import ext.Concepts;
 
-export namespace Core::Vulkan{
-	namespace Blending{
+namespace Core::Vulkan{
+	export namespace Blending{
 		constexpr auto DefaultMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
 			VK_COLOR_COMPONENT_A_BIT;
 
@@ -36,7 +36,7 @@ export namespace Core::Vulkan{
 			};
 	}
 
-	namespace Seq{
+	export namespace Seq{
 		template <VkDeviceSize ...offset>
 		constexpr VkDeviceSize Offset[sizeof...(offset)]{offset...};
 
@@ -46,7 +46,7 @@ export namespace Core::Vulkan{
 		constexpr unsigned StageFlagBits[sizeof...(mask)]{mask...};
 	}
 
-	namespace Default{
+	export namespace Default{
 		// template <VkDeviceSize offset = 0>
 		// constexpr VkDeviceSize Offset[1]{offset};
 
@@ -198,27 +198,30 @@ export namespace Core::Vulkan{
 		 * @tparam bindingIndex corresponding index
 		 * @tparam attributes attribute list
 		 */
-		template <typename Vertex, std::uint32_t bindingIndex, auto ... attributes>
+		export template <typename Vertex,
+			std::uint32_t bindingIndex, std::uint32_t beginLocation,
+			VkVertexInputRate inputRate,
+			auto ... attributes>
 			requires requires{
 				requires std::is_trivially_copy_assignable_v<Vertex>;
 				// requires (std::same_as<Vertex, typename ext::GetMemberPtrInfo<typename decltype(attributes)::first_type>::ClassType> && ...);
 				// requires (std::same_as<VkFormat, std::tuple_element_t<1, decltype(attributes)>> && ...);
 			}
 		struct VertexBindInfo{
-		private:
 			static constexpr std::uint32_t stride = sizeof(Vertex);
 			static constexpr std::uint32_t binding = bindingIndex;
 
-			static constexpr std::size_t attributeSize = sizeof...(attributes);
+			static constexpr std::uint32_t size = sizeof...(attributes);
 
-			using AttributeDesc = std::array<VkVertexInputAttributeDescription, attributeSize>;
+			using AttributeDesc = std::array<VkVertexInputAttributeDescription, size>;
 
+		private:
 			static constexpr auto getAttrInfo(){
 				AttributeDesc bindings{};
 
 				[&]<std::size_t... I>(std::index_sequence<I...>){
 					(VertexBindInfo::bind(bindings[I], attributes, static_cast<std::uint32_t>(I)), ...);
-				}(std::make_index_sequence<attributeSize>{});
+				}(std::make_index_sequence<size>{});
 
 				return bindings;
 			}
@@ -228,15 +231,15 @@ export namespace Core::Vulkan{
 			                           const std::pair<V Vertex::*, VkFormat>& attr, const std::uint32_t index){
 				description.binding = binding;
 				description.format = attr.second;
-				description.location = index;
+				description.location = beginLocation + index;
 				description.offset = std::bit_cast<std::uint32_t, V Vertex::*>(attr.first); //...
 			}
 
 		public:
-			static constexpr VkVertexInputBindingDescription bindDesc{
+			static constexpr VkVertexInputBindingDescription BindDesc{
 					.binding = binding,
 					.stride = stride,
-					.inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+					.inputRate = inputRate
 				};
 
 			static VkPipelineVertexInputStateCreateInfo createInfo() noexcept{
@@ -245,25 +248,85 @@ export namespace Core::Vulkan{
 						.pNext = nullptr,
 						.flags = 0,
 						.vertexBindingDescriptionCount = 1,
-						.pVertexBindingDescriptions = &bindDesc,
-						.vertexAttributeDescriptionCount = attrDesc.size(),
-						.pVertexAttributeDescriptions = attrDesc.data()
+						.pVertexBindingDescriptions = &BindDesc,
+						.vertexAttributeDescriptionCount = AttrDesc.size(),
+						.pVertexAttributeDescriptions = AttrDesc.data()
 					};
 			}
 
-			inline const static AttributeDesc attrDesc{getAttrInfo()};
+			inline const static AttributeDesc AttrDesc{getAttrInfo()};
 		};
 
-		template <typename T>
+		export template <typename T>
 		concept VertexInfo = requires{
 			{ T::createInfo() } -> std::same_as<VkPipelineVertexInputStateCreateInfo>;
 		};
 
-		template <VertexInfo Prov>
+		template <std::size_t bindingsSize, std::size_t attributeSize>
+		struct TempInfo{
+			std::array<VkVertexInputBindingDescription, bindingsSize> bindings{};
+			std::array<VkVertexInputAttributeDescription, attributeSize> attributes{};
+		};
+
+		export template <VertexInfo Prov>
 		VkPipelineVertexInputStateCreateInfo getVertexInfo(){
 			return Prov::createInfo();
 		}
 
+		template <std::size_t I, typename Args, std::size_t bSize, std::size_t aSize>
+		void bindTo(std::uint32_t binding, std::size_t& off, TempInfo<bSize, aSize>& info) {
+			using CurProv = std::tuple_element_t<I, Args>;
+
+			info.bindings[I] = CurProv::BindDesc;
+			info.bindings[I].binding = binding + I;
+
+			[&]<std::size_t... Idx>(std::index_sequence<Idx...>){
+				((info.attributes[off + Idx] = CurProv::AttrDesc[Idx]), ...);
+			}(std::make_index_sequence<CurProv::size>{});
+
+			[&]<std::size_t... Idx>(std::index_sequence<Idx...>){
+				((info.attributes[off + Idx].binding = binding + I), ...);
+			}(std::make_index_sequence<CurProv::size>{});
+
+			off += CurProv::size;
+		};
+
+		/**
+		 * @brief
+		 * @tparam Prov Vertex Info Provider Type
+		 * @param binding binding index
+		 * @return [VkPipelineVertexInputStateCreateInfo, data], data should not be discard before create pipeline
+		 * @warning NRVO MUST happen in this function, be careful when doing any modification
+		 */
+		export template <VertexInfo... Prov>
+		[[nodiscard]] auto getVertexGroupInfo(std::uint32_t binding = 0){
+			static constexpr std::size_t bSize = sizeof...(Prov);
+			static constexpr std::size_t aSize = (Prov::size + ... + 0);
+
+			using Args = std::tuple<Prov...>;
+
+			std::pair<VkPipelineVertexInputStateCreateInfo, TempInfo<bSize, aSize>> ret{};
+
+			std::size_t offset{};
+
+			[&]<std::size_t... I>(std::index_sequence<I...>) {
+				((Util::bindTo<I, Args>(binding, offset, ret.second)), ...);
+			}(std::index_sequence_for<Prov...>{});
+
+			ret.first = VkPipelineVertexInputStateCreateInfo{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.vertexBindingDescriptionCount = ret.second.bindings.size(),
+				.pVertexBindingDescriptions = ret.second.bindings.data(),
+				.vertexAttributeDescriptionCount = ret.second.attributes.size(),
+				.pVertexAttributeDescriptions = ret.second.attributes.data()
+			};
+
+			return ret;
+		}
+
+		export
 		VkPipelineDynamicStateCreateInfo createDynamicState(ContigiousRange<VkDynamicState> auto& states){
 			return {
 					.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,

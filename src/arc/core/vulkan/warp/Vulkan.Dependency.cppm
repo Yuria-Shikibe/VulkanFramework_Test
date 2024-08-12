@@ -28,11 +28,20 @@ export namespace Core::Vulkan{
 
 		Wrapper(const Wrapper& other) requires (enableCopy) = default;
 
-		Wrapper(Wrapper&& other) noexcept = default;
-
 		Wrapper& operator=(const Wrapper& other) requires (enableCopy) = default;
 
-		Wrapper& operator=(Wrapper&& other) noexcept = default;
+		Wrapper(Wrapper&& other) noexcept
+			: handle{std::move(other.handle)}{
+			other.handle = nullptr;
+		}
+
+		Wrapper& operator=(Wrapper&& other) noexcept{
+			if(this == &other) return *this;
+			handle = std::move(other.handle);
+			other.handle = nullptr;
+			return *this;
+		}
+
 
 		[[nodiscard]] constexpr operator T() const noexcept{ return handle; }
 

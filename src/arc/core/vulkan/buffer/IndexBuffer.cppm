@@ -59,17 +59,18 @@ export namespace Core::Vulkan{
 		template <std::ranges::contiguous_range Rng>
 		IndexBuffer createIndexBuffer(
 			const Context& context, VkCommandPool commandPool, Rng&& range){
-			VkDeviceSize bufferSize = sizeof(std::ranges::range_value_t<Rng>) * std::ranges::size(range);
-
-			const StagingBuffer stagingBuffer(context.physicalDevice, context.device, bufferSize);
-
-			stagingBuffer.memory.loadData(range);
+			const VkDeviceSize bufferSize = sizeof(std::ranges::range_value_t<Rng>) * std::ranges::size(range);
 
 			IndexBuffer buffer(context.physicalDevice, context.device, bufferSize,
-			                   IndexType<std::ranges::range_value_t<Rng>>::value);
+											   IndexType<std::ranges::range_value_t<Rng>>::value);
+			{
+				const StagingBuffer stagingBuffer(context.physicalDevice, context.device, bufferSize);
 
-			stagingBuffer.copyBuffer(TransientCommand{context.device, commandPool, context.device.getGraphicsQueue()},
-			                         buffer);
+				stagingBuffer.memory.loadData(range);
+
+				stagingBuffer.copyBuffer(TransientCommand{context.device, commandPool, context.device.getGraphicsQueue()},
+										 buffer);
+			}
 
 			return buffer;
 		}

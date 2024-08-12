@@ -23,11 +23,19 @@ export namespace Core::Vulkan{
 		Geom::Vec2 texCoord{};
 	};
 
-	using BindInfo = Util::VertexBindInfo<Vertex, 0,
+	struct InstanceDesignator{
+		std::int8_t offset{};
+	};
+
+	using VertBindInfo = Util::VertexBindInfo<Vertex, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX,
 		std::pair{&Vertex::position, VK_FORMAT_R32G32B32_SFLOAT},
 		// std::pair{&Vertex::depth, VK_FORMAT_R32_SFLOAT},
 		std::pair{&Vertex::color, VK_FORMAT_R32G32B32A32_SFLOAT},
 		std::pair{&Vertex::texCoord, VK_FORMAT_R32G32_SFLOAT}
+	>;
+
+	using InstanceBindInfo = Util::VertexBindInfo<InstanceDesignator, 0, VertBindInfo::size, VK_VERTEX_INPUT_RATE_INSTANCE,
+		std::pair{&InstanceDesignator::offset, VK_FORMAT_R8_SINT}
 	>;
 
 	const std::vector<Vertex> test_vertices = {

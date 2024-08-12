@@ -51,6 +51,10 @@ export namespace Core::Vulkan{
 			return {device, commandPool, level};
 		}
 
+		[[nodiscard]] TransientCommand obtainTransient(VkQueue targetQueue) const{
+			return TransientCommand{device, commandPool, targetQueue};
+		}
+
 		void resetAll(const VkCommandPoolResetFlags resetFlags) const{
 			vkResetCommandPool(device, commandPool, resetFlags);
 		}

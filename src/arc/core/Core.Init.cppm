@@ -14,7 +14,8 @@ export namespace Core{
 		GLFW::init();
 
 		window = new Window{};
-		vulkanManager = new Vulkan::VulkanManager{window};
+		vulkanManager = new Vulkan::VulkanManager;
+		vulkanManager->preInitVulkan(window);
 	}
 
 	void terminate(){

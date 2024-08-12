@@ -37,18 +37,21 @@ import Core.Vulkan.Buffer.IndexBuffer;
 import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Sampler;
 
+import OS.File;
+
+
+import Assets.Graphic;
 
 export namespace Core::Vulkan{
 	class VulkanManager{
 	public:
-		[[nodiscard]] explicit VulkanManager(Window* window){
-			initVulkan(window);
-		}
-
+		[[nodiscard]] VulkanManager() = default;
 
 		Context context{};
 
 		CommandPool commandPool{};
+		CommandPool transientCommandPool{};
+
 		DescriptorSetPool descriptorPool{};
 
 		SwapChain swapChain{};
@@ -73,14 +76,14 @@ export namespace Core::Vulkan{
 		IndexBuffer indexBuffer{};
 		DynamicVertexBuffer<Vertex> dyVertexBuffer{};
 
-		std::vector<UniformBuffer> uniformBuffers{};
 
+
+		std::vector<UniformBuffer> uniformBuffers{};
 		std::vector<DescriptorSet> descriptorSets{};
 
-		std::uint32_t mipLevels{};
-
-		Image textureImage{};
-		ImageView textureImageView{};
+		Texture texture1{};
+		Texture texture2{};
+		Texture texture3{};
 
 		Sampler textureSampler{};
 
@@ -111,11 +114,6 @@ export namespace Core::Vulkan{
 		}
 
 		void drawFrame(){
-			if (auto [p, failed] = dyVertexBuffer.acquireSegment(); !failed){
-				std::memcpy(p, test_vertices.data(), decltype(dyVertexBuffer)::UnitOffset);
-			}
-
-
 			auto currentFrame = swapChain.getCurrentRenderingImage();
 			auto& currentFrameData = frameDataArr[currentFrame];
 
@@ -151,9 +149,7 @@ export namespace Core::Vulkan{
 
 			presentInfo.waitSemaphoreCount = signalSemaphores.size();
 			presentInfo.pWaitSemaphores = signalSemaphores.data();
-
 			presentInfo.pImageIndices = &imageIndex;
-			presentInfo.pResults = nullptr; // Optional
 
 			swapChain.postImage(presentInfo);
 
@@ -161,8 +157,7 @@ export namespace Core::Vulkan{
 		}
 
 
-	private:
-		void initVulkan(Window* window){
+		void preInitVulkan(Window* window){
 			context.init();
 
 			swapChain.attachWindow(window);
@@ -179,26 +174,46 @@ export namespace Core::Vulkan{
 				createCommandBuffers();
 			};
 
-			descriptorSetLayout = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
-				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-			}};
-
 			descriptorPool = DescriptorSetPool{context.device, descriptorSetLayout.builder, swapChain.size()};
 
+			commandPool = CommandPool{context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
+			transientCommandPool = CommandPool{context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT};
+		}
+
+		void postInitVulkan(){
+			//Context Ready
+			descriptorSetLayout = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3);
+			}};
 			createGraphicsPipeline();
 
-			commandPool = CommandPool{context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT};
 
 			// vertexBuffer = createVertexBuffer(context, commandPool);
-			indexBuffer = Util::createIndexBuffer(context, commandPool, Util::BatchIndices);
+			indexBuffer = Util::createIndexBuffer(context, transientCommandPool, Util::BatchIndices);
 
 			dyVertexBuffer = DynamicVertexBuffer<Vertex>{context.physicalDevice, context.device, Util::BatchIndices.size() / Util::PrimitiveVertCount};
-			dyVertexBuffer.map();
 
-			createTextureImage(context.physicalDevice, commandPool, context.device, context.device.getGraphicsQueue(), textureImage, mipLevels);
-			textureImageView = ImageView(context.device, textureImage, VK_FORMAT_R8G8B8A8_UNORM, mipLevels);
-			textureSampler = createTextureSampler(context.device, mipLevels);
+			texture1 = Texture{
+				context.physicalDevice, context.device,
+				R"(D:\projects\vulkan_framework\properties\texture\src.png)",
+				transientCommandPool.obtainTransient(context.device.getGraphicsQueue())
+			};
+
+			texture2 = Texture{
+				context.physicalDevice, context.device,
+				R"(D:\projects\vulkan_framework\properties\texture\csw.png)",
+				transientCommandPool.obtainTransient(context.device.getGraphicsQueue())
+			};
+
+			texture3 = Texture{
+				context.physicalDevice, context.device,
+				R"(D:\projects\vulkan_framework\properties\texture\yyz.png)",
+				transientCommandPool.obtainTransient(context.device.getGraphicsQueue())
+			};
+
+
+			textureSampler = Sampler(context.device, Samplers::TextureSampler);
 
 			createUniformBuffer();
 			createDescriptorSets();
@@ -210,12 +225,15 @@ export namespace Core::Vulkan{
 			std::cout.flush();
 		}
 
+	private:
 		void createDescriptorSets() {
 			descriptorSets = descriptorPool.obtain(swapChain.size(), descriptorSetLayout);
 
 			for (std::size_t i = 0; i < swapChain.size(); i++) {
 				auto bufferInfo = uniformBuffers[i].getDescriptorInfo();
-				auto imageInfo = textureSampler.getDescriptorInfo_ShaderRead(textureImageView);
+
+				auto imageInfo =
+					textureSampler.getDescriptorInfo_ShaderRead(texture1.getView(), texture2.getView(), texture3.getView());
 
 				DescriptorSetUpdator updator{context.device, descriptorSets[i]};
 
@@ -265,27 +283,22 @@ export namespace Core::Vulkan{
 
 				commandBuffer.push(vkCmdBindPipeline, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
 
-				commandBuffer.setViewport({
-					.width = static_cast<float>(swapChain.getExtent().width),
-					.height = static_cast<float>(swapChain.getExtent().height),
-					.minDepth = 0.0f, .maxDepth = 1.f
-				});
 
-				commandBuffer.setScissor({ {}, swapChain.getExtent()});
-
-				const VkBuffer vertexBuffers[]{dyVertexBuffer.getVertexBuffer().get()};
-
-				vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, Seq::NoOffset);
+				vkCmdBindVertexBuffers(commandBuffer, 0, 1,
+					dyVertexBuffer.vertexBuffer.getTargetBuffer().asData(), Seq::NoOffset);
 
 
 				vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, indexBuffer.indexType);
 
 				vkCmdBindDescriptorSets(commandBuffer,
                         VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
-                        1, descriptorSets[i].operator->(),
+                        1, descriptorSets[i].asData(),
                         0, nullptr);
 
-				vkCmdDrawIndexedIndirect(commandBuffer, dyVertexBuffer.getIndirectCmdBuffer().get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+				vkCmdDrawIndexedIndirect(commandBuffer, dyVertexBuffer.indirectBuffer.getTargetBuffer().get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand));
+				// vkCmdDrawIndexedIndirectCount(commandBuffer, dyVertexBuffer.getIndirectCmdBuffer().get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand), );
+
+				// VkDrawIndirectCount
 
 				vkCmdEndRenderPass(commandBuffer);
 			}
@@ -294,21 +307,21 @@ export namespace Core::Vulkan{
 		void createGraphicsPipeline(){
 			pipelineLayout = PipelineLayout{context.device, descriptorSetLayout.asSeq()};
 
-			ShaderModule vertShaderModule{
-				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.vert.spv)"
-			};
+			auto extent = swapChain.getExtent();
 
-			ShaderModule fragShaderModule{
-				context.device, R"(D:\projects\vulkan_framework\properties\shader\spv\test.frag.spv)"
-			};
+			auto [vinfo, vdata] = Util::getVertexGroupInfo<VertBindInfo, InstanceBindInfo>();
+
 
 			PipelineTemplate pipelineTemplate{};
 			pipelineTemplate
 				.useDefaultFixedStages()
-				.setVertexInputInfo<BindInfo>()
-				.setShaderChain({&vertShaderModule, &fragShaderModule})
-				.setDynamicStates({VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR})
-				.setDynamicViewportCount(1);
+				.setVertexInputInfo(vinfo)
+				.setShaderChain({&Assets::Shader::batchVertShader, &Assets::Shader::batchFragShader})
+				.setStaticScissors({{}, extent})
+				.setStaticViewport({
+					0, 0,
+					static_cast<float>(extent.width), static_cast<float>(extent.height),
+					0.f, 1.f});
 			graphicsPipeline =
 				GraphicPipeline{context.device, pipelineTemplate, pipelineLayout, swapChain.getRenderPass()};
 		}
