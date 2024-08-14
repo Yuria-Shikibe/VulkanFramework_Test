@@ -37,6 +37,13 @@ export namespace Core::Vulkan{
 			return *this;
 		}
 
+		FrameBuffer(VkDevice device, const VkFramebufferCreateInfo& createInfo)
+			: device{device}, attachments{std::ranges::begin(attachments), std::ranges::end(attachments)}{
+			if(vkCreateFramebuffer(device, &createInfo, nullptr, &handle) != VK_SUCCESS){
+				throw std::runtime_error("Failed to create framebuffer!");
+			}
+		}
+
 		FrameBuffer(VkDevice device, const Geom::USize2 size, VkRenderPass renderPass, ContigiousRange<VkImageView> auto&& attachments, const std::uint32_t layers = 1)
 			: device{device}, attachments{std::ranges::begin(attachments), std::ranges::end(attachments)}{
 			if(size.area() == 0){

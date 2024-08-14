@@ -15,11 +15,12 @@ import Core.Vulkan.Dependency;
 import Core.Vulkan.Context;
 
 import Core.Vulkan.CommandPool;
+import Core.Vulkan.RenderPass;
 
 import std;
 
 export namespace Core::Vulkan{
-	struct SubPassSocket{
+	struct PipelineGroup{
 		// VkSubpassContents contents;
 
 		PipelineLayout layout{};
@@ -35,13 +36,31 @@ export namespace Core::Vulkan{
 	struct RenderPassGroup{
 		Dependency<Context*> context{};
 
-		VkRenderPass renderPass{};
-
+		RenderPass renderPass{};
 		FrameBuffer framebuffer{};
+
+
 		std::vector<Attachment> attachments{};
+
+		std::vector<PipelineGroup> subPassSockets{};
+		std::vector<VkPipeline> pipelines{};
 
 		DescriptorSetPool descriptorPool{};
 
-		std::vector<SubPassSocket> subPassSockets{};
+		//init
+		//set renderpass params
+		//set framebuffer params
+
+		void init(Context& context){
+			this->context = &context;
+
+			renderPass = RenderPass{context.device};
+		}
+
+		void createRenderPass(){
+			renderPass.createRenderPass();
+
+			pipelines.resize(renderPass.subpassSize());
+		}
 	};
 }

@@ -5,11 +5,10 @@ module;
 export module Core.Vulkan.RenderPass;
 
 import Core.Vulkan.Dependency;
-import Core.Vulkan.Comp;
 import std;
 
 export namespace Core::Vulkan{
-	namespace
+
 	class RenderPass : public Wrapper<VkRenderPass>{
 	public:
 		Dependency<VkDevice> device{};
@@ -17,6 +16,10 @@ export namespace Core::Vulkan{
 		std::vector<VkAttachmentDescription> attachmentSockets{};
 
 		struct AttachmentReference{
+			enum struct Category : std::uint32_t{
+				input, color, depthStencil, reserved, resolve
+			};
+
 			std::vector<VkAttachmentReference> color{};
 
 			std::optional<std::vector<VkAttachmentReference>> input{};
@@ -27,10 +30,14 @@ export namespace Core::Vulkan{
 		};
 
 		struct SubpassData{
+			std::uint32_t index{};
+
 			VkSubpassDescription description{};
 			std::vector<VkSubpassDependency> dependencies{};
 
 			AttachmentReference attachment{};
+
+
 
 			void setProperties(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                     VkSubpassDescriptionFlags flags = 0){
@@ -70,15 +77,67 @@ export namespace Core::Vulkan{
 					description.pResolveAttachments = nullptr;
 				}
 			}
+
+			void addDependency(const VkSubpassDependency& dependency){
+				dependencies.push_back(dependency);
+				dependencies.back().dstSubpass = index;
+			}
+
+			void addAttachment(const AttachmentReference::Category attachmentCategory, const std::uint32_t index, const VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL){
+				VkAttachmentReference attachmentReference{index, imageLayout};
+
+				switch(attachmentCategory){
+					case AttachmentReference::Category::input:{
+						if(attachment.input){
+							attachment.input->push_back(attachmentReference);
+						}else{
+							attachment.input.emplace({attachmentReference});
+						}
+
+						return;
+					}
+
+					case AttachmentReference::Category::color:
+						attachment.color.push_back(attachmentReference);
+						return;
+
+					case AttachmentReference::Category::depthStencil:
+						attachment.depthStencil = attachmentReference;
+						return;
+
+					case AttachmentReference::Category::resolve:
+						attachment.resolve = attachmentReference;
+						return;
+
+					case AttachmentReference::Category::reserved:{
+						if(attachment.reserved){
+							attachment.reserved->push_back(index);
+						}else{
+							attachment.reserved.emplace({index});
+						}
+
+						return;
+					}
+
+					default: std::unreachable();
+				}
+
+			}
 		};
 
 		std::vector<SubpassData> subpasses{};
 
-
 		[[nodiscard]] RenderPass() = default;
 
+		[[nodiscard]] explicit RenderPass(VkDevice device)
+			: device{device}{}
+
+		[[nodiscard]] RenderPass(VkRenderPass_T* handler, VkDevice device)
+			: Wrapper{handler},
+			  device{device}{}
+
 		~RenderPass(){
-			if(device)vkDestroyRenderPass(device, handle, nullptr);
+			destroy();
 		}
 
 		RenderPass(const RenderPass& other) = delete;
@@ -89,8 +148,8 @@ export namespace Core::Vulkan{
 
 		RenderPass& operator=(RenderPass&& other) noexcept{
 			if(this == &other) return *this;
-			if(device)vkDestroyRenderPass(device, handle, nullptr);
-			Wrapper<VkRenderPass>::operator =(std::move(other));
+			destroy();
+			Wrapper::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
 		}
@@ -99,11 +158,31 @@ export namespace Core::Vulkan{
 			return subpasses.size();
 		}
 
+		[[nodiscard]] auto attachmentsSize() const noexcept{
+			return attachmentSockets.size();
+		}
+
 		void pushAttachment(const VkAttachmentDescription& description){
 			attachmentSockets.push_back(description);
 		}
 
+		template <std::regular_invocable<SubpassData&> InitFunc>
+		void pushSubpass(InitFunc&& initFunc){
+			auto index = subpasses.size();
+			SubpassData& data = subpasses.emplace_back(index);
+			data.index = index;
+
+			initFunc(data);
+		}
+
+		void destroy(){
+			if(device)vkDestroyRenderPass(device, handle, nullptr);
+			handle = nullptr;
+		}
+
 		void createRenderPass(){
+			destroy();
+
 			for (auto& subpassData : subpasses){
 				subpassData.bindAttachments();
 			}
@@ -116,16 +195,6 @@ export namespace Core::Vulkan{
 				| std::views::transform(&SubpassData::dependencies)
 				| std::views::join
 				| std::ranges::to<std::vector>();
-
-			// VkAttachmentDescription colorAttachment{};
-			// colorAttachment.format = swapChain.getFormat();
-			// colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			// colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //LOAD;
-			// colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			// colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			// colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			// colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; //TODO
-			// colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
 			const VkRenderPassCreateInfo renderPassInfo{
 					.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,

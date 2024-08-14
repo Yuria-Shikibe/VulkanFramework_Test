@@ -30,12 +30,14 @@ import Core.Vulkan.Buffer.UniformBuffer;
 import Core.Vulkan.Preinstall;
 
 import Core.Vulkan.Pipeline;
+import Core.Vulkan.RenderPass;
 
 import Core.Vulkan.CommandPool;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.IndexBuffer;
 import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Sampler;
+import Core.Vulkan.Comp;
 
 import OS.File;
 
@@ -47,10 +49,6 @@ export namespace Core::Vulkan{
 	public:
 		[[nodiscard]] VulkanManager() = default;
 
-		~VulkanManager(){
-			vkDestroyRenderPass(context.device, renderPass, nullptr);
-		}
-
 		Context context{};
 
 		CommandPool commandPool{};
@@ -59,7 +57,8 @@ export namespace Core::Vulkan{
 		DescriptorSetPool descriptorPool{};
 
 		SwapChain swapChain{};
-		VkRenderPass renderPass{};
+
+		RenderPass renderPass{};
 
 		struct InFlightData{
 			std::atomic_bool alreadyCleared{false};
@@ -79,13 +78,6 @@ export namespace Core::Vulkan{
 
 		PipelineLayout pipelineLayout{};
 		GraphicPipeline graphicsPipeline{};
-
-		// ExclusiveBuffer vertexBuffer{};
-		// IndexBuffer indexBuffer{};
-		// DynamicVertexBuffer<Vertex> dyVertexBuffer{};
-		// PersistentTransferDoubleBuffer instanceBuffer{};
-		// UniformBuffer uniformBuffer{};
-		// DescriptorSet descriptorSet{};
 
 		Texture texture1{};
 		Texture texture2{};
@@ -193,6 +185,7 @@ export namespace Core::Vulkan{
 
 			swapChain.createSwapChain(context.physicalDevice, context.device);
 			swapChain.presentQueue = context.device.getPresentQueue();
+			renderPass = RenderPass{context.device};
 
 			createRenderPass();
 			swapChain.setRenderPass(renderPass);
@@ -218,17 +211,8 @@ export namespace Core::Vulkan{
 
 		void postInitVulkan(){
 			setPipelineLayout();
-			//Context Ready
-			// descriptorSetLayout = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
-			// 	layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-			// 	layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, 3);
-			// }};
-			createGraphicsPipeline();
 
-			// vertexBuffer = createVertexBuffer(context, commandPool);
-			// indexBuffer = Util::createIndexBuffer(context, transientCommandPool, Util::BatchIndices<>);
-			//
-			// dyVertexBuffer = DynamicVertexBuffer<Vertex>{context.physicalDevice, context.device, Util::BatchIndices<>.size() / Util::PrimitiveVertCount};
+			createGraphicsPipeline();
 
 			texture1 = Texture{
 				context.physicalDevice, context.device,
@@ -260,8 +244,6 @@ export namespace Core::Vulkan{
 		}
 
 	private:
-
-
 		void createFrameObjects(){
 			for (auto& frameData : frameDataArr){
 				frameData.inFlightFence = Fence{context.device, Fence::CreateFlags::signal};
@@ -272,8 +254,8 @@ export namespace Core::Vulkan{
 				frameData.vertexFlushCommandBuffer = commandPool.obtain();
 			}
 		}
-	public:
 
+	public:
 		void createClearCommands(){
 			for(const auto& [i, commandBuffer] : swapChain.getCommandClears() | std::views::enumerate){
 				commandBuffer = commandPool.obtain();
@@ -343,9 +325,6 @@ export namespace Core::Vulkan{
 									0, nullptr);
 
 				vkCmdDrawIndexedIndirect(commandBuffer, usedPipelineResources.indirectBuffer, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
-				// vkCmdDrawIndexedIndirectCount(commandBuffer, dyVertexBuffer.getIndirectCmdBuffer().get(), 0, 1, sizeof(VkDrawIndexedIndirectCommand), );
-
-				// VkDrawIndirectCount
 
 				vkCmdEndRenderPass(commandBuffer);
 			}
@@ -365,50 +344,35 @@ export namespace Core::Vulkan{
 					0, 0,
 					static_cast<float>(extent.width), static_cast<float>(extent.height),
 					0.f, 1.f});
+
 			graphicsPipeline =
 				GraphicPipeline{context.device, pipelineTemplate, pipelineLayout, renderPass};
 		}
 
 
 		void createRenderPass(){
-			VkAttachmentDescription colorAttachment{};
-			colorAttachment.format = swapChain.getFormat();
-			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; //LOAD;
-			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED; //TODO
-			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			renderPass.pushAttachment(VkAttachmentDescription{
+				.format = swapChain.getFormat(),
+				.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+				.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+			} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
-			VkAttachmentReference colorAttachmentRef{};
-			colorAttachmentRef.attachment = 0;
-			colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			renderPass.pushSubpass([](RenderPass::SubpassData& subpassData){
+				subpassData.setProperties(VK_PIPELINE_BIND_POINT_GRAPHICS);
 
-			VkSubpassDescription subpass{};
-			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-			subpass.colorAttachmentCount = 1;
-			subpass.pColorAttachments = &colorAttachmentRef;
+				subpassData.addDependency(VkSubpassDependency{
+						.dstSubpass = 0,
+						.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+						.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+					} | Subpass::Dependency::External);
 
-			VkSubpassDependency dependency{};
-			dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-			dependency.dstSubpass = 0;
-			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.srcAccessMask = 0;
-			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				subpassData.addAttachment(
+					RenderPass::AttachmentReference::Category::color, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			});
 
-			VkRenderPassCreateInfo renderPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-			renderPassInfo.attachmentCount = 1;
-			renderPassInfo.pAttachments = &colorAttachment;
-			renderPassInfo.subpassCount = 1;
-			renderPassInfo.pSubpasses = &subpass;
-			renderPassInfo.dependencyCount = 1;
-			renderPassInfo.pDependencies = &dependency;
-
-			if(vkCreateRenderPass(context.device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS){
-				throw std::runtime_error("failed to create render pass!");
-			}
+			renderPass.createRenderPass();
 		}
 	};
 }

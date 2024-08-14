@@ -10,64 +10,81 @@ import Core.Vulkan.Comp;
 
 export namespace Core::Vulkan{
 	namespace SamplerInfo{
-		constexpr Util::Component<VkSamplerCreateInfo, 0, &VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter> Filter_Linear{{
-				.magFilter = VK_FILTER_LINEAR,
-				.minFilter = VK_FILTER_LINEAR
-			}};
+		constexpr Util::Component Filter_Linear{
+				VkSamplerCreateInfo{
+					.magFilter = VK_FILTER_LINEAR,
+					.minFilter = VK_FILTER_LINEAR
+				},
+				&VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter
+			};
 
-		constexpr Util::Component<VkSamplerCreateInfo, 1, &VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter> Filter_Nearest{{
-				.magFilter = VK_FILTER_NEAREST,
-				.minFilter = VK_FILTER_NEAREST
-			}};
+		constexpr Util::Component Filter_Nearest{
+				VkSamplerCreateInfo{
+					.magFilter = VK_FILTER_NEAREST,
+					.minFilter = VK_FILTER_NEAREST
+				},
+				&VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter
+			};
 
-		constexpr Util::Component<VkSamplerCreateInfo, 0, &VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW> AddressMode_Repeat{{
-				.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-				.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-				.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-			}};
+		constexpr Util::Component AddressMode_Repeat{
+				VkSamplerCreateInfo{
+					.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+					.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+					.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+				},
+				&VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW
+			};
 
-		constexpr Util::Component<VkSamplerCreateInfo, 1, &VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW> AddressMode_Clamp{{
-				.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-				.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-				.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-			}};
+		constexpr Util::Component AddressMode_Clamp{
+				VkSamplerCreateInfo{
+					.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+					.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+					.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				},
+				&VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW
+			};
 
-		constexpr Util::Component<
-			VkSamplerCreateInfo, 0,
-			&VkSamplerCreateInfo::mipmapMode, &VkSamplerCreateInfo::minLod,
-			&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias> LOD_Max{{
+		constexpr Util::Component LOD_Max{
+				VkSamplerCreateInfo{
 					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
 					.mipLodBias = 0,
 					.minLod = 0,
 					.maxLod = VK_LOD_CLAMP_NONE,
-				}};
+				},
+				&VkSamplerCreateInfo::mipmapMode, &VkSamplerCreateInfo::minLod,
+				&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias
+			};
 
 
 		//designators must appear in member declaration order of class
 		template <VkCompareOp op = VK_COMPARE_OP_NEVER>
-		constexpr Util::Component<
-			VkSamplerCreateInfo, op,
-			&VkSamplerCreateInfo::compareEnable, &VkSamplerCreateInfo::compareOp> CompareOp{{
+		constexpr Util::Component CompareOp{
+				VkSamplerCreateInfo{
 					.compareEnable = op,
 					.compareOp = op,
-				}};
+				},
+				&VkSamplerCreateInfo::compareEnable, &VkSamplerCreateInfo::compareOp
+			};
 
 		template <std::uint32_t anisotropy = 4>
-		constexpr Util::Component<VkSamplerCreateInfo, anisotropy,
-		&VkSamplerCreateInfo::anisotropyEnable, &VkSamplerCreateInfo::maxAnisotropy> Anisotropy{VkSamplerCreateInfo{
-				.anisotropyEnable = static_cast<bool>(anisotropy),
-				.maxAnisotropy = anisotropy,
-			}};
+		constexpr Util::Component Anisotropy{
+				VkSamplerCreateInfo{
+					.anisotropyEnable = static_cast<bool>(anisotropy),
+					.maxAnisotropy = anisotropy,
+				},
+				&VkSamplerCreateInfo::anisotropyEnable, &VkSamplerCreateInfo::maxAnisotropy
+			};
 
-		constexpr Util::Component<VkSamplerCreateInfo, 0,
-		&VkSamplerCreateInfo::sType,
-		&VkSamplerCreateInfo::borderColor,
-		&VkSamplerCreateInfo::unnormalizedCoordinates
-		> Default{{
-				.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-				.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
-				.unnormalizedCoordinates = false
-			}};
+		constexpr Util::Component Default{
+				VkSamplerCreateInfo{
+					.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+					.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,
+					.unnormalizedCoordinates = false
+				},
+				&VkSamplerCreateInfo::sType,
+				&VkSamplerCreateInfo::borderColor,
+				&VkSamplerCreateInfo::unnormalizedCoordinates
+			};
 
 		constexpr VkSamplerCreateInfo TextureSampler = VkSamplerCreateInfo{}
 			| SamplerInfo::Default
