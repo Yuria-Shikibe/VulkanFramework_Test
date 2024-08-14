@@ -6,60 +6,124 @@ import Core.Vulkan.Manager;
 import Core.Vulkan.Shader.Compile;
 import Core.Vulkan.Instance;
 import Core.Vulkan.Vertex;
+import Core.Vulkan.Uniform;
+import Core.Vulkan.Image;
 
 import Core.InitAndTerminate;
 
 import OS.File;
 import Graphic.Color;
+import Graphic.Batch;
 
 import Assets.Graphic;
 
-int main(){
-	Assets::Shader::builtinShaderDir = Core::Vulkan::TargetCompilerPath;
+std::array<Core::Vulkan::Texture, 8> textures{};
 
-	Core::Vulkan::ShaderCompileTask{
-		Core::Vulkan::DefaultCompilerPath,
-		Core::Vulkan::DefaultSrcPath / "test.frag",
-		Core::Vulkan::TargetCompilerPath
+int main(){
+	using namespace Core;
+	Assets::Shader::builtinShaderDir = Vulkan::TargetCompilerPath;
+
+	Vulkan::ShaderCompileTask{
+		Vulkan::DefaultCompilerPath,
+		Vulkan::DefaultSrcPath / "test.frag",
+		Vulkan::TargetCompilerPath
 	}.compile();
 
-	Core::Vulkan::ShaderCompileTask{
-		Core::Vulkan::DefaultCompilerPath,
-		Core::Vulkan::DefaultSrcPath / "test.vert",
-		Core::Vulkan::TargetCompilerPath
+	Vulkan::ShaderCompileTask{
+		Vulkan::DefaultCompilerPath,
+		Vulkan::DefaultSrcPath / "test.vert",
+		Vulkan::TargetCompilerPath
 	}.compile();
 
 	Core::init();
-	Assets::Shader::load(Core::vulkanManager->context.device);
-	Core::vulkanManager->postInitVulkan();
 
-	while(Core::window && !Core::window->shouldClose()) {
-		Core::window->pollEvents();
-		if (auto [p, failed] = Core::vulkanManager->dyVertexBuffer.acquireSegment(); !failed){
-			new(p) std::array{
-					Core::Vulkan::Vertex{{50 , 50 }, 0.f, {1.0f, 0.0f, 0.0f, 1.f}, {0.0f, 1.0f}},
-					Core::Vulkan::Vertex{{250, 50 }, 0.f, {0.0f, 1.0f, 0.0f, 1.f}, {1.0f, 1.0f}},
-					Core::Vulkan::Vertex{{250, 250}, 0.f, {0.0f, 0.0f, 1.0f, .17f}, {1.0f, 0.0f}},
-					Core::Vulkan::Vertex{{50 , 250}, 0.f, {1.0f, 1.0f, 1.0f, 1.f }, {0.0f, 0.0f}},
-				};
-		}
+	Assets::load(vulkanManager->context.device);
 
-		if (auto [p, failed] = Core::vulkanManager->dyVertexBuffer.acquireSegment(); !failed){
-			new(p) std::array{
-					Core::Vulkan::Vertex{Geom::Vec2{50 , 50 }.add(400, 400), 0.f, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-					Core::Vulkan::Vertex{Geom::Vec2{150, 50 }.add(400, 400), 0.f, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-					Core::Vulkan::Vertex{Geom::Vec2{150, 150}.add(400, 400), 0.f, Graphic::Colors::WHITE, {1.0f, 0.0f}},
-					Core::Vulkan::Vertex{Geom::Vec2{50 , 150}.add(400, 400), 0.f, Graphic::Colors::WHITE, {0.0f, 0.0f}},
-				};
-		}
-
-		Core::vulkanManager->drawFrame();
+	for(const auto& [i, texture] : textures | std::views::enumerate){
+		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\test-{}.png)", i);
+		texture = Core::Vulkan::Texture{
+				vulkanManager->context.physicalDevice, vulkanManager->context.device,
+				OS::File{p},
+				vulkanManager->transientCommandPool.obtainTransient(vulkanManager->context.device.getGraphicsQueue())
+			};
 	}
 
-	vkDeviceWaitIdle(Core::vulkanManager->context.device);
+	{
+		Graphic::Batch<Vulkan::Vertex> batch{};
 
-	Assets::Shader::dispose();
+		batch.init(&vulkanManager->context, Assets::Sampler::textureDefaultSampler.get());
+		batch.initUniformBuffer<Vulkan::UniformBlock>();
 
-	Core::terminate();
-	Core::GLFW::terminate();
+		{
+			auto& info = vulkanManager->usedPipelineResources;
+
+			info.indexBuffer = batch.buffer_index;
+			info.indexType = batch.buffer_index.indexType;
+			info.vertexBuffer = batch.buffer_vertex;
+			info.indirectBuffer = batch.buffer_indirect.getTargetBuffer();
+
+			info.descriptorSetLayout = batch.descriptorSetLayout;
+			info.descriptorSet = batch.descriptorSet;
+		}
+
+		batch.commandRecordCallback = []{
+			vulkanManager->createCommandBuffers();
+		};
+
+		batch.externalDrawCall = [](const decltype(batch)& b, const bool isLast){
+			vulkanManager->drawFrame(b.semaphore_copyDone, b.semaphore_drawDone, isLast);
+		};
+
+		batch.updateDescriptorSetsPure();
+
+		vulkanManager->postInitVulkan();
+
+
+
+		while(window && !window->shouldClose()) {
+			window->pollEvents();
+
+			vulkanManager->drawBegin();
+
+			Geom::Matrix3D matrix3D{};
+			matrix3D.setOrthogonal(vulkanManager->swapChain.getTargetWindow()->getSize().as<float>());
+			batch.updateUniformBuffer(Vulkan::UniformBlock{matrix3D, 0.f});
+
+			for(const auto& [i, texture] : textures | std::views::enumerate){
+				auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
+				new(dataPtr) std::array{
+					Vulkan::Vertex{Geom::Vec2{0 , 0 }.addScaled({50, 50}, i), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+					Vulkan::Vertex{Geom::Vec2{50, 0 }.addScaled({50, 50}, i), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+					Vulkan::Vertex{Geom::Vec2{50, 50}.addScaled({50, 50}, i), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
+					Vulkan::Vertex{Geom::Vec2{0 , 50}.addScaled({50, 50}, i), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+				};
+			}
+
+
+			batch.consumeAll();
+
+			vulkanManager->drawEnd();
+
+			//
+			// if (auto [p, failed] = vulkanManager->dyVertexBuffer.acquireSegment(); !failed){
+			// 	new(p) std::array{
+			// 		Vulkan::Vertex{Geom::Vec2{50 , 50 }.add(400, 400), 0, 1, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+			// 		Vulkan::Vertex{Geom::Vec2{150, 50 }.add(400, 400), 0, 1, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+			// 		Vulkan::Vertex{Geom::Vec2{150, 150}.add(400, 400), 0, 1, Graphic::Colors::WHITE, {1.0f, 0.0f}},
+			// 		Vulkan::Vertex{Geom::Vec2{50 , 150}.add(400, 400), 0, 1, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+			// 	};
+			// }
+		}
+
+		vkDeviceWaitIdle(vulkanManager->context.device);
+	}
+
+	for(const auto& [i, texture] : textures | std::views::enumerate){
+		texture = Vulkan::Texture{};
+	}
+
+	Assets::dispose();
+
+	terminate();
+	GLFW::terminate();
 }

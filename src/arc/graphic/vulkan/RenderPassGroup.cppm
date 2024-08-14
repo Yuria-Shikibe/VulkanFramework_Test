@@ -6,6 +6,7 @@ export module Core.Vulkan.RenderPassGroup;
 
 import Core.Vulkan.Buffer.FrameBuffer;
 import Core.Vulkan.Buffer.UniformBuffer;
+import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Attachment;
 import Core.Vulkan.Pipeline;
 import Core.Vulkan.PipelineLayout;

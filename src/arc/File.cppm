@@ -20,6 +20,8 @@ namespace OS{
 
 		File(const decltype(rawPath)::string_type& p) : rawPath{p}{}
 
+		File(const std::string& p) : rawPath{p}{}
+
 		File(decltype(rawPath)::string_type&& p) : rawPath{std::move(p)}{}
 
 		File(const char* p) : rawPath{p}{}

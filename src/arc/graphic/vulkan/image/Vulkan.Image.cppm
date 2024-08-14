@@ -110,7 +110,7 @@ export namespace Core::Vulkan{
 
 		std::uint32_t getMipLevel(std::uint32_t w, std::uint32_t h){
 			auto logRst = std::log2(std::max(w, h));
-			static constexpr double ThresHold = 4;
+			static constexpr double ThresHold = 2;
 			return static_cast<std::uint32_t>(std::floor(std::max(0., logRst - ThresHold))) + 1;
 		}
 

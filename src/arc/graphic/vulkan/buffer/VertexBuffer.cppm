@@ -6,8 +6,9 @@ export module Core.Vulkan.Buffer.VertexBuffer;
 
 export import Core.Vulkan.Buffer.ExclusiveBuffer;
 export import Core.Vulkan.Buffer.CommandBuffer;
+export import Core.Vulkan.Buffer.PersistentTransferBuffer;
+
 import std;
-import Core.Vulkan.Buffer.PersistentTransferBuffer;
 
 export namespace Core::Vulkan{
 
@@ -19,8 +20,8 @@ export namespace Core::Vulkan{
 		std::atomic_uint32_t currentOffset{};
 
 	public:
-		PersistentTransferBuffer vertexBuffer{};
-		PersistentTransferBuffer indirectBuffer{};
+		PersistentTransferDoubleBuffer vertexBuffer{};
+		PersistentTransferDoubleBuffer indirectBuffer{};
 
 		static constexpr auto UnitOffset = vertexGroupCount * sizeof(T);
 
@@ -32,10 +33,10 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] DynamicVertexBuffer() = default;
 
-		[[nodiscard]] DynamicVertexBuffer(VkPhysicalDevice physicalDevice, VkDevice device, const std::uint32_t count) :
-			maxCount{count},
+		[[nodiscard]] DynamicVertexBuffer(VkPhysicalDevice physicalDevice, VkDevice device, const std::uint32_t maxCount) :
+			maxCount{maxCount},
 			vertexBuffer{
-				physicalDevice, device, count * UnitOffset, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+				physicalDevice, device, maxCount * UnitOffset, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
 			}, indirectBuffer{
 				physicalDevice, device, sizeof(VkDrawIndexedIndirectCommand), VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
 			}{}
@@ -73,8 +74,6 @@ export namespace Core::Vulkan{
 
 		void reset(){
 			currentOffset.store(0);
-			vertexBuffer.reset();
-			indirectBuffer.reset();
 		}
 
 		void map(){
@@ -100,7 +99,7 @@ export namespace Core::Vulkan{
 		}
 
 		[[nodiscard]] constexpr bool isValid() const noexcept{
-			return !isFull() && !vertexBuffer.isWaitingCopy();
+			return !isFull();
 		}
 
 		/**

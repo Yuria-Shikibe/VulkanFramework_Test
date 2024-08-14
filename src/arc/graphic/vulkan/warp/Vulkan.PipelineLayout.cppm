@@ -32,7 +32,9 @@ export namespace Core::Vulkan{
 			if(device)vkDestroyPipelineLayout(device, handle, nullptr);
 		}
 
-		template<ContigiousRange<VkDescriptorSetLayout> R1, ContigiousRange<VkPushConstantRange> R2 = EmptyRange<VkPushConstantRange>>
+		template<
+			ContigiousRange<VkDescriptorSetLayout> R1,
+			ContigiousRange<VkPushConstantRange> R2 = EmptyRange<VkPushConstantRange>>
 		[[nodiscard]] PipelineLayout(VkDevice device,
 			R1&& descriptorSetLayouts, R2&& constantRange = {}) : device{device}{
 

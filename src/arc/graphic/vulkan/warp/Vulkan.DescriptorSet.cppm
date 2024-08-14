@@ -102,9 +102,9 @@ export namespace Core::Vulkan{
 	};
 
 	class DescriptorSetPool : public Wrapper<VkDescriptorPool>{
+	public:
 		Dependency<VkDevice> device{};
 
-	public:
 		[[nodiscard]] DescriptorSetPool() = default;
 
 		~DescriptorSetPool(){
@@ -152,7 +152,7 @@ export namespace Core::Vulkan{
 					.pNext = nullptr,
 					.descriptorPool = handle,
 					.descriptorSetCount = 1,
-					.pSetLayouts = descriptorSetLayout.operator->()
+					.pSetLayouts = descriptorSetLayout.asData()
 				};
 
 			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.operator->()) != VK_SUCCESS) {

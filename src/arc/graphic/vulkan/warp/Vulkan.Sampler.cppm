@@ -9,7 +9,7 @@ import Core.Vulkan.Dependency;
 import Core.Vulkan.Comp;
 
 export namespace Core::Vulkan{
-	namespace Samplers{
+	namespace SamplerInfo{
 		constexpr Util::Component<VkSamplerCreateInfo, 0, &VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter> Filter_Linear{{
 				.magFilter = VK_FILTER_LINEAR,
 				.minFilter = VK_FILTER_LINEAR
@@ -24,6 +24,12 @@ export namespace Core::Vulkan{
 				.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
 				.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
 				.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+			}};
+
+		constexpr Util::Component<VkSamplerCreateInfo, 1, &VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW> AddressMode_Clamp{{
+				.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+				.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
 			}};
 
 		constexpr Util::Component<
@@ -64,18 +70,64 @@ export namespace Core::Vulkan{
 			}};
 
 		constexpr VkSamplerCreateInfo TextureSampler = VkSamplerCreateInfo{}
-			| Samplers::Default
-			| Samplers::Filter_Linear
-			| Samplers::AddressMode_Repeat
-			| Samplers::LOD_Max
-			| Samplers::CompareOp<VK_COMPARE_OP_NEVER>
-			| Samplers::Anisotropy<4>;
+			| SamplerInfo::Default
+			| SamplerInfo::Filter_Linear
+			| SamplerInfo::AddressMode_Clamp
+			| SamplerInfo::LOD_Max
+			| SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>
+			| SamplerInfo::Anisotropy<4>;
+	}
+
+	namespace Util{
+		[[nodiscard]] constexpr VkDescriptorImageInfo
+			getDescriptorInfo_ShaderRead(VkSampler handle, VkImageView imageView) noexcept{
+			return {
+				.sampler = handle,
+				.imageView = imageView,
+				.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
+		}
+
+		template <typename ...T>
+			requires (std::convertible_to<T, VkImageView> && ...)
+		[[nodiscard]] constexpr auto getDescriptorInfo_ShaderRead(VkSampler handle, const T&... imageViews) noexcept{
+			std::array<VkDescriptorImageInfo, sizeof...(T)> rst{};
+
+			[&]<std::size_t ...I>(std::index_sequence<I...>){
+				((
+					rst[I].imageView = imageViews,
+					rst[I].sampler = handle,
+					rst[I].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+				), ...);
+			}(std::index_sequence_for<T...>{});
+
+			return rst;
+		}
+
+		template <std::ranges::range Rng>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, VkImageView>)
+		[[nodiscard]] std::vector<VkDescriptorImageInfo> getDescriptorInfoRange_ShaderRead(VkSampler handle, const Rng& imageViews) noexcept{
+			std::vector<VkDescriptorImageInfo> rst{};
+
+			for (const auto& view : imageViews){
+				rst.emplace_back(handle, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			}
+
+			return rst;
+		}
+
+		VkDescriptorImageInfo getDescriptorInfo(VkSampler handle){
+			return {
+				.sampler = handle,
+			};
+		}
 	}
 	
 	class Sampler : public Wrapper<VkSampler>{
 		DeviceDependency device{};
 
 	public:
+		using Wrapper::Wrapper;
 		[[nodiscard]] constexpr Sampler() = default;
 
 		[[nodiscard]] explicit Sampler(VkDevice device, VkSampler textureSampler = nullptr)
@@ -119,17 +171,18 @@ export namespace Core::Vulkan{
 		template <typename ...T>
 			requires (std::convertible_to<T, VkImageView> && ...)
 		[[nodiscard]] constexpr auto getDescriptorInfo_ShaderRead(const T&... imageViews) const noexcept{
-			std::array<VkDescriptorImageInfo, sizeof...(T)> rst{};
+			return Util::getDescriptorInfo_ShaderRead(handle, imageViews...);
+		}
 
-			[&]<std::size_t ...I>(std::index_sequence<I...>){
-				((
-					rst[I].imageView = imageViews,
-					rst[I].sampler = handle,
-					rst[I].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-				), ...);
-			}(std::index_sequence_for<T...>{});
+		template <std::ranges::sized_range Rng>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, VkImageView>)
+		[[nodiscard]] constexpr auto getDescriptorInfo_ShaderRead(const Rng& imageViews) const noexcept{
+			return Util::getDescriptorInfo_ShaderRead(handle, imageViews);
 
-			return rst;
+		}
+
+		VkDescriptorImageInfo getDescriptorInfo() const{
+			return Util::getDescriptorInfo(handle);
 		}
 	};
 }

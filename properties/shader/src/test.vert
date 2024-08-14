@@ -2,14 +2,16 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 layout(location = 0) in vec3 inPosition;
-layout(location = 1) in vec4 inColor;
+layout(location = 1) in uint inTextureID;
 layout(location = 2) in vec2 inTexCoord;
 
-layout(location = 3) in int textureID;
+layout(location = 3) in vec4 inColor;
+
+//layout(location = 3) in int textureID;
 
 layout(location = 0) out vec4 fragColor;
 layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) flat out  int instanceID;
+layout(location = 2) flat out uint instanceID;
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -25,5 +27,5 @@ void main() {
     fragColor = inColor + ubo.v;
     fragTexCoord = inTexCoord;
 
-    instanceID = textureID;
+    instanceID = inTextureID;
 }

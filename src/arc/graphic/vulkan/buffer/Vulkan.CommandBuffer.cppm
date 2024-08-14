@@ -53,11 +53,11 @@ export namespace Core::Vulkan{
 			return *this;
 		}
 
-		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, const VkCommandBufferInheritanceInfo* inheritance = nullptr) const{
+		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, const VkCommandBufferInheritanceInfo& inheritance = {}) const{
 			VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 
 			beginInfo.flags = flags;
-			beginInfo.pInheritanceInfo = inheritance; // Optional
+			beginInfo.pInheritanceInfo = &inheritance; // Optional
 
 			if(vkBeginCommandBuffer(handle, &beginInfo) != VK_SUCCESS){
 				throw std::runtime_error("Failed to begin recording command buffer!");
@@ -76,6 +76,10 @@ export namespace Core::Vulkan{
 			std::invoke(fn, handle, args...);
 		}
 
+		void reset(VkCommandBufferResetFlagBits flagBits = static_cast<VkCommandBufferResetFlagBits>(0)) const{
+			vkResetCommandBuffer(handle, flagBits);
+		}
+
 		void setViewport(const VkViewport& viewport) const{
 			vkCmdSetViewport(handle, 0, 1, &viewport);
 		}
@@ -89,10 +93,10 @@ export namespace Core::Vulkan{
 		CommandBuffer& handler;
 
 		[[nodiscard]] explicit ScopedCommand(CommandBuffer& handler,
-			const VkCommandBufferUsageFlags flags,
+			const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
 			const VkCommandBufferInheritanceInfo& inheritance = {VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO})
 			: handler{handler}{
-			handler.begin(flags, &inheritance);
+			handler.begin(flags, inheritance);
 		}
 
 		~ScopedCommand() noexcept(false) {

@@ -1,7 +1,3 @@
-//
-// Created by Matrix on 2024/8/7.
-//
-
 export module Core.Vulkan.Concepts;
 
 import std;
@@ -10,7 +6,7 @@ namespace Core::Vulkan{
 	export
 	template <typename T = void*>
 	[[no_unique_address]] struct EmptyRange{
-		struct iterator : std::contiguous_iterator_tag{
+		struct iterator{
 			using iterator_category = std::contiguous_iterator_tag;
 			using value_type        = T;
 			using difference_type   = std::ptrdiff_t;

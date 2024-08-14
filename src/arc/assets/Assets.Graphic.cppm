@@ -5,6 +5,7 @@ module;
 export module Assets.Graphic;
 
 import Core.Vulkan.Shader;
+import Core.Vulkan.Sampler;
 
 import OS.File;
 
@@ -20,5 +21,25 @@ export namespace Assets{
 			batchVertShader = {};
 			batchFragShader = {};
 		}
+	}
+
+	namespace Sampler{
+		Core::Vulkan::Sampler textureDefaultSampler{};
+
+		void load(VkDevice device);
+
+		void dispose(){
+			textureDefaultSampler = {};
+		}
+	}
+
+	void load(VkDevice device){
+		Shader::load(device);
+		Sampler::load(device);
+	}
+
+	void dispose(){
+		Shader::dispose();
+		Sampler::dispose();
 	}
 }

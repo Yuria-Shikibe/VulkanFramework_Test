@@ -9,3 +9,7 @@ void Assets::Shader::load(VkDevice device){
 		device, builtinShaderDir / R"(test.frag.spv)"
 	};
 }
+
+void Assets::Sampler::load(VkDevice device){
+	textureDefaultSampler = Core::Vulkan::Sampler(device, Core::Vulkan::SamplerInfo::TextureSampler);
+}

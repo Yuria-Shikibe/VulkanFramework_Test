@@ -37,14 +37,14 @@ export namespace Core::Vulkan{
 
 		VkFormat swapChainImageFormat{};
 
-		//Move this to other place
-		VkRenderPass renderPass{};
+		VkRenderPass usedRenderPass{};
 
 		struct SwapChainFrameData{
 			VkImage image{};
 			ImageView imageView{};
 			FrameBuffer framebuffer{};
-			CommandBuffer commandBuffer{};
+			CommandBuffer commandPresent{};
+			CommandBuffer commandClear{};
 		};
 
 		std::vector<SwapChainFrameData> swapChainImages{};
@@ -55,7 +55,8 @@ export namespace Core::Vulkan{
 			resized = true;
 		}
 
-		std::uint32_t currentFrame{};
+		std::uint32_t currentInFlightFrame{};
+		std::uint32_t currentRenderingFrame{};
 
 	public:
 		std::function<void(SwapChain&)>  recreateCallback{};
@@ -111,7 +112,6 @@ export namespace Core::Vulkan{
 		void cleanupSwapChain() const{
 			if(!device)return;
 
-			vkDestroyRenderPass(device, renderPass, nullptr);
 			destroyOldSwapChain();
 		}
 
@@ -127,6 +127,7 @@ export namespace Core::Vulkan{
 			oldSwapChain = swapChain;
 
 			createSwapChain(physicalDevice, device);
+			createSwapChainFramebuffers();
 
 			recreateCallback(*this);
 			resized = false;
@@ -140,8 +141,8 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] operator VkSwapchainKHR() const noexcept{return swapChain;}
 
-		auto getCurrentRenderingImage() const noexcept{
-			return currentFrame;
+		auto getCurrentInFlightImage() const noexcept{
+			return currentInFlightFrame;
 		}
 
 		void createSwapChain(VkPhysicalDevice physicalDevice, VkDevice device){
@@ -201,8 +202,6 @@ export namespace Core::Vulkan{
 			swapChainImageFormat = surfaceFormat.format;
 
 			createImageViews();
-			createRenderPass();
-			createSwapChainFramebuffers();
 		}
 
 		void createImageViews(){
@@ -225,6 +224,8 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] VkFormat getFormat() const noexcept{ return swapChainImageFormat; }
 
+		[[nodiscard]] auto getCurrentImageIndex() const noexcept{ return currentRenderingFrame; }
+
 		[[nodiscard]] decltype(auto) getSwapChainImages() const noexcept{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::image);
 		}
@@ -237,11 +238,13 @@ export namespace Core::Vulkan{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::framebuffer);
 		}
 
-		[[nodiscard]] decltype(auto) getCommandBuffers() noexcept{
-			return swapChainImages | std::views::transform(&SwapChainFrameData::commandBuffer);
+		[[nodiscard]] decltype(auto) getCommandPresents() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::commandPresent);
 		}
 
-		[[nodiscard]] VkRenderPass getRenderPass() const noexcept{ return renderPass; }
+		[[nodiscard]] decltype(auto) getCommandClears() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::commandClear);
+		}
 
 		[[nodiscard]] std::uint32_t size() const noexcept{ return swapChainImages.size(); }
 
@@ -256,7 +259,8 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("failed to acquire swap chain image!");
 			}
 
-			return imageIndex;
+			currentRenderingFrame = imageIndex;
+			return currentRenderingFrame;
 		}
 
 		void postImage(VkPresentInfoKHR& presentInfo){
@@ -272,7 +276,18 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("failed to present swap chain image!");
 			}
 
-			currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+			currentInFlightFrame = (currentInFlightFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+		}
+
+
+		void setRenderPass(VkRenderPass renderPass){
+			usedRenderPass = renderPass;
+		}
+
+		void createSwapChainFramebuffers(){
+			for(const auto& [i, group] : swapChainImages | std::views::enumerate){
+				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), usedRenderPass, std::array{group.imageView.get()}};
+			}
 		}
 
 	private:
@@ -281,52 +296,6 @@ export namespace Core::Vulkan{
 			oldSwapChain = nullptr;
 		}
 
-		void createSwapChainFramebuffers(){
-			for(const auto& [i, group] : swapChainImages | std::views::enumerate){
-				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), renderPass, std::array{group.imageView.get()}};
-			}
-		}
-
-		void createRenderPass(){
-			VkAttachmentDescription colorAttachment{};
-			colorAttachment.format = swapChainImageFormat;
-			colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-			colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-			colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-			VkAttachmentReference colorAttachmentRef{};
-			colorAttachmentRef.attachment = 0;
-			colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-			VkSubpassDescription subpass{};
-			subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-			subpass.colorAttachmentCount = 1;
-			subpass.pColorAttachments = &colorAttachmentRef;
-
-			VkSubpassDependency dependency{};
-			dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-			dependency.dstSubpass = 0;
-			dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.srcAccessMask = 0;
-			dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-			VkRenderPassCreateInfo renderPassInfo{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
-			renderPassInfo.attachmentCount = 1;
-			renderPassInfo.pAttachments = &colorAttachment;
-			renderPassInfo.subpassCount = 1;
-			renderPassInfo.pSubpasses = &subpass;
-			renderPassInfo.dependencyCount = 1;
-			renderPassInfo.pDependencies = &dependency;
-
-			if(vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS){
-				throw std::runtime_error("failed to create render pass!");
-			}
-		}
 
 		[[nodiscard]] VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const{
 			if(capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max()){

@@ -8,13 +8,11 @@ import Core.Vulkan.Buffer.ExclusiveBuffer;
 import std;
 
 export namespace Core::Vulkan{
-	class PersistentTransferBuffer{
+	class PersistentTransferDoubleBuffer{
 		StagingBuffer stagingBuffer{};
 		ExclusiveBuffer targetBuffer{};
 
 		void* mappedData{};
-
-		bool waitingCopy{};
 
 	public:
 		[[nodiscard]] const StagingBuffer& getStagingBuffer() const{ return stagingBuffer; }
@@ -23,15 +21,13 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] void* getMappedData() const{ return mappedData; }
 
-		[[nodiscard]] bool isWaitingCopy() const{ return waitingCopy; }
-
 		[[nodiscard]] auto size() const noexcept{
 			return stagingBuffer.memory.size();
 		}
 
-		[[nodiscard]] PersistentTransferBuffer() = default;
+		[[nodiscard]] PersistentTransferDoubleBuffer() = default;
 
-		[[nodiscard]] PersistentTransferBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usage) :
+		[[nodiscard]] PersistentTransferDoubleBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usage) :
 			targetBuffer{
 				physicalDevice, device, size,
 				VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
@@ -59,22 +55,62 @@ export namespace Core::Vulkan{
 
 		void flush(VkDeviceSize size){
 			stagingBuffer.memory.flush(size);
-			waitingCopy = true;
 		}
 
 		//TODO support
 		void invalidate(VkDeviceSize size) = delete;
 
 		void cmdFlushToDevice(VkCommandBuffer commandBuffer, VkDeviceSize size = VK_WHOLE_SIZE) const{
-			if(!waitingCopy){
-				throw std::runtime_error("No Data Valid!");
-			}
-
 			stagingBuffer.copyBuffer(commandBuffer, targetBuffer.get(), size);
 		}
+	};
 
-		void reset(){
-			waitingCopy = false;
+	class PersistentTransferBuffer : public ExclusiveBuffer{
+		void* mappedData{};
+
+	public:
+		[[nodiscard]] void* getMappedData() const{ return mappedData; }
+
+		[[nodiscard]] auto size() const noexcept{
+			return memory.size();
 		}
+
+		[[nodiscard]] PersistentTransferBuffer() = default;
+
+		[[nodiscard]] PersistentTransferBuffer(
+			VkPhysicalDevice physicalDevice, VkDevice device,
+			VkDeviceSize size, VkBufferUsageFlags usage) :
+			ExclusiveBuffer{
+				physicalDevice, device, size,
+				usage,
+				VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+			}{
+			// map();
+		}
+
+		void map(){
+			if(mappedData){
+				throw std::runtime_error("Data Already Mapped");
+			}
+			mappedData = memory.map_noInvalidation();
+		}
+
+		void unmap(){
+			if(!mappedData)return;
+			memory.unmap();
+			mappedData = nullptr;
+		}
+
+		void flush(VkDeviceSize size) const{
+			memory.flush(size);
+		}
+
+		template <typename T = void>
+		[[nodiscard]] T* getData() const noexcept{
+			return static_cast<T*>(mappedData);
+		}
+
+		//TODO support
+		void invalidate(VkDeviceSize size) = delete;
 	};
 }

@@ -9,8 +9,8 @@ export import Core.Vulkan.PhysicalDevice;
 export import Core.Vulkan.LogicalDevice;
 
 import Core.Vulkan.Validation;
+import Core.Vulkan.Concepts;
 import Core.Vulkan.Util;
-
 
 import ext.MetaProgramming;
 import std;
@@ -87,14 +87,14 @@ export namespace Core::Vulkan{
 				};
 
 			if(toWait){
-				submitInfo.waitSemaphoreCount = toWait ? 1 : 0;
+				submitInfo.waitSemaphoreCount = 1;
 				submitInfo.pWaitSemaphores = &toWait;
 				submitInfo.pWaitDstStageMask = &waitDstStage_imageIsAvailable;
 			}
 
 
 			if(toSignal){
-				submitInfo.signalSemaphoreCount = toSignal ? 1 : 0;
+				submitInfo.signalSemaphoreCount = 1;
 				submitInfo.pSignalSemaphores = &toSignal;
 			}
 
@@ -115,6 +115,20 @@ export namespace Core::Vulkan{
 		VkResult commandSubmit_Compute(VkCommandBuffer commandBuffer, VkFence fence = nullptr) const{
 			VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO, .commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
 			return commandSubmit_Compute(submitInfo, fence);
+		}
+
+		void triggerSemaphore(VkCommandBuffer commandBuffer, const ContigiousRange<VkSemaphore> auto& semaphores){
+			VkSubmitInfo submitInfo = {
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.commandBufferCount = 1,
+				.pCommandBuffers = &commandBuffer
+			};
+
+			submitInfo.signalSemaphoreCount = std::ranges::size(semaphores);
+			submitInfo.pSignalSemaphores = std::ranges::data(semaphores);
+
+			(void)commandSubmit_Graphics(submitInfo, nullptr);
+			vkQueueWaitIdle(device.getGraphicsQueue());
 		}
 	};
 }
