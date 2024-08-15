@@ -42,7 +42,7 @@ namespace Core::Vulkan{
 
 		constexpr auto NoOffset = Offset<0>;
 
-		template <VkPipelineStageFlagBits ...mask>
+		template <unsigned ...mask>
 		constexpr unsigned StageFlagBits[sizeof...(mask)]{mask...};
 	}
 
@@ -255,6 +255,16 @@ namespace Core::Vulkan{
 			}
 
 			inline const static AttributeDesc AttrDesc{getAttrInfo()};
+		};
+
+		export struct EmptyVertexBind{
+			static constexpr VkVertexInputBindingDescription BindDesc{};
+
+			static constexpr VkPipelineVertexInputStateCreateInfo createInfo() noexcept{
+				return {VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
+			}
+
+			static constexpr std::array<VkVertexInputAttributeDescription, 1> AttrDesc{};
 		};
 
 		export template <typename T>

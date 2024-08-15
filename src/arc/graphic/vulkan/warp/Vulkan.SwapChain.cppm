@@ -16,7 +16,7 @@ import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
 
 export namespace Core::Vulkan{
-	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 1;
 
 	class SwapChain{
 	public:
@@ -37,14 +37,13 @@ export namespace Core::Vulkan{
 
 		VkFormat swapChainImageFormat{};
 
-		VkRenderPass usedRenderPass{};
-
 		struct SwapChainFrameData{
 			VkImage image{};
 			ImageView imageView{};
-			FrameBuffer framebuffer{};
-			CommandBuffer commandPresent{};
+			FramebufferLocal framebuffer{};
+			CommandBuffer commandDraw{};
 			CommandBuffer commandClear{};
+			CommandBuffer commandFlush{};
 		};
 
 		std::vector<SwapChainFrameData> swapChainImages{};
@@ -127,7 +126,6 @@ export namespace Core::Vulkan{
 			oldSwapChain = swapChain;
 
 			createSwapChain(physicalDevice, device);
-			createSwapChainFramebuffers();
 
 			recreateCallback(*this);
 			resized = false;
@@ -226,6 +224,10 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] auto getCurrentImageIndex() const noexcept{ return currentRenderingFrame; }
 
+		[[nodiscard]] decltype(auto) getImageData() noexcept{
+			return (swapChainImages);
+		}
+
 		[[nodiscard]] decltype(auto) getSwapChainImages() const noexcept{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::image);
 		}
@@ -238,12 +240,20 @@ export namespace Core::Vulkan{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::framebuffer);
 		}
 
-		[[nodiscard]] decltype(auto) getCommandPresents() noexcept{
-			return swapChainImages | std::views::transform(&SwapChainFrameData::commandPresent);
+		[[nodiscard]] decltype(auto) getFrameBuffers() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::framebuffer);
+		}
+
+		[[nodiscard]] decltype(auto) getCommandDraw() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::commandDraw);
 		}
 
 		[[nodiscard]] decltype(auto) getCommandClears() noexcept{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::commandClear);
+		}
+
+		[[nodiscard]] decltype(auto) getCommandFlushes() noexcept{
+			return swapChainImages | std::views::transform(&SwapChainFrameData::commandFlush);
 		}
 
 		[[nodiscard]] std::uint32_t size() const noexcept{ return swapChainImages.size(); }
@@ -279,16 +289,7 @@ export namespace Core::Vulkan{
 			currentInFlightFrame = (currentInFlightFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 		}
 
-
-		void setRenderPass(VkRenderPass renderPass){
-			usedRenderPass = renderPass;
-		}
-
-		void createSwapChainFramebuffers(){
-			for(const auto& [i, group] : swapChainImages | std::views::enumerate){
-				group.framebuffer = FrameBuffer{device, targetWindow->getSize(), usedRenderPass, std::array{group.imageView.get()}};
-			}
-		}
+		[[nodiscard]] bool isResized() const noexcept{ return resized; }
 
 	private:
 		void destroyOldSwapChain() const{

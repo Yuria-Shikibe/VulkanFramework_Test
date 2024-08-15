@@ -15,7 +15,7 @@ export namespace Core{
 
 		window = new Window{};
 		vulkanManager = new Vulkan::VulkanManager;
-		vulkanManager->preInitVulkan(window);
+		vulkanManager->initContext(window);
 	}
 
 	void terminate(){

@@ -1,10 +1,8 @@
 module;
 
 #include <vulkan/vulkan.h>
-#include <vulkan/utility/vk_format_utils.h>
 
 export module Core.Vulkan.Image;
-
 
 import Core.Vulkan.Memory;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
@@ -12,9 +10,6 @@ import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Dependency;
 import std;
 
-import Graphic.Pixmap;
-import OS.File;
-import Geom.Vector2D;
 
 export namespace Core::Vulkan{
 	namespace Util{
@@ -51,20 +46,30 @@ export namespace Core::Vulkan{
 			[[nodiscard]] Value find(const VkImageLayout oldLayout, const VkImageLayout newLayout) const{
 				if(const auto itr = supportTransform.find(Key{oldLayout, newLayout}); itr != supportTransform.end()){
 					return itr->second;
+				}else{
+					return {
+						VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+						VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+						VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+					};
 				}
-
-				throw std::invalid_argument("unsupported layout transition!");
 			}
 		};
 
-		const ImageFormatTransferCond imageFormatTransferCond{
-				{
+		const ImageFormatTransferCond imageFormatTransferCond{{
 					{VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL},
 					{
 						0, VK_ACCESS_TRANSFER_WRITE_BIT,
 						VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT
 					}
 				},
+				// {
+				// 	{VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL},
+				// 	{
+				// 		0, VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+				// 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+				// 	}
+				// },
 				{
 					{VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
 					{
@@ -116,7 +121,7 @@ export namespace Core::Vulkan{
 
 		void generateMipmaps(
 			VkCommandBuffer commandBuffer,
-			VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels){
+			VkImage image, VkFormat imageFormat, std::uint32_t texWidth, std::uint32_t texHeight, std::uint32_t mipLevels){
 			VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 			constexpr std::uint32_t layerCount = 1;
 
@@ -129,11 +134,10 @@ export namespace Core::Vulkan{
 			barrier.subresourceRange.layerCount = layerCount;
 			barrier.subresourceRange.levelCount = 1;
 
-			int32_t mipWidth = texWidth;
-			int32_t mipHeight = texHeight;
+			std::int32_t mipWidth = static_cast<std::int32_t>(texWidth);
+			std::int32_t mipHeight = static_cast<std::int32_t>(texHeight);
 
-
-			for(uint32_t i = 1; i < mipLevels; i++){
+			for(std::uint32_t i = 1; i < mipLevels; i++){
 				barrier.subresourceRange.baseMipLevel = i - 1;
 				barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 				barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -356,104 +360,5 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	class Texture{
-		Image image{};
-		ImageView defaultView{};
 
-		Dependency<VkPhysicalDevice> physicalDevice{};
-		Dependency<VkDevice> device{};
-
-		std::uint32_t mipLevels{};
-		std::uint32_t layers{};
-
-		Geom::USize2 size{};
-
-	public:
-		[[nodiscard]] Texture() = default;
-
-		[[nodiscard]] Texture(VkPhysicalDevice physicalDevice, VkDevice device)
-			: physicalDevice{physicalDevice},
-			  device{device}{}
-
-		[[nodiscard]] Texture(VkPhysicalDevice physicalDevice, VkDevice device, const Graphic::Pixmap& pixmap,
-		                      TransientCommand&& commandBuffer)
-			: Texture{physicalDevice, device}{
-			loadPixmap(pixmap, std::move(commandBuffer));
-			setImageView();
-		}
-
-		[[nodiscard]] Texture(VkPhysicalDevice physicalDevice, VkDevice device, const OS::File& file,
-		                      TransientCommand&& commandBuffer)
-			: Texture{physicalDevice, device}{
-			const Graphic::Pixmap pixmap{file};
-
-			loadPixmap(pixmap, std::move(commandBuffer));
-			setImageView();
-		}
-
-		//TODO 3D image support
-
-		[[nodiscard]] explicit Texture(std::vector<Graphic::Pixmap> layers) = delete;
-
-		void setImageView(const VkFormat format = VK_FORMAT_R8G8B8A8_UNORM){
-			if(!image) return;
-			defaultView = ImageView(device, image, format, mipLevels);;
-		}
-
-		void loadPixmap(const OS::File& file, TransientCommand&& commandBuffer){
-			loadPixmap(Graphic::Pixmap(file), std::move(commandBuffer));
-		}
-
-		void loadPixmap(const Graphic::Pixmap& pixmap, TransientCommand&& commandBuffer){
-			if(!device || !physicalDevice){
-				throw std::runtime_error("Device or PhysicalDevice is null");
-			}
-
-
-			layers = 1;
-			size = pixmap.size2D();
-
-			const StagingBuffer buffer(physicalDevice, device, pixmap.size());
-
-			buffer.memory.loadData(pixmap.data(), pixmap.size());
-
-			mipLevels = Util::getMipLevel(pixmap.getWidth(), pixmap.getHeight());
-
-			auto relay = std::move(commandBuffer);
-
-			image = Image(
-				physicalDevice, device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-				pixmap.getWidth(), pixmap.getHeight(), mipLevels,
-				VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
-				VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-			);
-
-			image.transitionImageLayout(
-				relay,
-				VK_FORMAT_R8G8B8A8_UNORM,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				mipLevels);
-
-			image.loadBuffer(relay, buffer, {pixmap.getWidth(), pixmap.getHeight(), 1});
-
-			Util::generateMipmaps(
-				relay,
-				image,
-				VK_FORMAT_R8G8B8A8_UNORM, pixmap.getWidth(), pixmap.getHeight(), mipLevels);
-		}
-
-		[[nodiscard]] const Image& getImage() const noexcept{ return image; }
-
-		[[nodiscard]] const ImageView& getView() const noexcept{ return defaultView; }
-
-		[[nodiscard]] VkDevice getDevice() const noexcept{ return device; }
-
-		[[nodiscard]] VkPhysicalDevice getPhysicalDevice() const noexcept{ return physicalDevice; }
-
-		[[nodiscard]] std::uint32_t getMipLevels() const noexcept{ return mipLevels; }
-
-		[[nodiscard]] std::uint32_t getLayers() const noexcept{ return layers; }
-
-		[[nodiscard]] Geom::USize2 getSize() const noexcept{ return size; }
-	};
 }

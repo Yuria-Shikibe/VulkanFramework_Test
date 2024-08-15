@@ -22,7 +22,7 @@ export namespace Core::Vulkan{
 			MutexWrapper(MutexWrapper&&) noexcept {}
 			MutexWrapper& operator=(const MutexWrapper&){return *this;}
 			MutexWrapper& operator=(MutexWrapper&&) noexcept{return *this;}
-		} mutex{};
+		} mutex{}; //TODO
 
 	public:
 		ShaderChain shaderChain{};
@@ -73,6 +73,17 @@ export namespace Core::Vulkan{
 
 		PipelineTemplate& setStaticViewport(const VkViewport& viewport){
 			return setStaticViewport(std::array{viewport});
+		}
+
+		PipelineTemplate& setStaticViewport(const float w, const float h){
+			return setStaticViewport(std::array{VkViewport{
+				.x = 0,
+				.y = 0,
+				.width = w,
+				.height = h,
+				.minDepth = 0.f,
+				.maxDepth = 1.f
+			}});
 		}
 
 		PipelineTemplate& setStaticScissors(const RangeOf<VkRect2D> auto& viewports){

@@ -37,7 +37,13 @@ export namespace Core::Vulkan{
 		}
 
 		void push(const std::uint32_t index, const VkDescriptorType type, const VkShaderStageFlags stageFlags, const std::uint32_t count = 1){
-			push({.binding = index, .descriptorType = type, .descriptorCount = count, .stageFlags = stageFlags, .pImmutableSamplers = nullptr});
+			push({
+				.binding = index,
+				.descriptorType = type,
+				.descriptorCount = count,
+				.stageFlags = stageFlags,
+				.pImmutableSamplers = nullptr
+			});
 		}
 
 		void push_seq(const VkDescriptorType type, const VkShaderStageFlags stageFlags, const std::uint32_t count = 1){
@@ -54,6 +60,10 @@ export namespace Core::Vulkan{
 
 	public:
 		DescriptorSetLayoutBuilder builder{};
+
+		VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsCreateInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO};
+		std::vector<VkDescriptorBindingFlags> bindingFlags{};
+		VkDescriptorSetLayoutCreateFlags flags{};
 
 		[[nodiscard]] DescriptorSetLayout() = default;
 
@@ -74,6 +84,7 @@ export namespace Core::Vulkan{
 			Wrapper::operator=(std::move(other));
 			builder = std::move(other.builder);
 			device = std::move(other.device);
+			flags = other.flags;
 			return *this;
 		}
 
@@ -83,14 +94,22 @@ export namespace Core::Vulkan{
 			create();
 		}
 
+		void pushBindingFlag(VkDescriptorBindingFlagBits flags){
+			bindingFlags.push_back(flags);
+		}
+
 	private:
 		void create(){
 			const auto bindings = builder.exportBindings();
 
+			bindingFlags.resize(bindings.size());
+			bindingFlagsCreateInfo.bindingCount = bindingFlags.size();
+			bindingFlagsCreateInfo.pBindingFlags = bindingFlags.data();
+
 			const VkDescriptorSetLayoutCreateInfo layoutInfo{
 					.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-					.pNext = nullptr,
-					.flags = 0,
+					.pNext = &bindingFlagsCreateInfo,
+					.flags = flags,
 					.bindingCount = static_cast<std::uint32_t>(bindings.size()),
 					.pBindings = bindings.data()
 				};
@@ -104,6 +123,7 @@ export namespace Core::Vulkan{
 	class DescriptorSetPool : public Wrapper<VkDescriptorPool>{
 	public:
 		Dependency<VkDevice> device{};
+		Dependency<VkDescriptorSetLayout> layout{};
 
 		[[nodiscard]] DescriptorSetPool() = default;
 
@@ -122,11 +142,12 @@ export namespace Core::Vulkan{
 			this->~DescriptorSetPool();
 			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
+			layout = std::move(other.layout);
 			return *this;
 		}
 
-		DescriptorSetPool(VkDevice device, const DescriptorSetLayoutBuilder& layout, std::uint32_t size) : device{device}{
-			auto bindings = layout.exportBindings();
+		DescriptorSetPool(VkDevice device, const DescriptorSetLayout& layout, std::uint32_t size) : device{device}, layout{layout}{
+			auto bindings = layout.builder.exportBindings();
 
 			std::vector<VkDescriptorPoolSize> poolSizes(bindings.size());
 
@@ -134,17 +155,27 @@ export namespace Core::Vulkan{
 				poolSizes[i] = {.type = binding.descriptorType, .descriptorCount = size};
 			}
 
-			VkDescriptorPoolCreateInfo poolInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
-			poolInfo.poolSizeCount = poolSizes.size();
-			poolInfo.pPoolSizes = poolSizes.data();
-			poolInfo.maxSets = size;
+			VkDescriptorPoolCreateFlags flags{};
+
+			if(layout.flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT){
+				flags |= VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+			}
+
+			VkDescriptorPoolCreateInfo poolInfo{
+					.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+					.pNext = nullptr,
+					.flags = flags,
+					.maxSets = size,
+					.poolSizeCount = static_cast<std::uint32_t>(poolSizes.size()),
+					.pPoolSizes = poolSizes.data()
+			};
 
 			if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &handle) != VK_SUCCESS) {
 				throw std::runtime_error("failed to create descriptor pool!");
 			}
 		}
 
-		[[nodiscard]] DescriptorSet obtain(const DescriptorSetLayout& descriptorSetLayout) const{
+		[[nodiscard]] DescriptorSet obtain() const{
 			DescriptorSet descriptors{};
 
 			VkDescriptorSetAllocateInfo allocInfo{
@@ -152,7 +183,7 @@ export namespace Core::Vulkan{
 					.pNext = nullptr,
 					.descriptorPool = handle,
 					.descriptorSetCount = 1,
-					.pSetLayouts = descriptorSetLayout.asData()
+					.pSetLayouts = layout.operator->()
 				};
 
 			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.operator->()) != VK_SUCCESS) {
@@ -162,9 +193,9 @@ export namespace Core::Vulkan{
 			return descriptors;
 		}
 
-		[[nodiscard]] std::vector<DescriptorSet> obtain(const std::size_t size, const DescriptorSetLayout& descriptorSetLayout) const{
+		[[nodiscard]] std::vector<DescriptorSet> obtain(const std::size_t size) const{
 			std::vector<DescriptorSet> descriptors(size);
-			std::vector layouts(size, descriptorSetLayout.get());
+			std::vector layouts(size, layout.handler);
 
 			VkDescriptorSetAllocateInfo allocInfo{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -218,13 +249,23 @@ export namespace Core::Vulkan{
 			current.pBufferInfo = &uniformBufferInfo;
 		}
 
-		void push(VkDescriptorImageInfo& imageInfo){
+		void pushSampledImage(VkDescriptorImageInfo& imageInfo){
 			const auto index = descriptorWrites.size();
 
 			auto& current = descriptorWrites.emplace_back(DefaultSet);
 			current.dstSet = descriptorSets;
 			current.dstBinding = index;
 			current.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+			current.pImageInfo = &imageInfo;
+		}
+
+		void pushAttachment(VkDescriptorImageInfo& imageInfo){
+			const auto index = descriptorWrites.size();
+
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 			current.pImageInfo = &imageInfo;
 		}
 

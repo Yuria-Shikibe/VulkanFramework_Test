@@ -39,24 +39,16 @@ export namespace Graphic{
 		Core::Vulkan::CommandPool transientCommandPool{};
 		Core::Vulkan::CommandPool commandPool{};
 
-		Core::Vulkan::DescriptorSetLayout descriptorSetLayout{};
-		Core::Vulkan::DescriptorSetPool descriptorPool{}; //TODO
-
 		VkSampler sampler{};
-
 
 		//Buffers to be bound
 		Core::Vulkan::IndexBuffer buffer_index{};
 		Core::Vulkan::PersistentTransferDoubleBuffer buffer_indirect{};
 		Core::Vulkan::ExclusiveBuffer buffer_vertex{};
+
 		Core::Vulkan::CommandBuffer command_flush{};
-
-
 		Core::Vulkan::CommandBuffer command_empty{};
 		Core::Vulkan::CommandBuffer command_rebindDescriptorSet{};
-
-		Core::Vulkan::UniformBuffer uniformBuffer{}; //TODO
-		Core::Vulkan::DescriptorSet descriptorSet{}; //TODO
 
 		ImageSet usedImages_old{};
 		ImageSet usedImages{};
@@ -104,7 +96,7 @@ export namespace Graphic{
 
 			void updateDescriptorImages(Batch& batch){
 				if(usedImages != batch.usedImages_old){
-					batch.updateDescriptorSet(usedImages);
+					batch.updateDescriptorSets(usedImages);
 
 					batch.usedImages_old = usedImages;
 				}
@@ -132,7 +124,7 @@ export namespace Graphic{
 
 		//TODO better callback
 		std::function<void(Batch&, bool)> externalDrawCall{};
-		std::function<void()> commandRecordCallback{};
+		std::function<void(std::span<VkDescriptorImageInfo>)> descriptorChangedCallback{};
 
 		[[nodiscard]] ImageIndex getMappedImageIndex(VkImageView imageView){
 
@@ -234,42 +226,13 @@ export namespace Graphic{
 
 				frame.vertData = frame.stagingBuffer.memory.map_noInvalidation();
 			}
-
-			descriptorSetLayout = DescriptorSetLayout{context->device, [](DescriptorSetLayout& layout){
-				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MaximumAllowedSamplersSize);
-			}};
-
-			descriptorPool = DescriptorSetPool{context->device, descriptorSetLayout.builder, 1};
-			descriptorSet = descriptorPool.obtain(descriptorSetLayout);
 		}
 
-		void updateDescriptorBindBuffer() const{
-			commandRecordCallback();
-		}
-
-		template <typename T>
-		void initUniformBuffer(){
-			uniformBuffer = Core::Vulkan::UniformBuffer{context->physicalDevice, context->device, sizeof(T)};
-		}
-
-		template <typename T>
-		void updateUniformBuffer(const T& data){
-			uniformBuffer.memory.loadData(data);
-		}
-
-
-		void updateDescriptorSetsPure(const ImageSet& imageSet = {}){
-			auto bufferInfo = uniformBuffer.getDescriptorInfo();
-
+		void updateDescriptorSets(const ImageSet& imageSet = {}){
 			auto imageInfo = Core::Vulkan::Util::getDescriptorInfoRange_ShaderRead(sampler,
 				imageSet | std::views::take_while([](VkImageView imageView){ return imageView != nullptr; }));
 
-			Core::Vulkan::DescriptorSetUpdator updator{context->device, descriptorSet};
-
-			updator.push(bufferInfo);
-			if(!imageInfo.empty())updator.push(imageInfo);
-			updator.update();
+			descriptorChangedCallback(imageInfo);
 		}
 
 		class [[jetbrains::guard]] Acquirer{
@@ -333,11 +296,6 @@ export namespace Graphic{
 		}
 
 	private:
-		void updateDescriptorSet(const ImageSet& imageSet){
-			updateDescriptorSetsPure(imageSet);
-			updateDescriptorBindBuffer();
-		}
-
 		void submitCommand(const bool isLast){
 			// fence.reset();
 
@@ -346,7 +304,9 @@ export namespace Graphic{
 					semaphore_drawDone,
 					semaphore_copyDone,
 					fence.get(),
-					VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+					VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
+					VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
+					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
 				);
 
 			externalDrawCall(*this, isLast);
@@ -436,6 +396,31 @@ export namespace Graphic{
 				if(count){
 					static_cast<Core::Vulkan::StagingBuffer&>(frameData->stagingBuffer)
 						.copyBuffer(command_flush, buffer_vertex.get(), count * UnitOffset);
+
+
+					VkBufferMemoryBarrier bufferMemoryBarrier{
+						.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+						.pNext = nullptr,
+						.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+						.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
+						.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+						.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+						.buffer = buffer_vertex,
+						.offset = 0,
+						.size = static_cast<VkDeviceSize>(count * UnitOffset)
+					};
+
+					vkCmdPipelineBarrier(
+						command_flush,
+						VK_PIPELINE_STAGE_TRANSFER_BIT,                                           // srcStageMask
+						VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStageMask
+						0,
+						0, nullptr,
+						1,
+						&bufferMemoryBarrier, // pBufferMemoryBarriers
+						0, nullptr
+					);
+
 				}
 			}
 
@@ -449,6 +434,29 @@ export namespace Graphic{
 
 			buffer_indirect.flush(sizeof(VkDrawIndexedIndirectCommand));
 			buffer_indirect.cmdFlushToDevice(command_flush, sizeof(VkDrawIndexedIndirectCommand));
+
+			VkBufferMemoryBarrier indirectBufferMemoryBarrier{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
+				.pNext = nullptr,
+				.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+				.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
+				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				.buffer = buffer_indirect.getTargetBuffer(),
+				.offset = 0,
+				.size = sizeof(VkDrawIndexedIndirectCommand)
+			};
+
+			vkCmdPipelineBarrier(
+				command_flush,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,                                           // srcStageMask
+				VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, // dstStageMask
+				0,
+				0, nullptr,
+				1,
+				&indirectBufferMemoryBarrier, // pBufferMemoryBarriers
+				0, nullptr
+			);
 
 			command_flush.end();
 		}

@@ -14,12 +14,16 @@ export namespace Assets{
 		OS::File builtinShaderDir{};
 		Core::Vulkan::ShaderModule batchVertShader{};
 		Core::Vulkan::ShaderModule batchFragShader{};
+		Core::Vulkan::ShaderModule blitSingleFrag{};
+		Core::Vulkan::ShaderModule blitSingleVert{};
 
 		void load(VkDevice device);
 
 		void dispose(){
 			batchVertShader = {};
 			batchFragShader = {};
+			blitSingleFrag = {};
+			blitSingleVert = {};
 		}
 	}
 

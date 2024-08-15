@@ -20,6 +20,15 @@ export namespace Core::Vulkan{
 			.samplerAnisotropy = true
 		};
 
+		static constexpr VkPhysicalDeviceDescriptorIndexingFeatures RequiredDescriptorIndexingFeatures{[](){
+			VkPhysicalDeviceDescriptorIndexingFeatures features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};
+
+			features.descriptorBindingSampledImageUpdateAfterBind = true;
+			features.descriptorBindingUpdateUnusedWhilePending = true;
+
+			return features;
+		}()};
+
 		[[nodiscard]] LogicalDevice() = default;
 
 		~LogicalDevice(){
@@ -54,6 +63,10 @@ export namespace Core::Vulkan{
 			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
 			const std::unordered_set uniqueQueueFamilies{indices.graphicsFamily, indices.presentFamily, indices.computeFamily};
 
+			VkPhysicalDeviceFeatures2 deviceFeatures2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+			deviceFeatures2.pNext = const_cast<VkPhysicalDeviceDescriptorIndexingFeatures*>(&RequiredDescriptorIndexingFeatures);
+			deviceFeatures2.features = RequiredFeatures;
+
 			constexpr float queuePriority = 1.0f;
 			for(const std::uint32_t queueFamily : uniqueQueueFamilies){
 				VkDeviceQueueCreateInfo queueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
@@ -64,7 +77,7 @@ export namespace Core::Vulkan{
 			}
 
 			VkDeviceCreateInfo createInfo{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-			createInfo.pEnabledFeatures = &RequiredFeatures;
+			createInfo.pNext = &deviceFeatures2;
 
 			createInfo.queueCreateInfoCount = static_cast<std::uint32_t>(queueCreateInfos.size());
 			createInfo.pQueueCreateInfos = queueCreateInfos.data();

@@ -27,6 +27,15 @@ export namespace Core::Vulkan{
 			std::optional<VkAttachmentReference> depthStencil{};
 
 			std::optional<std::vector<std::uint32_t>> reserved{};
+
+			std::uint32_t getMaxIndex(){
+				const std::uint32_t max1 = input.has_value() ? std::ranges::max(input.value(), std::less<std::uint32_t>{}, &VkAttachmentReference::attachment).attachment : 0;
+				const std::uint32_t max2 = resolve.has_value() ? resolve->attachment : 0;
+				const std::uint32_t max3 = depthStencil.has_value() ? depthStencil->attachment : 0;
+				const std::uint32_t max4 = std::ranges::max(color, std::less<std::uint32_t>{}, &VkAttachmentReference::attachment).attachment;
+
+				return std::max({max1, max2, max3, max4});
+			}
 		};
 
 		struct SubpassData{
@@ -36,8 +45,6 @@ export namespace Core::Vulkan{
 			std::vector<VkSubpassDependency> dependencies{};
 
 			AttachmentReference attachment{};
-
-
 
 			void setProperties(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                     VkSubpassDescriptionFlags flags = 0){
@@ -170,7 +177,6 @@ export namespace Core::Vulkan{
 		void pushSubpass(InitFunc&& initFunc){
 			auto index = subpasses.size();
 			SubpassData& data = subpasses.emplace_back(index);
-			data.index = index;
 
 			initFunc(data);
 		}

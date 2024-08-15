@@ -8,6 +8,14 @@ void Assets::Shader::load(VkDevice device){
 	batchFragShader = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(test.frag.spv)"
 	};
+
+	blitSingleVert = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(blit.vert.spv)"
+	};
+
+	blitSingleFrag = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(blit.frag.spv)"
+	};
 }
 
 void Assets::Sampler::load(VkDevice device){

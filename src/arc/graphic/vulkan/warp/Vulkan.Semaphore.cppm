@@ -27,19 +27,10 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void reset() const{
-
-		}
-
-		void wait(const std::uint32_t timeout = std::numeric_limits<std::uint64_t>::max()) const{
-
-		}
 
 		Semaphore(const Semaphore& other) = delete;
 
-		Semaphore(Semaphore&& other) noexcept
-			: Wrapper{other.handle},
-			  device{std::move(other.device)}{}
+		Semaphore(Semaphore&& other) noexcept = default;
 
 		Semaphore& operator=(const Semaphore& other) = delete;
 
