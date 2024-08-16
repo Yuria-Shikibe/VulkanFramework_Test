@@ -22,6 +22,10 @@ layout(set = 0, binding = 0) uniform UBO {
     float v;
 } ubo;
 
+//layout(push_constant) uniform pushConstants {
+//    vec2 mul;
+//};
+
 void main() {
     gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z, 1.0);
     fragColor = inColor + ubo.v;

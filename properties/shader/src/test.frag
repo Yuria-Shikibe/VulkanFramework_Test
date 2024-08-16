@@ -9,6 +9,10 @@ layout(location = 2) flat in uint instanceID;
 
 layout(binding = 1) uniform sampler2D texSampler[8];
 
+//layout(push_constant) uniform pushConstants {
+//    layout(offset = 16)
+//    vec4 mul;
+//};
 //layout (depth_unchanged) out float gl_FragDepth;
 
 void main() {

@@ -104,6 +104,14 @@ namespace Core::Vulkan{
 			return info;
 		}()};
 
+		constexpr VkImageViewCreateInfo ImageViewCreateInfo_DepthStencil{[]() constexpr {
+			auto info = ImageViewCreateInfo<VK_IMAGE_ASPECT_STENCIL_BIT>;
+
+			info.format = VK_FORMAT_D24_UNORM_S8_UINT;
+
+			return info;
+		}()};
+
 		constexpr VkPipelineInputAssemblyStateCreateInfo InputAssembly{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
 				.pNext = nullptr,
@@ -165,19 +173,7 @@ namespace Core::Vulkan{
 				.alphaToOneEnable = false
 			};
 
-		// template <const VkPipelineColorBlendAttachmentState* ColorBlendAttachments>
-		// constexpr VkPipelineColorBlendStateCreateInfo ColorBlending{
-		// 		.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-		// 		.pNext = nullptr,
-		// 		.flags = 0,
-		// 		.logicOpEnable = false,
-		// 		.logicOp = VK_LOGIC_OP_COPY,
-		// 		.attachmentCount = 1,
-		// 		.pAttachments = ColorBlendAttachments,
-		// 		.blendConstants = {}
-		// 	};
-
-		template <std::ranges::sized_range auto R>
+		template <ContigiousRange<VkPipelineColorBlendAttachmentState> auto R>
 		constexpr VkPipelineColorBlendStateCreateInfo ColorBlending{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
 				.pNext = nullptr,
@@ -186,7 +182,7 @@ namespace Core::Vulkan{
 				.logicOp = VK_LOGIC_OP_COPY,
 				.attachmentCount = static_cast<std::uint32_t>(std::ranges::size(R)),
 				.pAttachments = std::ranges::data(R),
-				.blendConstants = {}
+				.blendConstants = {.0f, .0f, .0f, .0f}
 			};
 	}
 

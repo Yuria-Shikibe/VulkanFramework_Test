@@ -10,10 +10,10 @@ import std;
 
 export namespace Core::Vulkan{
 	struct ConstantLayout{
-		std::vector<VkPushConstantRange> pushConstantRanges{};
+		std::vector<VkPushConstantRange> constants{};
 
 		void push(const VkPushConstantRange& constantRange){
-			pushConstantRanges.push_back(constantRange);
+			constants.push_back(constantRange);
 		}
 	};
 

@@ -17,6 +17,7 @@ import Core.Vulkan.DescriptorSet;
 import Core.Vulkan.Semaphore;
 import Core.Vulkan.Context;
 import Core.Vulkan.Fence;
+import Core.Vulkan.BatchData;
 
 import std;
 
@@ -174,6 +175,15 @@ export namespace Graphic{
 
 		FrameData& currentFrame(){
 			return frames[currentIndex];
+		}
+
+		[[nodiscard]] Core::Vulkan::BatchData getBatchData() const noexcept{
+			return {
+				.vertices = buffer_vertex,
+				.indices = buffer_index,
+				.indexType = buffer_index.indexType,
+				.indirect = buffer_indirect.getTargetBuffer()
+			};
 		}
 
 		void init(Core::Vulkan::Context* context, VkSampler sampler){

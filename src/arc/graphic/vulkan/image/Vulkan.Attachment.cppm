@@ -13,73 +13,50 @@ import Geom.Vector2D;
 import std;
 
 export namespace Core::Vulkan{
-	struct Attachment : CombinedImage{
-		using CombinedImage::CombinedImage;
 
+	struct Attachment : CombinedImage{
 		VkFormat format{};
 		VkImageUsageFlags usages{};
+		VkImageLayout bestLayout{};
+
+		//TODO miplevels support??
 
 		void resize(const Geom::USize2 size, VkCommandBuffer commandBuffer){
-			create(size, commandBuffer, usages, format);
-		}
+			if(size == this->size) return;
 
-		VkDescriptorImageInfo getDescriptorInfo(VkSampler sampler = nullptr, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const{
-			return {
-				.sampler = sampler,
-				.imageView = defaultView,
-				.imageLayout = layout
-			};
-		}
-
-		void create(
-			const Geom::USize2 size,
-			VkCommandBuffer commandBuffer,
-			VkImageUsageFlags usages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-			VkFormat format = VK_FORMAT_R8G8B8A8_UNORM
-			){
-
-			if(!device || !physicalDevice){
-				throw std::runtime_error("Device or PhysicalDevice is null");
-			}
-
-			//TODO 3d attachment support
-			layers = 1;
 			this->size = size;
-			this->usages = usages;
-			this->format = format;
 
-			image = Image{physicalDevice, device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, {
-				.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-				.imageType = VK_IMAGE_TYPE_2D,
-				.format = format,
-				.extent = { size.x, size.y, 1 },
-				.mipLevels = 1,
-				.arrayLayers = 1, //TODO
-				.samples = VK_SAMPLE_COUNT_1_BIT,
-				.tiling = VK_IMAGE_TILING_OPTIMAL,
-				.usage = usages,
-			}};
+			image = Image{
+				physicalDevice, device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, {
+					.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+					.imageType = VK_IMAGE_TYPE_2D,
+					.format = format,
+					.extent = {size.x, size.y, 1},
+					.mipLevels = 1,
+					.arrayLayers = 1, //TODO
+					.samples = VK_SAMPLE_COUNT_1_BIT,
+					.tiling = VK_IMAGE_TILING_OPTIMAL,
+					.usage = usages,
+				}
+			};
 
 			image.transitionImageLayout(
 				commandBuffer,
 				format,
-				VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, 1);
+				VK_IMAGE_LAYOUT_UNDEFINED, bestLayout, 1);
 
 			defaultView = ImageView{device, image, format};
 		}
 
-		Attachment(const Attachment& other) = delete;
-
-		Attachment(Attachment&& other) noexcept = default;
-
-		Attachment& operator=(const Attachment& other) = delete;
-
-		Attachment& operator=(Attachment&& other) noexcept = default;
-
-		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkImageLayout newLayout, VkAccessFlags srcAccessFlags = 0) {
+		void cmdClear(VkCommandBuffer commandBuffer,
+			VkClearColorValue clearColor,
+			VkAccessFlags srcAccessFlags,
+			VkImageAspectFlags aspect
+		) const{
 			VkImageSubresourceRange imageSubresourceRange{
-				VK_IMAGE_ASPECT_COLOR_BIT,
-				0, 1, 0, layers };
+				aspect,
+				0, 1, 0, layers
+			};
 
 			VkImageMemoryBarrier imageMemoryBarrier{
 				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -102,10 +79,91 @@ export namespace Core::Vulkan{
 			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
 			imageMemoryBarrier.dstAccessMask = 0;
 			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrier.newLayout = newLayout;
+			imageMemoryBarrier.newLayout = bestLayout;
 
 			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
 				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+		}
+
+
+		using CombinedImage::CombinedImage;
+
+		std::uint32_t index{};
+
+		void create(
+					const Geom::USize2 size,
+					VkCommandBuffer commandBuffer,
+					VkImageUsageFlags usages,
+					VkFormat format,
+					VkImageLayout imageLayout
+				){
+
+			if(!device || !physicalDevice){
+				throw std::runtime_error("Device or PhysicalDevice is null");
+			}
+
+			layers = 1;
+			this->usages = usages;
+			this->format = format;
+			this->bestLayout = imageLayout;
+
+			resize(size, commandBuffer);
+		}
+
+		VkDescriptorImageInfo getDescriptorInfo(VkSampler sampler = nullptr, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const{
+			return {
+				.sampler = sampler,
+				.imageView = defaultView,
+				.imageLayout = layout
+			};
+		}
+	};
+
+	/**
+	 * @brief Slice Usage
+	 */
+	struct ColorAttachment : Attachment{
+		using Attachment::Attachment;
+
+		void create(
+			const Geom::USize2 size,
+			VkCommandBuffer commandBuffer,
+			VkImageUsageFlags usages = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			VkFormat format = VK_FORMAT_R8G8B8A8_UNORM
+		){
+			Attachment::create(size, commandBuffer, usages, format, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		}
+
+		void resize(const Geom::USize2 size, VkCommandBuffer commandBuffer){
+			Attachment::resize(size, commandBuffer);
+		}
+
+		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) {
+			Attachment::cmdClear(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
+		}
+	};
+
+	/**
+	 * @brief Slice Usage
+	 */
+	struct DepthStencilAttachment : Attachment{
+		using Attachment::Attachment;
+
+		void create(
+			const Geom::USize2 size,
+			VkCommandBuffer commandBuffer,
+			VkImageUsageFlags usages = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+			VkFormat format = VK_FORMAT_D24_UNORM_S8_UINT
+		){
+			Attachment::create(size, commandBuffer, usages, format, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+		}
+
+		void resize(const Geom::USize2 size, VkCommandBuffer commandBuffer){
+			Attachment::resize(size, commandBuffer);
+		}
+
+		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) {
+			Attachment::cmdClear(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	};
 }

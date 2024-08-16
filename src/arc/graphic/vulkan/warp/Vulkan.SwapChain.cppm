@@ -16,7 +16,7 @@ import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
 
 export namespace Core::Vulkan{
-	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 1;
+	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
 
 	class SwapChain{
 	public:
@@ -41,8 +41,6 @@ export namespace Core::Vulkan{
 			VkImage image{};
 			ImageView imageView{};
 			FramebufferLocal framebuffer{};
-			CommandBuffer commandDraw{};
-			CommandBuffer commandClear{};
 			CommandBuffer commandFlush{};
 		};
 
@@ -133,6 +131,9 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] Window* getTargetWindow() const{ return targetWindow; }
 
+		[[nodiscard]] VkExtent2D getExtent() const {return std::bit_cast<VkExtent2D>(targetWindow->getSize());}
+		[[nodiscard]] auto getSize() const {return targetWindow->getSize();}
+
 		[[nodiscard]] VkInstance getInstance() const{ return instance; }
 
 		[[nodiscard]] VkSurfaceKHR getSurface() const{ return surface; }
@@ -212,12 +213,6 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		[[nodiscard]] VkExtent2D getExtent() const noexcept{
-			if(!targetWindow)return {};
-
-			return std::bit_cast<VkExtent2D>(targetWindow->getSize().as<std::uint32_t>());
-		}
-
 		[[nodiscard]] VkDevice getDevice() const noexcept{ return device; }
 
 		[[nodiscard]] VkFormat getFormat() const noexcept{ return swapChainImageFormat; }
@@ -242,14 +237,6 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] decltype(auto) getFrameBuffers() noexcept{
 			return swapChainImages | std::views::transform(&SwapChainFrameData::framebuffer);
-		}
-
-		[[nodiscard]] decltype(auto) getCommandDraw() noexcept{
-			return swapChainImages | std::views::transform(&SwapChainFrameData::commandDraw);
-		}
-
-		[[nodiscard]] decltype(auto) getCommandClears() noexcept{
-			return swapChainImages | std::views::transform(&SwapChainFrameData::commandClear);
 		}
 
 		[[nodiscard]] decltype(auto) getCommandFlushes() noexcept{

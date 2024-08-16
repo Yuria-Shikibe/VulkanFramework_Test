@@ -31,13 +31,13 @@ namespace Core::Vulkan{
 		return extensions;
 	}
 
-	VkApplicationInfo DefaultAppInfo = {
+	constexpr VkApplicationInfo DefaultAppInfo = {
 		.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
 		.pApplicationName = "Hello Triangle",
 		.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
 		.pEngineName = "No Engine",
 		.engineVersion = VK_MAKE_VERSION(1, 0, 0),
-		.apiVersion = VK_MAKE_API_VERSION(0, 1, 2, 0),
+		.apiVersion = VK_API_VERSION_1_3,
 	};
 
 
@@ -87,7 +87,7 @@ namespace Core::Vulkan{
 				throw std::runtime_error("failed to create vulkan instance!");
 			}
 
-			std::println("Init VK Instance Succeed: {:#X}", reinterpret_cast<std::uintptr_t>(instance));
+			std::println("[Vulkan] Instance Create Succeed: {:#X}", reinterpret_cast<std::uintptr_t>(instance));
 		}
 
 		void free(){ //TODO is this necessary?

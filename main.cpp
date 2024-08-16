@@ -49,21 +49,13 @@ int main(){
 	}
 
 	{
-		Graphic::Batch<Vulkan::Vertex> batch{};
+		Graphic::Batch<Vulkan::BatchVertex> batch{};
 
 		batch.init(&vulkanManager->context, Assets::Sampler::textureDefaultSampler.get());
 
-		{
-			auto& info = vulkanManager->batchVertexData;
-
-			info.indexBuffer = batch.buffer_index;
-			info.indexType = batch.buffer_index.indexType;
-			info.vertexBuffer = batch.buffer_vertex;
-			info.indirectBuffer = batch.buffer_indirect.getTargetBuffer();
-		}
+		vulkanManager->batchVertexData = batch.getBatchData();
 
 		batch.externalDrawCall = [](const decltype(batch)& b, const bool isLast){
-			// b.fence.wait();
 			vulkanManager->drawFrame(isLast, b.fence);
 		};
 
@@ -74,13 +66,9 @@ int main(){
 			}else{
 				vulkanManager->createDrawCommands();
 			}
-
 		};
 
 		batch.updateDescriptorSets();
-
-		// vulkanManager->createDrawCommands();
-
 
 		while(window && !window->shouldClose()) {
 			window->pollEvents();
@@ -97,10 +85,10 @@ int main(){
 				for(const auto& [i, texture] : textures | std::views::enumerate){
 					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
 					new(dataPtr) std::array{
-						Vulkan::Vertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::Vertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::Vertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
-						Vulkan::Vertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
 					};
 				}
 			}
@@ -109,7 +97,7 @@ int main(){
 
 			batch.consumeAll();
 
-			vulkanManager->drawEnd();
+			vulkanManager->blitToScreen();
 		}
 
 		vkDeviceWaitIdle(vulkanManager->context.device);

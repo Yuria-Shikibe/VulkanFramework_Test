@@ -16,7 +16,7 @@ import ext.MetaProgramming;
 
 export namespace Core::Vulkan{
 
-	struct Vertex {
+	struct BatchVertex {
 		Geom::Vec2 position{};
 		float depth{};
 		std::uint32_t textureID{};
@@ -28,12 +28,12 @@ export namespace Core::Vulkan{
 		std::int8_t offset{};
 	};
 
-	using VertBindInfo = Util::VertexBindInfo<Vertex, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX,
-		std::pair{&Vertex::position, VK_FORMAT_R32G32B32_SFLOAT},
-		std::pair{&Vertex::textureID, VK_FORMAT_R32_UINT},
+	using VertBindInfo = Util::VertexBindInfo<BatchVertex, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX,
+		std::pair{&BatchVertex::position, VK_FORMAT_R32G32B32_SFLOAT},
+		std::pair{&BatchVertex::textureID, VK_FORMAT_R32_UINT},
 		// std::pair{&Vertex::depth, VK_FORMAT_R32_SFLOAT},
-		std::pair{&Vertex::texCoord, VK_FORMAT_R32G32_SFLOAT},
-		std::pair{&Vertex::color, VK_FORMAT_R32G32B32A32_SFLOAT}
+		std::pair{&BatchVertex::texCoord, VK_FORMAT_R32G32_SFLOAT},
+		std::pair{&BatchVertex::color, VK_FORMAT_R32G32B32A32_SFLOAT}
 	>;
 
 	using InstanceBindInfo = Util::VertexBindInfo<InstanceDesignator, 0, VertBindInfo::size, VK_VERTEX_INPUT_RATE_INSTANCE,

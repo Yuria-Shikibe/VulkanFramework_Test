@@ -26,8 +26,8 @@ namespace Core::Vulkan::Util{
 
 	template <typename T>
 	struct InvokeResultPair{
-		std::vector<T> Result{};
-		VkResult Code{VK_SUCCESS};
+		std::vector<T> vec{};
+		VkResult rst{VK_SUCCESS};
 	};
 
 	template <typename... Ts>
@@ -47,9 +47,9 @@ namespace Core::Vulkan::Util{
 			InvokeResultPair<std::remove_pointer_t<get_last_t<Prms...>>> result{};
 
 			::uint32_t nums;
-			if((result.Code = fn(args..., &nums, nullptr)) != VK_SUCCESS) return result;
-			result.Result.resize(nums);
-			result.Code = fn(args..., &nums, result.Result.data());
+			if((result.rst = fn(args..., &nums, nullptr)) != VK_SUCCESS) return result;
+			result.vec.resize(nums);
+			result.rst = fn(args..., &nums, result.vec.data());
 			return result;
 		} else{
 			::std::vector<std::remove_pointer_t<get_last_t<Prms...>>> result{};
@@ -62,6 +62,26 @@ namespace Core::Vulkan::Util{
 
 			return result;
 		}
+	}
+
+
+	//WARNING: Use this method to invoke create pipeline, not the generic template.
+	export
+	auto Invoke(decltype(&::vkCreateGraphicsPipelines) fnCreate,
+				::VkDevice device,
+				::VkPipelineCache pipelineCache,
+				::std::span<::VkGraphicsPipelineCreateInfo> createInfos,
+				const ::VkAllocationCallbacks* pAllocator){
+		struct result_type{
+			::std::vector<::VkPipeline> Result;
+			::VkResult Code;
+		};
+
+		::std::vector<::VkPipeline> pipes{createInfos.size()};
+		auto code = fnCreate(device, pipelineCache, static_cast<::uint32_t>(createInfos.size()), createInfos.data(),
+							 pAllocator, pipes.data());
+
+		return result_type{::std::move(pipes), code};
 	}
 
 	/*
@@ -98,25 +118,6 @@ namespace Core::Vulkan::Util{
 		::std::vector<::VkCommandBuffer> buffers{info->commandBufferCount};
 		auto code = fnAllocate(device, info, buffers.data());
 		return result_type{::std::move(buffers), code};
-	}
-
-	//WARNING: Use this method to invoke create pipeline, not the generic template.
-	export
-	auto Invoke(decltype(&::vkCreateGraphicsPipelines) fnCreate,
-	            ::VkDevice device,
-	            ::VkPipelineCache pipelineCache,
-	            ::std::span<::VkGraphicsPipelineCreateInfo> createInfos,
-	            const ::VkAllocationCallbacks* pAllocator){
-		struct result_type{
-			::std::vector<::VkPipeline> Result;
-			::VkResult Code;
-		};
-
-		::std::vector<::VkPipeline> pipes{createInfos.size()};
-		auto code = fnCreate(device, pipelineCache, static_cast<::uint32_t>(createInfos.size()), createInfos.data(),
-		                     pAllocator, pipes.data());
-
-		return result_type{::std::move(pipes), code};
 	}
 
 	export

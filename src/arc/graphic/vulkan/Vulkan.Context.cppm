@@ -34,7 +34,7 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void selectPhysicalDevice(VkSurfaceKHR surface){
+		void createDevice(VkSurfaceKHR surface){
 			auto [devices, rst] = Util::enumerate(vkEnumeratePhysicalDevices, static_cast<VkInstance>(instance));
 
 			if(devices.empty()){
@@ -65,12 +65,15 @@ export namespace Core::Vulkan{
 			}
 
 			physicalDevice.cacheProperties(surface);
+
+			device = LogicalDevice{physicalDevice, physicalDevice.queues};
 		}
 
 		VkResult commandSubmit_Graphics(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
 			VkResult result = vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, fence);
-			if(result) std::println(std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!",
-			                        static_cast<int>(result));
+			if(result)std::println(
+				std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!",
+				static_cast<int>(result));
 			return result;
 		}
 
@@ -91,7 +94,6 @@ export namespace Core::Vulkan{
 				submitInfo.pWaitSemaphores = &toWait;
 				submitInfo.pWaitDstStageMask = &waitDstStage_imageIsAvailable;
 			}
-
 
 			if(toSignal){
 				submitInfo.signalSemaphoreCount = 1;
@@ -117,7 +119,7 @@ export namespace Core::Vulkan{
 			return commandSubmit_Compute(submitInfo, fence);
 		}
 
-		void triggerSemaphore(VkCommandBuffer commandBuffer, const ContigiousRange<VkSemaphore> auto& semaphores){
+		void triggerSemaphore(VkCommandBuffer commandBuffer, const ContigiousRange<VkSemaphore> auto& semaphores) const{
 			VkSubmitInfo submitInfo = {
 				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 				.commandBufferCount = 1,

@@ -41,7 +41,10 @@ export namespace Core::Vulkan{
 		struct SubpassData{
 			std::uint32_t index{};
 
-			VkSubpassDescription description{};
+			VkSubpassDescription description{
+					.flags = 0,
+					.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS
+				};
 			std::vector<VkSubpassDependency> dependencies{};
 
 			AttachmentReference attachment{};
@@ -88,6 +91,12 @@ export namespace Core::Vulkan{
 			void addDependency(const VkSubpassDependency& dependency){
 				dependencies.push_back(dependency);
 				dependencies.back().dstSubpass = index;
+			}
+
+			void addAttachment(std::initializer_list<std::tuple<const AttachmentReference::Category, const std::uint32_t, const VkImageLayout>> list){
+				for (const auto& [category, index, layout] : list){
+					addAttachment(category, index, layout);
+				}
 			}
 
 			void addAttachment(const AttachmentReference::Category attachmentCategory, const std::uint32_t index, const VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL){
