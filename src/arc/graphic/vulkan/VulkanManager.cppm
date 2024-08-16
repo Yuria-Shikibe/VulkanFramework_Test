@@ -63,10 +63,10 @@ export namespace Core::Vulkan{
 		RenderPassGroup batchDrawPass{};
 		RenderPassGroup flushPass{};
 
-		DescriptorSetLayout descriptorSetLayout{};
-		DescriptorSetPool descriptorPool{};
-		UniformBuffer uniformBuffer{}; //TODO
-		DescriptorSet descriptorSet{}; //TODO
+		// DescriptorSetLayout descriptorSetLayout{};
+		// DescriptorSetPool descriptorPool{};
+		// UniformBuffer uniformBuffer{}; //TODO
+		// DescriptorSet descriptorSet{}; //TODO
 
 		TransientCommand obtainTransientCommand() const{
 			return transientCommandPool.obtainTransient(context.device.getGraphicsQueue());
@@ -97,18 +97,13 @@ export namespace Core::Vulkan{
 			VkBuffer indirectBuffer{};
 		} batchVertexData{};
 
-		void drawFrame(VkSemaphore toWait, VkSemaphore toSignal, bool isLast){
+		void drawFrame(bool isLast, const Fence& fence){
 			auto currentFrame = swapChain.getCurrentInFlightImage();
 			auto& currentFrameData = frameDataArr[currentFrame];
 			auto imageIndex = swapChain.getCurrentImageIndex();
 
-			const std::array semaphoresToWait{toWait};
-
 			VkSubmitInfo submitInfo{
 					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-					.waitSemaphoreCount = static_cast<std::uint32_t>(semaphoresToWait.size()),
-					.pWaitSemaphores = semaphoresToWait.data(),
-					.pWaitDstStageMask = Seq::StageFlagBits<VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT>,
 					.commandBufferCount = 1u,
 					.pCommandBuffers = swapChain.getCommandDraw()[imageIndex].asData(),
 				};
@@ -119,20 +114,16 @@ export namespace Core::Vulkan{
 				batchFence.waitAndReset();
 			}
 
-			if(isLast){
-				const std::array semaphoresToSignal{toSignal, currentFrameData.renderFinishedSemaphore.get()};
+			fence.wait();
 
-				// currentFrameData.inFlightFence.reset();
+			if(isLast){
+				const std::array semaphoresToSignal{currentFrameData.renderFinishedSemaphore.get()};
+
 				submitInfo.signalSemaphoreCount = semaphoresToSignal.size();
 				submitInfo.pSignalSemaphores = semaphoresToSignal.data();
 
 				context.commandSubmit_Graphics(submitInfo, batchFence);
 			} else{
-				const std::array semaphoresToSignal{toSignal};
-
-				submitInfo.signalSemaphoreCount = semaphoresToSignal.size();
-				submitInfo.pSignalSemaphores = semaphoresToSignal.data();
-
 				context.commandSubmit_Graphics(submitInfo, batchFence);
 			}
 		}
@@ -216,20 +207,7 @@ export namespace Core::Vulkan{
 				createFlushCommands();
 			};
 
-			descriptorSetLayout = DescriptorSetLayout{
-					context.device, [](DescriptorSetLayout& layout){
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (8));
-					}
-				};
-			descriptorPool = DescriptorSetPool{context.device, descriptorSetLayout, 1};
-			descriptorSet = descriptorPool.obtain();
-			uniformBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(UniformBlock)};
-
 			createFrameObjects();
-
-			// createClearCommands();
-			// createClearCommands();
 			createFlushCommands();
 
 			std::cout.flush();
@@ -237,9 +215,9 @@ export namespace Core::Vulkan{
 
 		void updateDescriptorSet(std::span<VkDescriptorImageInfo> imageInfo){
 
-			DescriptorSetUpdator updator{context.device, descriptorSet};
+			DescriptorSetUpdator updator{context.device, batchDrawPass.pipelinesLocal[0].descriptorSets[0]};
 
-			auto bufferInfo = uniformBuffer.getDescriptorInfo();
+			auto bufferInfo = batchDrawPass.pipelinesLocal[0].uniformBuffers[0].getDescriptorInfo();
 
 			updator.push(bufferInfo);
 			if(!imageInfo.empty())updator.push(imageInfo);
@@ -337,21 +315,16 @@ export namespace Core::Vulkan{
 				});
 			});
 
-			flushPass.rebuildPipelineFunc = [this](RenderPassGroup& flushPass){
-				flushPass.pushAndInitPipeline([this](RenderPassGroup::PipelineData& pipeline){
+			flushPass.pushAndInitPipeline([this](RenderPassGroup::PipelineData& pipeline){
+				pipeline.setDescriptorLayout([this](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+				});
 
-					pipeline.setDescriptorLayout([this](DescriptorSetLayout& layout){
-						// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-						//
-						// layout.pushBindingFlag(VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT);
-						// layout.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-					});
+				pipeline.setPipelineLayout();
 
-					pipeline.setPipelineLayout();
+				pipeline.createDescriptorSet(swapChain.size());
 
-					pipeline.createDescriptorSet(swapChain.size());
-
+				pipeline.builder = [](RenderPassGroup::PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
@@ -361,8 +334,8 @@ export namespace Core::Vulkan{
 						.setStaticViewport(float(pipeline.group->size.x), float(pipeline.group->size.y));
 
 					pipeline.createPipeline(pipelineTemplate);
-				});
-			};
+				};
+			});
 
 			flushPass.resize(swapChain.getTargetWindow()->getSize());
 		}
@@ -395,21 +368,18 @@ export namespace Core::Vulkan{
 				});
 			});
 
-			batchDrawPass.rebuildPipelineFunc = [](RenderPassGroup& batchDrawPass){
-				batchDrawPass.pushAndInitPipeline([](RenderPassGroup::PipelineData& pipeline){
-					pipeline.setDescriptorLayout([](DescriptorSetLayout& layout){
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (8));
+			batchDrawPass.pushAndInitPipeline([](RenderPassGroup::PipelineData& pipeline){
+				pipeline.setDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (8));
+				});
 
-						//
-						// layout.pushBindingFlag(VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT);
-						// layout.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-					});
+				pipeline.setPipelineLayout();
 
-					pipeline.setPipelineLayout();
+				pipeline.createDescriptorSet(1);
+				pipeline.addUniformBuffer(sizeof(UniformBlock));
 
-					pipeline.createDescriptorSet(1);
-
+				pipeline.builder = [](RenderPassGroup::PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
@@ -419,14 +389,15 @@ export namespace Core::Vulkan{
 						.setStaticViewport(float(pipeline.group->size.x), float(pipeline.group->size.y));
 
 					pipeline.createPipeline(pipelineTemplate);
-				});
-			};
+				};
+			});
+
 			batchDrawPass.resize(swapChain.getTargetWindow()->getSize());
 		}
 
 		void updateInputDescriptorSet(){
 			for(std::size_t i = 0; i < swapChain.size(); ++i){
-				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelines[0].descriptorSets[i]};
+				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal[0].descriptorSets[i]};
 
 				// auto info = batchLocal.localAttachments[0].getDescriptorInfo(Assets::Sampler::textureDefaultSampler);
 				auto info = batchLocal.localAttachments[0].getDescriptorInfo(nullptr);
@@ -449,15 +420,17 @@ export namespace Core::Vulkan{
 						.renderArea = {{}, swapChain.getExtent()},
 					};
 
+
 				vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, batchDrawPass.pipelines[0].pipeline);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, batchDrawPass[0]);
+
 
 				vkCmdBindVertexBuffers(commandBuffer, 0, 1, &batchVertexData.vertexBuffer, Seq::NoOffset);
 				vkCmdBindIndexBuffer(commandBuffer, batchVertexData.indexBuffer, 0, batchVertexData.indexType);
 				vkCmdBindDescriptorSets(commandBuffer,
-				                        VK_PIPELINE_BIND_POINT_GRAPHICS, batchDrawPass.pipelines[0].layout, 0,
-				                        1, descriptorSet.asData(),
+				                        VK_PIPELINE_BIND_POINT_GRAPHICS, batchDrawPass.pipelinesLocal[0].layout, 0,
+				                        1, batchDrawPass.pipelinesLocal[0].descriptorSets[0].asData(),
 				                        0, nullptr);
 				vkCmdDrawIndexedIndirect(commandBuffer, batchVertexData.indirectBuffer, 0, 1,
 				                         sizeof(VkDrawIndexedIndirectCommand));
@@ -485,18 +458,18 @@ export namespace Core::Vulkan{
 
 				vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, flushPass.pipelines[0].pipeline);
+				vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, flushPass.pipelinesLocal[0].pipeline);
 
 				vkCmdBindDescriptorSets(commandBuffer,
-				                        VK_PIPELINE_BIND_POINT_GRAPHICS, flushPass.pipelines[0].layout, 0,
-				                        1, flushPass.pipelines[0].descriptorSets[i].asData(),
+				                        VK_PIPELINE_BIND_POINT_GRAPHICS, flushPass.pipelinesLocal[0].layout, 0,
+				                        1, flushPass.pipelinesLocal[0].descriptorSets[i].asData(),
 				                        0, nullptr);
 
 				vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 				VkClearAttachment clearAttachment = {};
 				clearAttachment.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-				clearAttachment.clearValue.color = {{0.0f, 0.0f, 0.0f, 1.0f}};
+				clearAttachment.clearValue.color = {};
 
 				VkClearRect clearRect = {};
 				clearRect.rect.offset = {0, 0};
@@ -512,7 +485,7 @@ export namespace Core::Vulkan{
 		}
 
 		void updateUniformBuffer(const UniformBlock& data) const{
-			uniformBuffer.memory.loadData(data);
+			batchDrawPass.pipelinesLocal[0].uniformBuffers[0].memory.loadData(data);
 		}
 	};
 }

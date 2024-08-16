@@ -54,6 +54,8 @@ export namespace Graphic{
 		ImageSet usedImages{};
 		std::shared_mutex imageMutex{};
 
+
+		//TODO replace fence with semaphores
 		Core::Vulkan::Semaphore semaphore_drawDone{};
 		Core::Vulkan::Semaphore semaphore_copyDone{};
 		Core::Vulkan::Fence fence{};
@@ -301,12 +303,10 @@ export namespace Graphic{
 
 			context->commandSubmit_Graphics(
 					command_flush,
-					semaphore_drawDone,
-					semaphore_copyDone,
+					nullptr,
+					nullptr,
 					fence.get(),
-					VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-					VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |
-					VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+					VK_PIPELINE_STAGE_VERTEX_SHADER_BIT
 				);
 
 			externalDrawCall(*this, isLast);
@@ -396,31 +396,6 @@ export namespace Graphic{
 				if(count){
 					static_cast<Core::Vulkan::StagingBuffer&>(frameData->stagingBuffer)
 						.copyBuffer(command_flush, buffer_vertex.get(), count * UnitOffset);
-
-
-					VkBufferMemoryBarrier bufferMemoryBarrier{
-						.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-						.pNext = nullptr,
-						.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-						.dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
-						.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-						.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-						.buffer = buffer_vertex,
-						.offset = 0,
-						.size = static_cast<VkDeviceSize>(count * UnitOffset)
-					};
-
-					vkCmdPipelineBarrier(
-						command_flush,
-						VK_PIPELINE_STAGE_TRANSFER_BIT,                                           // srcStageMask
-						VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, // dstStageMask
-						0,
-						0, nullptr,
-						1,
-						&bufferMemoryBarrier, // pBufferMemoryBarriers
-						0, nullptr
-					);
-
 				}
 			}
 
@@ -434,29 +409,6 @@ export namespace Graphic{
 
 			buffer_indirect.flush(sizeof(VkDrawIndexedIndirectCommand));
 			buffer_indirect.cmdFlushToDevice(command_flush, sizeof(VkDrawIndexedIndirectCommand));
-
-			VkBufferMemoryBarrier indirectBufferMemoryBarrier{
-				.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER,
-				.pNext = nullptr,
-				.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-				.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT,
-				.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-				.buffer = buffer_indirect.getTargetBuffer(),
-				.offset = 0,
-				.size = sizeof(VkDrawIndexedIndirectCommand)
-			};
-
-			vkCmdPipelineBarrier(
-				command_flush,
-				VK_PIPELINE_STAGE_TRANSFER_BIT,                                           // srcStageMask
-				VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT, // dstStageMask
-				0,
-				0, nullptr,
-				1,
-				&indirectBufferMemoryBarrier, // pBufferMemoryBarriers
-				0, nullptr
-			);
 
 			command_flush.end();
 		}

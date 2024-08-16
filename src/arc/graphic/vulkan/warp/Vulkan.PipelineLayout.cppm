@@ -9,6 +9,14 @@ import Core.Vulkan.Concepts;
 import std;
 
 export namespace Core::Vulkan{
+	struct ConstantLayout{
+		std::vector<VkPushConstantRange> pushConstantRanges{};
+
+		void push(const VkPushConstantRange& constantRange){
+			pushConstantRanges.push_back(constantRange);
+		}
+	};
+
 	struct PipelineLayout : public Wrapper<VkPipelineLayout>{
 		Dependency<VkDevice> device{};
 

@@ -42,6 +42,9 @@ export namespace Core::Vulkan{
 
 			std::vector<UniformBuffer> uniformBuffers{};
 
+			void overrideIndex(const std::uint32_t index){
+				this->index = index;
+			}
 
 			template <std::regular_invocable<DescriptorSetLayout&> Func>
 			void setDescriptorLayout(Func&& func){
@@ -64,16 +67,25 @@ export namespace Core::Vulkan{
 			}
 
 			void createPipeline(PipelineTemplate& pipelineTemplate){
-				pipeline =	GraphicPipeline{group->context->device, pipelineTemplate, layout, group->renderPass, index};
+				pipeline = GraphicPipeline{group->context->device, pipelineTemplate, layout, group->renderPass, index};
 			}
+
+
+			void addUniformBuffer(const std::size_t size){
+				uniformBuffers.push_back(UniformBuffer{group->context->physicalDevice, group->context->device, size});
+			}
+
+			std::function<void(PipelineData&)> builder{};
 		};
 
 		Context* context{};
 		RenderPass renderPass{};
 		Geom::USize2 size{};
 
-		std::vector<PipelineData> pipelines{};
-		std::function<void(RenderPassGroup&)> rebuildPipelineFunc{};
+		std::vector<PipelineData> pipelinesLocal{};
+
+		std::vector<std::pair<std::uint32_t, VkPipeline>> pipelinesExternal{};
+		std::vector<VkPipeline> pipelines{};
 
 		//init
 		//set renderpass params
@@ -96,25 +108,13 @@ export namespace Core::Vulkan{
 
 			renderPass.createRenderPass();
 
-			// usedPipelines.resize(renderPass.subpassSize());
+			pipelines.resize(renderPass.subpassSize());
 		}
 
 
-		template<
-			ContigiousRange<VkDescriptorSetLayout> R1,
-			ContigiousRange<VkPushConstantRange> R2 = EmptyRange<VkPushConstantRange>>
-		void pushPipeline(PipelineTemplate& pipelineTemplate, R1&& descriptorSetLayouts, R2&& constantRange = {}){
-			PipelineData& group = pushAndInitPipeline();
-
-			// static_assert(false, "TODO");
-
-			// group.setLayout(context->device, descriptorSetLayouts, constantRange);
-
-			group.createPipeline(context->device, renderPass, pipelineTemplate);
-		}
 
 		decltype(auto) pushAndInitPipeline(){
-			return pipelines.emplace_back(pipelines.size(), this);
+			return pipelinesLocal.emplace_back(pipelinesLocal.size(), this);
 		}
 
 		template <std::regular_invocable<PipelineData&> InitFunc>
@@ -124,9 +124,59 @@ export namespace Core::Vulkan{
 
 		void resize(const Geom::USize2 size){
 			this->size = size;
-			if(rebuildPipelineFunc){
-				pipelines.clear();
-				rebuildPipelineFunc(*this);
+
+			for (auto& pipeline : pipelinesLocal){
+				if(pipeline.builder){
+					pipeline.builder(pipeline);
+				}
+			}
+
+			loadPipelines();
+		}
+
+		[[nodiscard]] VkPipeline pipelineAt(const std::size_t index) const{
+			return pipelines[index];
+		}
+
+		[[nodiscard]] VkPipeline operator[](const std::size_t index) const{
+			return pipelineAt(index);
+		}
+
+		void loadExternalPipelines(const std::initializer_list<decltype(pipelinesExternal)::value_type> pipelines){
+			pipelinesExternal = pipelines;
+		}
+
+		void loadPipelines(){
+			std::map<std::uint32_t, VkPipeline> checkedPipelines{};
+
+			for (const auto& pipeline : pipelinesLocal){
+				auto [r, suc] = checkedPipelines.try_emplace(pipeline.index, pipeline.pipeline.get());
+				if(!suc){
+					throw std::runtime_error("Duplicated Index");
+				}
+			}
+
+			for (auto [index, pipeline] : pipelinesExternal){
+				auto [r, suc] = checkedPipelines.try_emplace(index, pipeline);
+				if(!suc){
+					throw std::runtime_error("Duplicated Index");
+				}
+			}
+
+			if(checkedPipelines.empty()){
+				throw std::runtime_error("No valid pipeline");
+			}
+
+			const auto max = checkedPipelines.rbegin()->first;
+
+			pipelines.resize(max + 1);
+
+			for (auto [index, p] : checkedPipelines){
+				pipelines[index] = p;
+			}
+
+			for (const auto & vkPipeline : pipelines){
+				if(!vkPipeline)throw std::runtime_error("VkPipeline is NULL");
 			}
 		}
 

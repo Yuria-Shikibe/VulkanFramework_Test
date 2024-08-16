@@ -85,7 +85,7 @@ add_executable(
         ${CURRENT_HEADERS}   #[[.h]]
         main.cpp
 #        ${MODULE_DIR}/std.compat.ixx
-        ${MODULE_DIR}/std.ixx
+
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -94,8 +94,9 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_sources(${PROJECT_NAME}
-        PUBLIC
-        ${FAST_MODULES}      #[[Modules]]
+    PUBLIC
+    ${FAST_MODULES}      #[[Modules]]
+    ${MODULE_DIR}/std.ixx
 )
 
 #set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")

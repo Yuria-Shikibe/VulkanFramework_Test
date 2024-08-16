@@ -1,3 +1,4 @@
+#include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
 import std;
@@ -20,6 +21,7 @@ import Graphic.Batch;
 import Assets.Graphic;
 
 std::array<Core::Vulkan::Texture, 10> textures{};
+
 
 int main(){
 	using namespace Core;
@@ -62,7 +64,7 @@ int main(){
 
 		batch.externalDrawCall = [](const decltype(batch)& b, const bool isLast){
 			// b.fence.wait();
-			vulkanManager->drawFrame(b.semaphore_copyDone, b.semaphore_drawDone, isLast);
+			vulkanManager->drawFrame(isLast, b.fence);
 		};
 
 		batch.descriptorChangedCallback = [](auto data){
@@ -83,6 +85,7 @@ int main(){
 		while(window && !window->shouldClose()) {
 			window->pollEvents();
 
+			auto t = glfwGetTime();
 			// vulkanManager->drawBegin();
 
 			Geom::Matrix3D matrix3D{};
@@ -94,10 +97,10 @@ int main(){
 				for(const auto& [i, texture] : textures | std::views::enumerate){
 					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
 					new(dataPtr) std::array{
-						Vulkan::Vertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::Vertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::Vertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
-						Vulkan::Vertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+						Vulkan::Vertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+						Vulkan::Vertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+						Vulkan::Vertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
+						Vulkan::Vertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
 					};
 				}
 			}
@@ -118,4 +121,6 @@ int main(){
 
 	Core::terminate();
 	GLFW::terminate();
+
+	return 0;//just for main func test swap...
 }
