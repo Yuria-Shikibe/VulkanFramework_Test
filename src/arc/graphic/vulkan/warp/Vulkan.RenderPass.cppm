@@ -49,6 +49,10 @@ export namespace Core::Vulkan{
 
 			AttachmentReference attachment{};
 
+			[[nodiscard]] std::uint32_t getPrevIndex() const noexcept{
+				return index - 1;
+			}
+
 			void setProperties(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
 			                     VkSubpassDescriptionFlags flags = 0){
 				description.flags = flags;
@@ -97,6 +101,18 @@ export namespace Core::Vulkan{
 				for (const auto& [category, index, layout] : list){
 					addAttachment(category, index, layout);
 				}
+			}
+
+			void addInput(const std::uint32_t index){
+				addAttachment(AttachmentReference::Category::input, index, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			}
+
+			void addOutput(const std::uint32_t index){
+				addAttachment(AttachmentReference::Category::color, index, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			}
+
+			void addReserved(const std::uint32_t index){
+				addAttachment(AttachmentReference::Category::reserved, index, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 			}
 
 			void addAttachment(const AttachmentReference::Category attachmentCategory, const std::uint32_t index, const VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL){

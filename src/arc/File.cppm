@@ -18,21 +18,21 @@ namespace OS{
 
 		File() = default;
 
-		File(const decltype(rawPath)::string_type& p) : rawPath{p}{}
+		explicit(false) File(const decltype(rawPath)::string_type& p) : rawPath{p}{}
 
-		File(const std::string& p) : rawPath{p}{}
+		explicit(false) File(const std::string& p) : rawPath{p}{}
 
-		File(decltype(rawPath)::string_type&& p) : rawPath{std::move(p)}{}
+		explicit(false) File(decltype(rawPath)::string_type&& p) : rawPath{std::move(p)}{}
 
-		File(const char* p) : rawPath{p}{}
+		explicit(false) File(const char* p) : rawPath{p}{}
 
-		File(const std::string_view p) : rawPath{p}{}
+		explicit(false) File(const std::string_view p) : rawPath{p}{}
 
-		File(const fs::path& p) : rawPath{p}{}
+		explicit(false) File(const fs::path& p) : rawPath{p}{}
 
-		File(fs::path&& p) : rawPath{std::move(p)}{}
+		explicit(false) File(fs::path&& p) : rawPath{std::move(p)}{}
 
-		File(const fs::directory_entry& p) : rawPath(p){}
+		explicit(false) File(const fs::directory_entry& p) : rawPath(p){}
 
 		File& operator=(const fs::path& other){
 			rawPath = other;
@@ -412,16 +412,16 @@ namespace OS{
 			return lhs.rawPath <=> rhs.rawPath;
 		}
 
-		File operator/(const File& file) const{
-			return File{rawPath / file.getPath()};
+		friend File operator/(const File& l, const File& file){
+			return File{l.rawPath / file.getPath()};
 		}
 
-		File operator/(const std::string_view path) const{
-			return File{rawPath / path};
+		friend File operator/(const File& l, const std::string_view path){
+			return File{l.rawPath / path};
 		}
 
-		File operator/(const char* path) const{
-			return File{rawPath / path};
+		friend File operator/(const File& l, const char* path){
+			return File{l.rawPath / path};
 		}
 
 		File& operator/=(const File& file){
@@ -450,21 +450,21 @@ namespace OS{
 		time = 0b0000'0010,
 		size = 0b0000'0100,
 
-		/**	default 'ascend', it here do actually nothing*/
+		/**	default 'ascend', it here does actually nothing*/
 		ascend = 0,
 		descend = 0b0001'0000
 	};
+
+	export FileSortFunc operator|(FileSortFunc l, FileSortFunc r) noexcept{
+		return FileSortFunc{static_cast<std::underlying_type_t<FileSortFunc>>(std::to_underlying(l) | std::to_underlying(r))};
+	}
+
+	export bool operator&(FileSortFunc l, FileSortFunc r) noexcept{
+		return static_cast<bool>(std::to_underlying(l) | std::to_underlying(r));
+	}
 }
 
-export OS::FileSortFunc operator|(OS::FileSortFunc l, OS::FileSortFunc r) noexcept{
-	using Ty = std::underlying_type_t<OS::FileSortFunc>;
-	return OS::FileSortFunc{static_cast<Ty>(static_cast<Ty>(l) | static_cast<Ty>(r))};
-}
 
-export bool operator&(OS::FileSortFunc l, OS::FileSortFunc r) noexcept{
-	using Ty = std::underlying_type_t<OS::FileSortFunc>;
-	return static_cast<bool>(static_cast<Ty>(l) & static_cast<Ty>(r));
-}
 
 export namespace OS{
 	std::function<bool(const File&, const File&)> getFileSortter(FileSortFunc sortFunc){

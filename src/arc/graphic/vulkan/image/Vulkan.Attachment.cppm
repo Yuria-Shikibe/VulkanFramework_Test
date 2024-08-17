@@ -19,6 +19,10 @@ export namespace Core::Vulkan{
 		VkImageUsageFlags usages{};
 		VkImageLayout bestLayout{};
 
+		std::uint32_t index{};
+		//TODO support scale for over/low sampler usage
+		float scale{1.f};
+
 		//TODO miplevels support??
 
 		void resize(const Geom::USize2 size, VkCommandBuffer commandBuffer){
@@ -87,8 +91,6 @@ export namespace Core::Vulkan{
 
 
 		using CombinedImage::CombinedImage;
-
-		std::uint32_t index{};
 
 		void create(
 					const Geom::USize2 size,
@@ -162,7 +164,7 @@ export namespace Core::Vulkan{
 			Attachment::resize(size, commandBuffer);
 		}
 
-		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) {
+		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) const{
 			Attachment::cmdClear(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	};

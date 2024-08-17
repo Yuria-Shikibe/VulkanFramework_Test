@@ -146,7 +146,7 @@ export namespace Core::Vulkan{
 			return true;
 		}
 
-		[[nodiscard]] constexpr operator VkPhysicalDevice() const noexcept{
+		[[nodiscard]] explicit(false) constexpr operator VkPhysicalDevice() const noexcept{
 			return device;
 		}
 

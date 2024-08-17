@@ -18,10 +18,7 @@ export namespace Core::Vulkan{
 				VkImageLayout oldLayout{};
 				VkImageLayout newLayout{};
 
-				constexpr friend bool operator==(const Key& lhs, const Key& rhs) noexcept{
-					return lhs.oldLayout == rhs.oldLayout
-						&& lhs.newLayout == rhs.newLayout;
-				}
+				constexpr friend bool operator==(const Key& lhs, const Key& rhs) noexcept = default;
 			};
 
 			struct Value{
@@ -75,6 +72,13 @@ export namespace Core::Vulkan{
 					{
 						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
 						VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+					}
+				},
+				{
+					{VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+					{
+						VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+						VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 					}
 				},
 			};

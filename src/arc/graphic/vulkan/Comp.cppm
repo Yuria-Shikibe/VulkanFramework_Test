@@ -55,7 +55,7 @@ namespace Core::Vulkan{
 				T rst = target;
 
 				[&]<std::size_t... I>(std::index_sequence<I...>){
-					(src.template copy<I>(rst, src.val), ...);
+					(src.copy<I>(rst, src.val), ...);
 				}(std::make_index_sequence<size>{});
 
 				return rst;
@@ -93,6 +93,85 @@ namespace Core::Vulkan{
 				&VkAttachmentDescription::flags,
 				&VkAttachmentDescription::samples
 			};
+
+		constexpr Util::Component ReadOnly{
+				VkAttachmentDescription{
+					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+				},
+				&VkAttachmentDescription::loadOp,
+				&VkAttachmentDescription::storeOp
+			};
+
+		constexpr Util::Component ReadAndWrite{
+				VkAttachmentDescription{
+					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+					.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				},
+				&VkAttachmentDescription::loadOp,
+				&VkAttachmentDescription::storeOp
+			};
+
+
+		constexpr Util::Component ReusedColorAttachment{
+				VkAttachmentDescription{
+					.format = VK_FORMAT_R8G8B8A8_UNORM,
+					.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+					.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				},
+				&VkAttachmentDescription::format,
+				&VkAttachmentDescription::initialLayout,
+				&VkAttachmentDescription::finalLayout
+			};
+
+		constexpr Util::Component ExportAttachment{
+				VkAttachmentDescription{
+					.format = VK_FORMAT_R8G8B8A8_UNORM,
+					.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+					.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+
+					.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+					.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				},
+				&VkAttachmentDescription::format,
+				&VkAttachmentDescription::loadOp,
+				&VkAttachmentDescription::storeOp,
+				&VkAttachmentDescription::initialLayout,
+				&VkAttachmentDescription::finalLayout
+			};
+
+		constexpr Util::Component Load_DontCare{
+				VkAttachmentDescription{
+					.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+				},
+				&VkAttachmentDescription::loadOp,
+			};
+
+		template <VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL>
+		constexpr Util::Component ImportAttachment{
+				VkAttachmentDescription{
+					.format = VK_FORMAT_R8G8B8A8_UNORM,
+					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+
+					.initialLayout = imageLayout,
+					.finalLayout = imageLayout,
+				},
+				&VkAttachmentDescription::format,
+				&VkAttachmentDescription::loadOp,
+				&VkAttachmentDescription::storeOp,
+				&VkAttachmentDescription::initialLayout,
+				&VkAttachmentDescription::finalLayout
+			};
+
+		constexpr Util::Component StoreOnly{
+				VkAttachmentDescription{
+					.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+					.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				},
+				&VkAttachmentDescription::loadOp,
+				&VkAttachmentDescription::storeOp
+			};
 	}
 
 	export namespace Subpass{
@@ -106,6 +185,19 @@ namespace Core::Vulkan{
 					&VkSubpassDependency::srcSubpass,
 					&VkSubpassDependency::srcStageMask,
 					&VkSubpassDependency::srcAccessMask
+				};
+
+			constexpr Util::Component Blit{
+					VkSubpassDependency{
+						.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+						.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+						.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+						.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+					},
+					&VkSubpassDependency::srcStageMask,
+					&VkSubpassDependency::dstStageMask,
+					&VkSubpassDependency::srcAccessMask,
+					&VkSubpassDependency::dstAccessMask
 				};
 		}
 	}

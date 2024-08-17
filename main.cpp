@@ -22,7 +22,6 @@ import Assets.Graphic;
 
 std::array<Core::Vulkan::Texture, 10> textures{};
 
-
 int main(){
 	using namespace Core;
 	Assets::Shader::builtinShaderDir = Vulkan::TargetCompilerPath;
@@ -35,7 +34,7 @@ int main(){
 
 	Core::init();
 
-	Assets::load(vulkanManager->context.device);
+	Assets::load(vulkanManager->context);
 
 	vulkanManager->initVulkan();
 
@@ -85,10 +84,10 @@ int main(){
 				for(const auto& [i, texture] : textures | std::views::enumerate){
 					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
 					new(dataPtr) std::array{
-						Vulkan::BatchVertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50 + t * 10, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
 					};
 				}
 			}

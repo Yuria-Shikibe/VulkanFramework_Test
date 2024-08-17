@@ -132,13 +132,13 @@ export namespace Core::Vulkan{
 		[[nodiscard]] Window* getTargetWindow() const{ return targetWindow; }
 
 		[[nodiscard]] VkExtent2D getExtent() const {return std::bit_cast<VkExtent2D>(targetWindow->getSize());}
-		[[nodiscard]] auto getSize() const {return targetWindow->getSize();}
+		[[nodiscard]] auto size2D() const {return targetWindow->getSize();}
 
 		[[nodiscard]] VkInstance getInstance() const{ return instance; }
 
 		[[nodiscard]] VkSurfaceKHR getSurface() const{ return surface; }
 
-		[[nodiscard]] operator VkSwapchainKHR() const noexcept{return swapChain;}
+		[[nodiscard]] explicit(false) operator VkSwapchainKHR() const noexcept{return swapChain;}
 
 		auto getCurrentInFlightImage() const noexcept{
 			return currentInFlightFrame;

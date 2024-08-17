@@ -11,7 +11,7 @@ import OS.File;
 export namespace Core::Vulkan{
 	struct ShaderModule{
 		DeviceDependency device{};
-		VkShaderModule module{};
+		VkShaderModule shaderModule{};
 		VkShaderStageFlagBits declStage{};
 
 		static constexpr std::array ShaderType{
@@ -59,7 +59,7 @@ export namespace Core::Vulkan{
 				.pNext = nullptr,
 				.flags = 0,
 				.stage = stage,
-				.module = module,
+				.module = shaderModule,
 				.pName = entry.data(),
 				.pSpecializationInfo = specializationInfo
 			};
@@ -68,7 +68,7 @@ export namespace Core::Vulkan{
 		}
 
 		void load(VkDevice device, const OS::File& path){
-			if(module && this->device)vkDestroyShaderModule(device, module, nullptr);
+			if(shaderModule && this->device)vkDestroyShaderModule(device, shaderModule, nullptr);
 
 			this->device = device;
 			createShaderModule(path);
@@ -76,7 +76,7 @@ export namespace Core::Vulkan{
 		}
 
 		~ShaderModule(){
-			if(module && device)vkDestroyShaderModule(device, module, nullptr);
+			if(shaderModule && device)vkDestroyShaderModule(device, shaderModule, nullptr);
 		}
 
 		ShaderModule(const ShaderModule& other) = delete;
@@ -87,9 +87,9 @@ export namespace Core::Vulkan{
 
 		ShaderModule& operator=(ShaderModule&& other) noexcept{
 			if(this == &other) return *this;
-			this->~ShaderModule();
+			if(shaderModule && device)vkDestroyShaderModule(device, shaderModule, nullptr);
 			device = std::move(other.device);
-			module = other.module;
+			shaderModule = other.shaderModule;
 			declStage = other.declStage;
 			return *this;
 		}
@@ -112,7 +112,7 @@ export namespace Core::Vulkan{
 			createInfo.codeSize = std::ranges::size(code);
 			createInfo.pCode = reinterpret_cast<const std::uint32_t*>(std::ranges::data(code));
 
-			if(vkCreateShaderModule(device, &createInfo, nullptr, &module) != VK_SUCCESS){
+			if(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create shader module!");
 			}
 		}
@@ -139,11 +139,11 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] ShaderChain() = default;
 
-		[[nodiscard]] ShaderChain(const std::initializer_list<const ShaderModule*> args){
+		[[nodiscard]] explicit(false) ShaderChain(const std::initializer_list<const ShaderModule*> args){
 			push(args);
 		}
 
-		[[nodiscard]] ShaderChain(const std::initializer_list<VkPipelineShaderStageCreateInfo> args) : chain{args}{}
+		[[nodiscard]] explicit(false) ShaderChain(const std::initializer_list<VkPipelineShaderStageCreateInfo> args) : chain{args}{}
 
 
 		[[nodiscard]] VkPipelineShaderStageCreateInfo* data() noexcept{

@@ -4,19 +4,19 @@ module;
 
 export module Core.Vulkan.RenderPassGroup;
 
-import Core.Vulkan.Buffer.FrameBuffer;
-import Core.Vulkan.Buffer.UniformBuffer;
-import Core.Vulkan.Buffer.CommandBuffer;
-import Core.Vulkan.Attachment;
-import Core.Vulkan.Pipeline;
-import Core.Vulkan.PipelineLayout;
-import Core.Vulkan.DescriptorSet;
-import Core.Vulkan.Dependency;
+export import Core.Vulkan.Buffer.FrameBuffer;
+export import Core.Vulkan.Buffer.UniformBuffer;
+export import Core.Vulkan.Buffer.CommandBuffer;
+export import Core.Vulkan.Attachment;
+export import Core.Vulkan.Pipeline;
+export import Core.Vulkan.PipelineLayout;
+export import Core.Vulkan.DescriptorSet;
+export import Core.Vulkan.Dependency;
+export import Core.Vulkan.CommandPool;
+export import Core.Vulkan.RenderPass;
+
 import Core.Vulkan.Context;
 import Core.Vulkan.Concepts;
-
-import Core.Vulkan.CommandPool;
-import Core.Vulkan.RenderPass;
 
 import Geom.Vector2D;
 
@@ -43,7 +43,7 @@ export namespace Core::Vulkan{
 
 			std::function<void(PipelineData&)> builder{};
 
-			[[nodiscard]] auto size() const{
+			[[nodiscard]] Geom::USize2 size() const{
 				return group->size;
 			}
 
@@ -51,7 +51,7 @@ export namespace Core::Vulkan{
 			// 	this->index = index;
 			// }
 
-			template <ContigiousRange<std::uint32_t> Rng = std::initializer_list<std::uint32_t>>
+			template <RangeOf<std::uint32_t> Rng = std::initializer_list<std::uint32_t>>
 			void addTarget(Rng&& list){
 				for (std::uint32_t index : list){
 					targetIndices.push_back({index, {}});
@@ -59,7 +59,7 @@ export namespace Core::Vulkan{
 			}
 
 
-			template <ContigiousRange<std::uint32_t> Rng = std::initializer_list<std::uint32_t>>
+			template <RangeOf<std::uint32_t> Rng = std::initializer_list<std::uint32_t>>
 			void setTarget(Rng&& list){
 				targetIndices.clear();
 				for (std::uint32_t index : list){
@@ -68,7 +68,7 @@ export namespace Core::Vulkan{
 			}
 
 			template <std::regular_invocable<DescriptorSetLayout&> Func>
-			void setDescriptorLayout(Func&& func){
+			void createDescriptorLayout(Func&& func){
 				descriptorSetLayout = DescriptorSetLayout{group->context->device, std::forward<Func>(func)};
 			}
 
@@ -79,7 +79,7 @@ export namespace Core::Vulkan{
 			/**
 			 * @brief Call after descriptors and constants have been set
 			 */
-			void setPipelineLayout(VkPipelineCreateFlags flags = 0){
+			void createPipelineLayout(VkPipelineCreateFlags flags = 0){
 				layout = PipelineLayout{group->context->device, flags, descriptorSetLayout.asSeq(), constantLayout.constants};
 			}
 
@@ -106,12 +106,23 @@ export namespace Core::Vulkan{
 			void bindDescriptorTo(
 				VkCommandBuffer commandBuffer,
 				VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-				std::uint32_t firstSet = 0, Rng&& dynamicOffset = {}){
+				std::uint32_t firstSet = 0, Rng&& dynamicOffset = {}) const {
 				::vkCmdBindDescriptorSets(
 					commandBuffer, bindPoint,
 					layout, firstSet,
 					descriptorSets.size(), reinterpret_cast<const VkDescriptorSet*>(descriptorSets.data()),
 					std::ranges::size(dynamicOffset), std::ranges::data(dynamicOffset)
+				);
+			}
+
+			void bindDescriptorTo(
+				VkCommandBuffer commandBuffer, const std::size_t index,
+				VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS) const{
+				::vkCmdBindDescriptorSets(
+					commandBuffer, bindPoint,
+					layout, 0,
+					1, descriptorSets.at(index).asData(),
+					0, nullptr
 				);
 			}
 
@@ -137,7 +148,7 @@ export namespace Core::Vulkan{
 			}
 		};
 
-		Context* context{};
+		const Context* context{};
 		RenderPass renderPass{};
 		Geom::USize2 size{};
 
@@ -149,7 +160,7 @@ export namespace Core::Vulkan{
 
 		std::vector<std::pair<VkPipeline, PipelineData*>> pipelines{};
 
-		void init(Context& context){
+		void init(const Context& context){
 			this->context = &context;
 
 			renderPass = RenderPass{context.device};
@@ -259,7 +270,19 @@ export namespace Core::Vulkan{
 		//TODO make it as iterator??
 		struct PipelineContext{
 			RenderProcedure& renderProcedure;
+			VkCommandBuffer commandBuffer{};
 			std::uint32_t currentIndex{};
+			VkPipelineBindPoint bindPoint{};
+
+			[[nodiscard]] PipelineContext(
+				RenderProcedure& renderProcedure,
+				VkCommandBuffer commandBuffer,
+				VkPipelineBindPoint bindPoint
+				)
+				: renderProcedure{renderProcedure},
+				  commandBuffer{commandBuffer}, bindPoint{bindPoint}{
+				vkCmdBindPipeline(commandBuffer, bindPoint, currentPipeline());
+			}
 
 			[[nodiscard]] PipelineData& data() const{
 				if(auto p = renderProcedure.pipelines.at(currentIndex).second)return *p;
@@ -267,29 +290,32 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("No valid local pipeline");
 			}
 
-			[[nodiscard]] VkPipeline pipeline() const{
+			[[nodiscard]] VkPipeline currentPipeline() const{
 				return renderProcedure[currentIndex];
 			}
 
-			void next(VkCommandBuffer commandBuffer, VkSubpassContents contents){
+			void next(VkSubpassContents contents = VK_SUBPASS_CONTENTS_INLINE){
 				++currentIndex;
+
+				if(currentIndex == renderProcedure.renderPass.subpasses.size())return;
 
 				if(currentIndex > renderProcedure.renderPass.subpasses.size()){
 					throw std::runtime_error("Subpass index out of range");
 				}
 
 				vkCmdNextSubpass(commandBuffer, contents);
+				vkCmdBindPipeline(commandBuffer, bindPoint, currentPipeline());
 			}
 
 			~PipelineContext() noexcept(false) {
-				if((currentIndex + 1) != renderProcedure.renderPass.subpasses.size()){
+				if((currentIndex + 1) < renderProcedure.renderPass.subpasses.size()){
 					throw std::runtime_error("Subpass not finished");
 				}
 			}
 		};
 
-		PipelineContext getCmdContext(){
-			return PipelineContext{*this};
+		PipelineContext startCmdContext(VkCommandBuffer commandBuffer, VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS){
+			return PipelineContext{*this, commandBuffer, bindPoint};
 		}
 
 		[[nodiscard]] VkRenderPassBeginInfo getBeginInfo(VkFramebuffer framebuffer) const noexcept{

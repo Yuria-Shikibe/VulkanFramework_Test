@@ -86,7 +86,7 @@ export namespace Graphic{
 			}
 
 			std::pair<void*, bool> acquire(){
-				const auto offset = currentCount++;
+				const auto offset = (currentCount++);
 				const bool v = offset < MaxCount;
 
 				return {static_cast<std::uint8_t*>(vertData) + offset * UnitOffset, v};

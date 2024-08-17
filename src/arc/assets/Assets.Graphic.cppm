@@ -9,13 +9,22 @@ import Core.Vulkan.Sampler;
 
 import OS.File;
 
+namespace Core::Vulkan{
+	export class Context;
+}
+
+
 export namespace Assets{
 	namespace Shader{
 		OS::File builtinShaderDir{};
 		Core::Vulkan::ShaderModule batchVertShader{};
 		Core::Vulkan::ShaderModule batchFragShader{};
+
 		Core::Vulkan::ShaderModule blitSingleFrag{};
 		Core::Vulkan::ShaderModule blitSingleVert{};
+
+		Core::Vulkan::ShaderModule blitBlurFrag{};
+		Core::Vulkan::ShaderModule blitBlurVert{};
 
 		void load(VkDevice device);
 
@@ -24,26 +33,25 @@ export namespace Assets{
 			batchFragShader = {};
 			blitSingleFrag = {};
 			blitSingleVert = {};
+
+			blitBlurFrag = {};
+			blitBlurVert = {};
 		}
 	}
 
 	namespace Sampler{
 		Core::Vulkan::Sampler textureDefaultSampler{};
+		Core::Vulkan::Sampler blitSampler{};
 
 		void load(VkDevice device);
 
 		void dispose(){
 			textureDefaultSampler = {};
+			blitSampler = {};
 		}
 	}
 
-	void load(VkDevice device){
-		Shader::load(device);
-		Sampler::load(device);
-	}
+	void load(const Core::Vulkan::Context& context);
 
-	void dispose(){
-		Shader::dispose();
-		Sampler::dispose();
-	}
+	void dispose();
 }

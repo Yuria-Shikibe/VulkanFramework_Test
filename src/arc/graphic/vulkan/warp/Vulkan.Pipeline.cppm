@@ -4,11 +4,11 @@ module;
 
 export module Core.Vulkan.Pipeline;
 
+export import Core.Vulkan.PipelineLayout;
 import Core.Vulkan.Concepts;
 import Core.Vulkan.Shader;
 import Core.Vulkan.Dependency;
 import Core.Vulkan.Preinstall;
-import Core.Vulkan.PipelineLayout;
 import std;
 
 export namespace Core::Vulkan{
@@ -22,7 +22,7 @@ export namespace Core::Vulkan{
 			MutexWrapper(MutexWrapper&&) noexcept {}
 			MutexWrapper& operator=(const MutexWrapper&){return *this;}
 			MutexWrapper& operator=(MutexWrapper&&) noexcept{return *this;}
-		} mutex{}; //TODO
+		} mutex{}; //TODO necessary??
 
 	public:
 		ShaderChain shaderChain{};
@@ -30,7 +30,7 @@ export namespace Core::Vulkan{
 		std::vector<VkDynamicState> dynamicStates{};
 		VkPipelineDynamicStateCreateInfo dynamicStateInfo{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
 
-		VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+		VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 		VkPipelineViewportStateCreateInfo viewportState{};
 
 		std::uint32_t dynamicViewportSize{};
@@ -43,7 +43,9 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] PipelineTemplate() : VkGraphicsPipelineCreateInfo{
 				VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO
-			}{}
+			}{
+			useDefaultFixedStages();
+		}
 
 		PipelineTemplate& useDefaultFixedStages(){
 			viewportState = Default::DynamicViewportState<1>;
@@ -84,6 +86,17 @@ export namespace Core::Vulkan{
 				.minDepth = 0.f,
 				.maxDepth = 1.f
 			}});
+		}
+
+		PipelineTemplate& setStaticViewportAndScissor(const std::uint32_t w, const std::uint32_t h){
+			return setStaticViewport(std::array{VkViewport{
+				.x = 0,
+				.y = 0,
+				.width = static_cast<float>(w),
+				.height = static_cast<float>(h),
+				.minDepth = 0.f,
+				.maxDepth = 1.f
+			}}).setStaticScissors({{}, {w, h}});
 		}
 
 		PipelineTemplate& setStaticScissors(const RangeOf<VkRect2D> auto& viewports){

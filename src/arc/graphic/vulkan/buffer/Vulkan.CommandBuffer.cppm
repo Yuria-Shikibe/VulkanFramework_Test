@@ -76,6 +76,10 @@ export namespace Core::Vulkan{
 			std::invoke(fn, handle, args...);
 		}
 
+		void blitDraw() const{
+			vkCmdDraw(handle, 3, 1, 0, 0);
+		}
+
 		void reset(VkCommandBufferResetFlagBits flagBits = static_cast<VkCommandBufferResetFlagBits>(0)) const{
 			vkResetCommandBuffer(handle, flagBits);
 		}
@@ -103,7 +107,11 @@ export namespace Core::Vulkan{
 			handler.end();
 		}
 
-		operator VkCommandBuffer() const noexcept{return handler.get();}
+		explicit(false) operator VkCommandBuffer() const noexcept{return handler.get();}
+
+		CommandBuffer* operator->() const{
+			return &handler;
+		}
 	};
 
 	struct [[jetbrains::guard]] TransientCommand : CommandBuffer{
@@ -116,9 +124,12 @@ export namespace Core::Vulkan{
 		VkQueue targetQueue{};
 
 		std::vector<VkSemaphore> toWait{};
-		std::vector<VkSemaphore> toSingal{};
+		std::vector<VkSemaphore> toSignal{};
 
-		[[nodiscard]] TransientCommand(CommandBuffer&& commandBuffer, VkQueue targetQueue) : CommandBuffer{
+		[[nodiscard]] TransientCommand() = default;
+
+		[[nodiscard]] TransientCommand(CommandBuffer&& commandBuffer, VkQueue targetQueue) :
+			CommandBuffer{
 				std::move(commandBuffer)
 			}, targetQueue{targetQueue}{
 			vkBeginCommandBuffer(handle, &BeginInfo);
@@ -145,7 +156,7 @@ export namespace Core::Vulkan{
 			: CommandBuffer{std::move(other)},
 			  targetQueue{other.targetQueue},
 			  toWait{std::move(other.toWait)},
-			  toSingal{std::move(other.toSingal)}{}
+			  toSignal{std::move(other.toSignal)}{}
 
 		TransientCommand& operator=(TransientCommand&& other) noexcept{
 			if(this == &other) return *this;
@@ -153,7 +164,7 @@ export namespace Core::Vulkan{
 			CommandBuffer::operator =(std::move(other));
 			targetQueue = other.targetQueue;
 			toWait = std::move(other.toWait);
-			toSingal = std::move(other.toSingal);
+			toSignal = std::move(other.toSignal);
 			return *this;
 		}
 

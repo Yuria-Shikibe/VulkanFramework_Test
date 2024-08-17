@@ -22,7 +22,7 @@ export namespace Core::Vulkan{
 
 		Geom::USize2 size{};
 
-		VkRenderPass renderPass{};
+		Dependency<VkRenderPass> renderPass{};
 
 	public:
 		void setSize(const Geom::USize2 size){
@@ -37,6 +37,11 @@ export namespace Core::Vulkan{
 		~FrameBuffer(){
 			destroy();
 		}
+
+		[[nodiscard]] FrameBuffer(VkDevice device, Geom::USize2 size, VkRenderPass renderPass)
+			: device{device},
+			  size{size},
+			  renderPass{renderPass}{}
 
 		[[nodiscard]] FrameBuffer() = default;
 
@@ -54,7 +59,7 @@ export namespace Core::Vulkan{
 			device = std::move(other.device);
 			attachments = std::move(other.attachments);
 			size = std::move(other.size);
-			renderPass = other.renderPass;
+			renderPass = std::move(other.renderPass);
 			return *this;
 		}
 
@@ -73,8 +78,12 @@ export namespace Core::Vulkan{
 			create(layers);
 		}
 
+		[[nodiscard]] VkImageView at(const std::size_t index) const {
+			return attachments[index];
+		}
+
 	protected:
-		void create(const std::uint32_t layers = 1){
+		void create(const std::uint32_t layers){
 			destroy();
 
 			if(size.area() == 0){
@@ -102,11 +111,28 @@ export namespace Core::Vulkan{
 	struct FramebufferLocal : FrameBuffer{
 		using FrameBuffer::FrameBuffer;
 
+
 		/**
 		 * @warning Slice Caution: Frame Buffer Only Accepts Attachments
 		 */
 		void pushCapturedAttachments(Attachment&& attachment){
 			attachment.index = localAttachments.size();
+			localAttachments.push_back(std::move(attachment));
+		}
+
+		/**
+		 * @warning Slice Caution: Frame Buffer Only Accepts Attachments
+		 */
+		template <std::ranges::range Rng = std::initializer_list<Attachment&&>>
+		void pushCapturedAttachments(Rng&& attachments){
+			for(auto&& attachment : attachments){
+				attachment.index = localAttachments.size();
+				localAttachments.push_back(std::move(attachment));
+			}
+		}
+
+		void addCapturedAttachments(std::uint32_t index, Attachment&& attachment){
+			attachment.index = index;
 			localAttachments.push_back(std::move(attachment));
 		}
 
@@ -142,16 +168,12 @@ export namespace Core::Vulkan{
 			create();
 		}
 
-		void setDevice(VkDevice device){
-			this->device = device;
-		}
-
 		void loadCapturedAttachments(const std::size_t size){
 			if(size){
 				attachments.resize(size);
 			}else{
 				const std::uint32_t max = std::ranges::max(localAttachments | std::views::transform(&Attachment::index));
-				attachments.resize(max);
+				attachments.resize(max + 1);
 			}
 
 			for (const auto & attachment : localAttachments){
@@ -185,15 +207,14 @@ export namespace Core::Vulkan{
 			return localAttachments[index];
 		}
 
-		void createFrameBuffer(VkRenderPass renderPass){
-			this->renderPass = renderPass;
+		void create(){
 			checkAttachments();
 
 			if(!renderPass){
 				throw std::runtime_error{"Invalid RenderPass"};
 			}
 
-			create();
+			FrameBuffer::create(1);
 		}
 
 	protected:

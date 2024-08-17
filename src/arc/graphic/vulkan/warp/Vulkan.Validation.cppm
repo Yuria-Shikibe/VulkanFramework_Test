@@ -30,7 +30,7 @@ namespace Core::Vulkan{
 		const VkAllocationCallbacks* pAllocator,
 		VkDebugUtilsMessengerEXT* pCallback){
 
-		if(const auto func = LoadFuncPtr(instance, vkCreateDebugUtilsMessengerEXT)){
+		if(const auto* func = LoadFuncPtr(instance, vkCreateDebugUtilsMessengerEXT)){
 			return func(instance, pCreateInfo, pAllocator, pCallback);
 		} else{
 			return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -42,7 +42,7 @@ namespace Core::Vulkan{
 		VkDebugUtilsMessengerEXT callback,
 		const VkAllocationCallbacks* pAllocator
 	){
-		if(const auto func = LoadFuncPtr(instance, vkDestroyDebugUtilsMessengerEXT)){
+		if(const auto* func = LoadFuncPtr(instance, vkDestroyDebugUtilsMessengerEXT)){
 			func(instance, callback, pAllocator);
 		}
 	}

@@ -4,12 +4,13 @@ module;
 
 export module Core.Vulkan.Manager;
 
+import std;
+
 import ext.MetaProgramming;
 
 import Core.Window;
 import Core.Vulkan.Uniform;
 import Core.Vulkan.Vertex;
-import std;
 
 import Core.Vulkan.Context;
 import Core.Vulkan.Validation;
@@ -36,15 +37,18 @@ import Core.Vulkan.Buffer.IndexBuffer;
 import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
 import Core.Vulkan.Sampler;
+import Core.Vulkan.Image;
 import Core.Vulkan.Comp;
 import Core.Vulkan.RenderPassGroup;
 import Core.Vulkan.Attachment;
 import Core.Vulkan.BatchData;
 
+import Graphic.PostProcessor;
+
 import OS.File;
 
-
 import Assets.Graphic;
+import Assets.Graphic.PostProcess;
 
 export namespace Core::Vulkan{
 	class VulkanManager{
@@ -61,15 +65,20 @@ export namespace Core::Vulkan{
 		RenderProcedure batchDrawPass{};
 		RenderProcedure flushPass{};
 
-		TransientCommand obtainTransientCommand() const{
+		[[nodiscard]] TransientCommand obtainTransientCommand() const{
 			return transientCommandPool.obtainTransient(context.device.getGraphicsQueue());
 		}
 
 		FramebufferLocal batchFrameBuffer{};
 
-		std::atomic_bool isReset{false};
+		FramebufferLocal testFrameBuffer{};
+		ColorAttachment finalStagingAttachment{};
+
+		std::atomic_bool descriptorSetUpdated{false};
 		Fence batchFence{};
 		CommandBuffer batchDrawCommand{};
+
+		Graphic::PostProcessor postProcess{};
 
 		struct InFlightData{
 			Fence inFlightFence{};
@@ -93,8 +102,8 @@ export namespace Core::Vulkan{
 					.pCommandBuffers = batchDrawCommand.asData(),
 				};
 
-			if(isReset){
-				isReset = false;
+			if(descriptorSetUpdated) [[unlikely]] {
+				descriptorSetUpdated = false;
 			}else{
 				batchFence.waitAndReset();
 			}
@@ -117,11 +126,13 @@ export namespace Core::Vulkan{
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
+			postProcess.submitCommand(currentFrameData.renderFinishedSemaphore);
+
 			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			const std::array toWait{
-					currentFrameData.imageAvailableSemaphore.get(), currentFrameData.renderFinishedSemaphore.get()
+					currentFrameData.imageAvailableSemaphore.get(), postProcess.getToWait()
 				};
 
 			context.commandSubmit_Graphics(
@@ -187,14 +198,17 @@ export namespace Core::Vulkan{
 			swapChain.recreateCallback = [this](SwapChain& swapChain){
 				resize(swapChain);//createFrameBuffers();
 
-				flushPass.resize(swapChain.getSize());
-				batchDrawPass.resize(swapChain.getSize());
+				finalStagingAttachment.resize(swapChain.size2D(), obtainTransientCommand());
+				flushPass.resize(swapChain.size2D());
+				batchDrawPass.resize(swapChain.size2D());
 
 				updateInputDescriptorSet();
 
 				createDrawCommands();
 				createFlushCommands();
 			};
+
+			createPostEffectPipeline();
 
 			createFrameObjects();
 			createFlushCommands();
@@ -212,7 +226,7 @@ export namespace Core::Vulkan{
 
 			if(!imageInfo.empty()){
 				batchFence.waitAndReset();
-				isReset = true;
+				descriptorSetUpdated = true;
 			}
 
 			updator.update();
@@ -229,38 +243,49 @@ export namespace Core::Vulkan{
 		}
 
 		void createFrameBuffers(){
-
-			batchFrameBuffer.setDevice(context.device);
-			batchFrameBuffer.setSize(swapChain.getTargetWindow()->getSize());
-			batchFrameBuffer.localAttachments.clear();
+			auto cmd = obtainTransientCommand();
+			batchFrameBuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), batchDrawPass.renderPass};
 
 			ColorAttachment colorAttachment{context.physicalDevice, context.device};
 			colorAttachment.create(
-				swapChain.getTargetWindow()->getSize(), obtainTransientCommand(),
+				swapChain.getTargetWindow()->getSize(), cmd,
 				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 			);
 
 			batchFrameBuffer.pushCapturedAttachments(std::move(colorAttachment));
 
-			batchFrameBuffer.loadCapturedAttachments(1);
-			batchFrameBuffer.createFrameBuffer(batchDrawPass.renderPass);
+			testFrameBuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), batchDrawPass.renderPass};
 
-			for(const auto& [i, group] : swapChain.getImageData() | std::views::enumerate){
-				group.framebuffer.setDevice(context.device);
-				group.framebuffer.setSize(swapChain.getTargetWindow()->getSize());
+			finalStagingAttachment = ColorAttachment{context.physicalDevice, context.device};
+			finalStagingAttachment.create(
+					swapChain.getTargetWindow()->getSize(), cmd,
+					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+				);
 
-				group.framebuffer.loadExternalImageView({{0, group.imageView.get()}, {1, batchFrameBuffer.localAttachments[0].getView().get()}});
-				group.framebuffer.createFrameBuffer(flushPass.renderPass);
+			cmd = {};
+
+			for(const auto& [i, group] : swapChain.getImageData() | std::ranges::views::enumerate){
+				group.framebuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), flushPass.renderPass};
+
+				group.framebuffer.loadExternalImageView({
+					{0, group.imageView.get()},
+					{1, finalStagingAttachment.getView().get()}
+				});
+				group.framebuffer.create();
 			}
+
+			batchFrameBuffer.loadCapturedAttachments(1);
+			batchFrameBuffer.create();
 		}
 
 		void resize(SwapChain& swapChain){
 			auto cmd = obtainTransientCommand();
-			batchFrameBuffer.resize(swapChain.getSize(), cmd);
+			batchFrameBuffer.resize(swapChain.size2D(), cmd);
 
 			for(const auto& [i, group] : swapChain.getImageData() | std::views::enumerate){
-				group.framebuffer.resize(swapChain.getSize(), cmd, {{0, group.imageView.get()}, {1, batchFrameBuffer.localAttachments[0].getView().get()}});
+				group.framebuffer.resize(swapChain.size2D(), cmd, {{0, group.imageView.get()}, {1, batchFrameBuffer.localAttachments[0].getView().get()}});
 			}
 		}
 
@@ -280,11 +305,11 @@ export namespace Core::Vulkan{
 					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
 				renderPass.pushAttachment(VkAttachmentDescription{
-						.format = swapChain.getFormat(),
+						.format = VK_FORMAT_R8G8B8A8_UNORM,
 						.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 						.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-						.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-						.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+						.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
 				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
@@ -305,11 +330,11 @@ export namespace Core::Vulkan{
 			});
 
 			flushPass.pushAndInitPipeline([this](RenderProcedure::PipelineData& pipeline){
-				pipeline.setDescriptorLayout([this](DescriptorSetLayout& layout){
+				pipeline.createDescriptorLayout([this](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
 				});
 
-				pipeline.setPipelineLayout();
+				pipeline.createPipelineLayout();
 
 				pipeline.createDescriptorSet(swapChain.size());
 
@@ -317,16 +342,14 @@ export namespace Core::Vulkan{
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
-						.setVertexInputInfo<Util::EmptyVertexBind>()
 						.setShaderChain({&Assets::Shader::blitSingleVert, &Assets::Shader::blitSingleFrag})
-						.setStaticScissors({{}, std::bit_cast<VkExtent2D>(pipeline.size())})
-						.setStaticViewport(float(pipeline.size().x), float(pipeline.size().y));
+						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);
 				};
 			});
 
-			flushPass.resize(swapChain.getSize());
+			flushPass.resize(swapChain.size2D());
 		}
 
 		void setBatchGroup(){
@@ -356,12 +379,12 @@ export namespace Core::Vulkan{
 			});
 
 			batchDrawPass.pushAndInitPipeline([](RenderProcedure::PipelineData& pipeline){
-				pipeline.setDescriptorLayout([](DescriptorSetLayout& layout){
+				pipeline.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (8));
 				});
 
-				pipeline.setPipelineLayout();
+				pipeline.createPipelineLayout();
 
 				pipeline.createDescriptorSet(1);
 				pipeline.addUniformBuffer(sizeof(UniformBlock));
@@ -379,14 +402,22 @@ export namespace Core::Vulkan{
 				};
 			});
 
-			batchDrawPass.resize(swapChain.getSize());
+			batchDrawPass.resize(swapChain.size2D());
+		}
+
+		void createPostEffectPipeline(){
+			Graphic::AttachmentPort port{};
+			port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
+			port.out.insert_or_assign(3u, finalStagingAttachment.getView());
+
+			postProcess = Assets::PostProcess::Factory::blurProcessorFactory.generate(std::move(port), swapChain.size2D());
 		}
 
 		void updateInputDescriptorSet(){
 			for(std::size_t i = 0; i < swapChain.size(); ++i){
 				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal[0].descriptorSets[i]};
 
-				auto info = batchFrameBuffer.atLocal(0).getDescriptorInfo(nullptr);
+				auto info = finalStagingAttachment.getDescriptorInfo(nullptr);
 				descriptorSetUpdator.pushAttachment(info);
 				descriptorSetUpdator.update();
 			}
@@ -394,12 +425,11 @@ export namespace Core::Vulkan{
 
 		void createDrawCommands(){
 			const ScopedCommand scopedCommand{batchDrawCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-			const auto pipelineContext = batchDrawPass.getCmdContext();
 
 			const auto renderPassInfo = batchDrawPass.getBeginInfo(batchFrameBuffer);
 
 			vkCmdBeginRenderPass(scopedCommand, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-			vkCmdBindPipeline(scopedCommand, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineContext.pipeline());
+			const auto pipelineContext = batchDrawPass.startCmdContext(scopedCommand);
 
 			pipelineContext.data().bindDescriptorTo(scopedCommand);
 
@@ -409,7 +439,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createFlushCommands(){
-			for(const auto& [i, commandBuffer] : swapChain.getCommandFlushes() | std::views::enumerate){
+			for(const auto& [i, commandBuffer] : swapChain.getCommandFlushes() | std::ranges::views::enumerate){
 				ScopedCommand scopedCommand{commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
 				VkClearValue clearColor[1]{};
@@ -426,11 +456,15 @@ export namespace Core::Vulkan{
 				                        1, flushPass.front().descriptorSets[i].asData(),
 				                        0, nullptr);
 
-				vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+				commandBuffer.blitDraw();
+				// vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 				vkCmdEndRenderPass(commandBuffer);
 
-				batchFrameBuffer.atLocal(0).cmdClear(commandBuffer, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				batchFrameBuffer.atLocal(0).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				//TODO self clear
+				// postProcess.framebuffer.atLocal(0).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				// postProcess.framebuffer.atLocal(1).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 			}
 		}
 

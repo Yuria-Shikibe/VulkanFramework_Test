@@ -55,6 +55,17 @@ export namespace Core::Vulkan{
 				&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias
 			};
 
+		constexpr Util::Component LOD_None{
+				VkSamplerCreateInfo{
+					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
+					.mipLodBias = 0,
+					.minLod = 0,
+					.maxLod = 0,
+				},
+				&VkSamplerCreateInfo::mipmapMode, &VkSamplerCreateInfo::minLod,
+				&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias
+			};
+
 
 		//designators must appear in member declaration order of class
 		template <VkCompareOp op = VK_COMPARE_OP_NEVER>
@@ -177,11 +188,11 @@ export namespace Core::Vulkan{
 		}
 
 		[[nodiscard]] constexpr VkDescriptorImageInfo
-			getDescriptorInfo_ShaderRead(VkImageView imageView) const noexcept{
+			getDescriptorInfo_ShaderRead(VkImageView imageView, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const noexcept{
 			return {
 					.sampler = handle,
 					.imageView = imageView,
-					.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					.imageLayout = layout
 				};
 		}
 

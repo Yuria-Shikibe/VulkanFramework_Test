@@ -94,7 +94,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_sources(${PROJECT_NAME}
-    PUBLIC
+    PRIVATE
     ${FAST_MODULES}      #[[Modules]]
     ${MODULE_DIR}/std.ixx
 )
