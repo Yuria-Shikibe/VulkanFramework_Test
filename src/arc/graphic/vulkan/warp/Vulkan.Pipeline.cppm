@@ -32,6 +32,7 @@ export namespace Core::Vulkan{
 
 		VkPipelineVertexInputStateCreateInfo vertexInputInfo{VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
 		VkPipelineViewportStateCreateInfo viewportState{};
+		VkPipelineDepthStencilStateCreateInfo depthStencilState{};
 
 		std::uint32_t dynamicViewportSize{};
 		std::vector<VkViewport> staticViewports{};
@@ -60,6 +61,11 @@ export namespace Core::Vulkan{
 
 		PipelineTemplate& setColorBlend(const VkPipelineColorBlendStateCreateInfo* info){
 			pColorBlendState = info;
+			return *this;
+		}
+
+		PipelineTemplate& setDepthStencilState(const VkPipelineDepthStencilStateCreateInfo& info){
+			depthStencilState = info;
 			return *this;
 		}
 
@@ -180,6 +186,7 @@ export namespace Core::Vulkan{
 			this->pDynamicState = &dynamicStateInfo;
 
 			this->pViewportState = &viewportState;
+			this->pDepthStencilState = &depthStencilState;
 
 			VkPipeline pipeline{};
 			auto rst = vkCreateGraphicsPipelines(device, nullptr, 1, this, nullptr, &pipeline);

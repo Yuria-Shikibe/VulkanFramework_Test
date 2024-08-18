@@ -71,14 +71,15 @@ export namespace Core::Vulkan{
 
 		FramebufferLocal batchFrameBuffer{};
 
-		FramebufferLocal testFrameBuffer{};
-		ColorAttachment finalStagingAttachment{};
+		ColorAttachment blurStagingAttachment{};
+		ColorAttachment mergeStagingAttachment{};
 
 		std::atomic_bool descriptorSetUpdated{false};
 		Fence batchFence{};
 		CommandBuffer batchDrawCommand{};
 
-		Graphic::PostProcessor postProcess{};
+		Graphic::PostProcessor processBlur{};
+		Graphic::PostProcessor processBloom{};
 
 		struct InFlightData{
 			Fence inFlightFence{};
@@ -126,13 +127,14 @@ export namespace Core::Vulkan{
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
-			postProcess.submitCommand(currentFrameData.renderFinishedSemaphore);
+			processBlur.submitCommand(currentFrameData.renderFinishedSemaphore);
+			processBloom.submitCommand(processBlur.getToWait());
 
 			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			const std::array toWait{
-					currentFrameData.imageAvailableSemaphore.get(), postProcess.getToWait()
+					currentFrameData.imageAvailableSemaphore.get(), processBloom.getToWait()
 				};
 
 			context.commandSubmit_Graphics(
@@ -186,6 +188,7 @@ export namespace Core::Vulkan{
 			for (auto && commandBuffer : swapChain.getCommandFlushes()){
 				commandBuffer = commandPool.obtain();
 			}
+
 		}
 
 		void initVulkan(){
@@ -198,9 +201,26 @@ export namespace Core::Vulkan{
 			swapChain.recreateCallback = [this](SwapChain& swapChain){
 				resize(swapChain);//createFrameBuffers();
 
-				finalStagingAttachment.resize(swapChain.size2D(), obtainTransientCommand());
 				flushPass.resize(swapChain.size2D());
 				batchDrawPass.resize(swapChain.size2D());
+
+				auto cmd = obtainTransientCommand();
+				blurStagingAttachment.resize(swapChain.size2D(), cmd);
+				mergeStagingAttachment.resize(swapChain.size2D(), cmd);
+				batchFrameBuffer.resize(swapChain.size2D(), cmd);
+				cmd = {};
+
+				for(const auto& [i, group] : swapChain.getImageData() | std::ranges::views::enumerate){
+					group.framebuffer.setSize(swapChain.size2D());
+					group.framebuffer.loadExternalImageView({
+						{0, group.imageView.get()},
+						{1, mergeStagingAttachment.getView().get()}
+					});
+					group.framebuffer.create();
+				}
+
+				processBloom.resize(swapChain.size2D());
+				processBlur.resize(swapChain.size2D());
 
 				updateInputDescriptorSet();
 
@@ -253,13 +273,26 @@ export namespace Core::Vulkan{
 				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 			);
 
+			DepthStencilAttachment depthAttachment{context.physicalDevice, context.device};
+			depthAttachment.create(
+				swapChain.getTargetWindow()->getSize(), cmd,
+				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+			);
+
 			batchFrameBuffer.pushCapturedAttachments(std::move(colorAttachment));
+			batchFrameBuffer.pushCapturedAttachments(std::move(depthAttachment));
 
-			testFrameBuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), batchDrawPass.renderPass};
+			blurStagingAttachment = ColorAttachment{context.physicalDevice, context.device};
+			blurStagingAttachment.create(
+					swapChain.size2D(), cmd,
+					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+				);
 
-			finalStagingAttachment = ColorAttachment{context.physicalDevice, context.device};
-			finalStagingAttachment.create(
-					swapChain.getTargetWindow()->getSize(), cmd,
+			mergeStagingAttachment = ColorAttachment{context.physicalDevice, context.device};
+			mergeStagingAttachment.create(
+					swapChain.size2D(), cmd,
 					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
 				);
@@ -267,16 +300,16 @@ export namespace Core::Vulkan{
 			cmd = {};
 
 			for(const auto& [i, group] : swapChain.getImageData() | std::ranges::views::enumerate){
-				group.framebuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), flushPass.renderPass};
+				group.framebuffer = FramebufferLocal{context.device, swapChain.size2D(), flushPass.renderPass};
 
 				group.framebuffer.loadExternalImageView({
 					{0, group.imageView.get()},
-					{1, finalStagingAttachment.getView().get()}
+					{1, mergeStagingAttachment.getView().get()}
 				});
 				group.framebuffer.create();
 			}
 
-			batchFrameBuffer.loadCapturedAttachments(1);
+			batchFrameBuffer.loadCapturedAttachments(2);
 			batchFrameBuffer.create();
 		}
 
@@ -365,6 +398,13 @@ export namespace Core::Vulkan{
 						.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
 					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
+				renderPass.pushAttachment(VkAttachmentDescription{
+						.format = VK_FORMAT_D24_UNORM_S8_UINT,
+						.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+						.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+						.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+						.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
 				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
 					subpass.addDependency(VkSubpassDependency{
@@ -375,6 +415,8 @@ export namespace Core::Vulkan{
 
 					subpass.addAttachment(
 						RenderPass::AttachmentReference::Category::color, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+					subpass.addAttachment(
+						RenderPass::AttachmentReference::Category::depthStencil, 1, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 				});
 			});
 
@@ -393,6 +435,8 @@ export namespace Core::Vulkan{
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
+						.setDepthStencilState(Default::DefaultDepthStencilState)
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::AlphaBlend}>)
 						.setVertexInputInfo<VertBindInfo>()
 						.setShaderChain({&Assets::Shader::batchVertShader, &Assets::Shader::batchFragShader})
 						.setStaticScissors({{}, std::bit_cast<VkExtent2D>(pipeline.size())})
@@ -406,18 +450,29 @@ export namespace Core::Vulkan{
 		}
 
 		void createPostEffectPipeline(){
-			Graphic::AttachmentPort port{};
-			port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
-			port.out.insert_or_assign(3u, finalStagingAttachment.getView());
+			processBlur = Assets::PostProcess::Factory::blurProcessorFactory.generate(swapChain.size2D(), [this]{
+				Graphic::AttachmentPort port{};
+				port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
+				port.out.insert_or_assign(3u, blurStagingAttachment.getView());
+				return port;
+			});
 
-			postProcess = Assets::PostProcess::Factory::blurProcessorFactory.generate(std::move(port), swapChain.size2D());
+
+			processBloom = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
+				Graphic::AttachmentPort port{};
+				port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
+				port.in.insert_or_assign(1u, blurStagingAttachment.getView());
+				port.out.insert_or_assign(2u, mergeStagingAttachment.getView());
+
+				return port;
+			});
 		}
 
 		void updateInputDescriptorSet(){
 			for(std::size_t i = 0; i < swapChain.size(); ++i){
 				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal[0].descriptorSets[i]};
 
-				auto info = finalStagingAttachment.getDescriptorInfo(nullptr);
+				auto info = mergeStagingAttachment.getDescriptorInfo(nullptr);
 				descriptorSetUpdator.pushAttachment(info);
 				descriptorSetUpdator.update();
 			}
@@ -457,14 +512,12 @@ export namespace Core::Vulkan{
 				                        0, nullptr);
 
 				commandBuffer.blitDraw();
-				// vkCmdDraw(commandBuffer, 3, 1, 0, 0);
 
 				vkCmdEndRenderPass(commandBuffer);
 
-				batchFrameBuffer.atLocal(0).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				//TODO self clear
-				// postProcess.framebuffer.atLocal(0).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				// postProcess.framebuffer.atLocal(1).cmdClear(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				batchFrameBuffer.atLocal(0).cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				batchFrameBuffer.atLocal(1).cmdClearDepthStencil(scopedCommand, {1.f}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+
 			}
 		}
 

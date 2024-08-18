@@ -25,8 +25,20 @@ export namespace Core::Vulkan{
 		Dependency<VkRenderPass> renderPass{};
 
 	public:
+		[[nodiscard]] VkDescriptorImageInfo getInputInfo(const std::size_t index, VkImageLayout imageLayout) const{
+			 return {
+				.sampler = nullptr,
+				.imageView = at(index),
+				.imageLayout = imageLayout
+			};
+		}
+
 		void setSize(const Geom::USize2 size){
 			this->size = size;
+		}
+
+		void setRenderPass(VkRenderPass renderPass){
+			this->renderPass = renderPass;
 		}
 
 		void destroy(){
@@ -171,7 +183,7 @@ export namespace Core::Vulkan{
 		void loadCapturedAttachments(const std::size_t size){
 			if(size){
 				attachments.resize(size);
-			}else{
+			}else if(!localAttachments.empty()){
 				const std::uint32_t max = std::ranges::max(localAttachments | std::views::transform(&Attachment::index));
 				attachments.resize(max + 1);
 			}

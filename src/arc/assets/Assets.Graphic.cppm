@@ -26,6 +26,8 @@ export namespace Assets{
 		Core::Vulkan::ShaderModule blitBlurFrag{};
 		Core::Vulkan::ShaderModule blitBlurVert{};
 
+		Core::Vulkan::ShaderModule blitMergeFrag{};
+
 		void load(VkDevice device);
 
 		void dispose(){
@@ -36,6 +38,7 @@ export namespace Assets{
 
 			blitBlurFrag = {};
 			blitBlurVert = {};
+			blitMergeFrag = {};
 		}
 	}
 

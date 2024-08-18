@@ -147,6 +147,13 @@ namespace Core::Vulkan{
 				&VkAttachmentDescription::loadOp,
 			};
 
+		constexpr Util::Component Store_Store{
+				VkAttachmentDescription{
+					.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+				},
+				&VkAttachmentDescription::storeOp,
+			};
+
 		template <VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL>
 		constexpr Util::Component ImportAttachment{
 				VkAttachmentDescription{

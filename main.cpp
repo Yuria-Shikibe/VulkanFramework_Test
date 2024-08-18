@@ -20,7 +20,7 @@ import Graphic.Batch;
 
 import Assets.Graphic;
 
-std::array<Core::Vulkan::Texture, 10> textures{};
+std::array<Core::Vulkan::Texture, 3> textures{};
 
 int main(){
 	using namespace Core;
@@ -39,7 +39,7 @@ int main(){
 	vulkanManager->initVulkan();
 
 	for(const auto& [i, texture] : textures | std::views::enumerate){
-		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\test-{}.png)", i);
+		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\t{}.png)", i);
 		texture = Core::Vulkan::Texture{
 				vulkanManager->context.physicalDevice, vulkanManager->context.device,
 				OS::File{p},
@@ -72,7 +72,7 @@ int main(){
 		while(window && !window->shouldClose()) {
 			window->pollEvents();
 
-			auto t = glfwGetTime();
+			float t = glfwGetTime();
 			// vulkanManager->drawBegin();
 
 			Geom::Matrix3D matrix3D{};
@@ -82,12 +82,13 @@ int main(){
 
 			for(std::uint32_t x = 0; x < 10; ++x){
 				for(const auto& [i, texture] : textures | std::views::enumerate){
+					Geom::Vec2 off{x * 300.f + t * 10.f, 500.f * i};
 					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
 					new(dataPtr) std::array{
-						Vulkan::BatchVertex{Geom::Vec2{0 , 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{50, 0 }.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{50, 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {1.0f, 0.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{0 , 50}.addScaled({0, 50}, i).add(x * 50, 0), 0, imageIndex, Graphic::Colors::WHITE, {0.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{500, 0  }.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{500, 500}.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::CLEAR, {1.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0  , 500}.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::CLEAR, {0.0f, 0.0f}},
 					};
 				}
 			}

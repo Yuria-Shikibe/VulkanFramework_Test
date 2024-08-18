@@ -181,8 +181,10 @@ export namespace Core::Vulkan{
 		RenderPass& operator=(RenderPass&& other) noexcept{
 			if(this == &other) return *this;
 			destroy();
-			Wrapper::operator =(std::move(other));
+			Wrapper<VkRenderPass>::operator =(std::move(other));
 			device = std::move(other.device);
+			attachmentSockets = std::move(other.attachmentSockets);
+			subpasses = std::move(other.subpasses);
 			return *this;
 		}
 

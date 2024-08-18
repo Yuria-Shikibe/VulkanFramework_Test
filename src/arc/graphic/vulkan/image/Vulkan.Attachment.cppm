@@ -25,7 +25,12 @@ export namespace Core::Vulkan{
 
 		//TODO miplevels support??
 
-		void resize(const Geom::USize2 size, VkCommandBuffer commandBuffer){
+		void setScale(const float scale){
+			this->scale = scale;
+		}
+
+		void resize(Geom::USize2 size, VkCommandBuffer commandBuffer){
+			size.scl(scale);
 			if(size == this->size) return;
 
 			this->size = size;
@@ -44,15 +49,33 @@ export namespace Core::Vulkan{
 				}
 			};
 
+			VkImageAspectFlags aspects{};
+
+			if(usages & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT){
+				aspects |= VK_IMAGE_ASPECT_COLOR_BIT;
+			}
+
+			if(usages & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT){
+				aspects |= VK_IMAGE_ASPECT_DEPTH_BIT;
+				aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
+			}
+
 			image.transitionImageLayout(
 				commandBuffer,
 				format,
-				VK_IMAGE_LAYOUT_UNDEFINED, bestLayout, 1);
+				VK_IMAGE_LAYOUT_UNDEFINED, bestLayout, 1, aspects);
 
-			defaultView = ImageView{device, image, format};
+			defaultView = ImageView{device, image, format, {
+				.aspectMask = aspects,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = layers
+			}};
 		}
 
-		void cmdClear(VkCommandBuffer commandBuffer,
+		//TODO merge two below to one template function
+		void cmdClearColor(VkCommandBuffer commandBuffer,
 			VkClearColorValue clearColor,
 			VkAccessFlags srcAccessFlags,
 			VkImageAspectFlags aspect
@@ -78,6 +101,7 @@ export namespace Core::Vulkan{
 			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
 				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 
+
 			vkCmdClearColorImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &imageSubresourceRange);
 
 			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -89,6 +113,43 @@ export namespace Core::Vulkan{
 				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 		}
 
+		void cmdClearDepthStencil(VkCommandBuffer commandBuffer,
+			VkClearDepthStencilValue clearValue,
+			VkAccessFlags srcAccessFlags,
+			VkImageAspectFlags aspect
+		) const{
+			VkImageSubresourceRange imageSubresourceRange{
+				aspect,
+				0, 1, 0, layers
+			};
+
+			VkImageMemoryBarrier imageMemoryBarrier{
+				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+				nullptr,
+				srcAccessFlags,
+				VK_ACCESS_TRANSFER_WRITE_BIT,
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_QUEUE_FAMILY_IGNORED,
+				VK_QUEUE_FAMILY_IGNORED,
+				image,
+				imageSubresourceRange
+			};
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+
+
+			vkCmdClearDepthStencilImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &imageSubresourceRange);
+
+			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			imageMemoryBarrier.dstAccessMask = 0;
+			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageMemoryBarrier.newLayout = bestLayout;
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+		}
 
 		using CombinedImage::CombinedImage;
 
@@ -104,7 +165,7 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("Device or PhysicalDevice is null");
 			}
 
-			layers = 1;
+			this->layers = 1;
 			this->usages = usages;
 			this->format = format;
 			this->bestLayout = imageLayout;
@@ -141,9 +202,12 @@ export namespace Core::Vulkan{
 		}
 
 		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) {
-			Attachment::cmdClear(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
+			Attachment::cmdClearColor(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	};
+
+
+	//TODO as functions instead of class?
 
 	/**
 	 * @brief Slice Usage
@@ -165,7 +229,7 @@ export namespace Core::Vulkan{
 		}
 
 		void cmdClear(VkCommandBuffer commandBuffer, VkClearColorValue clearColor, VkAccessFlags srcAccessFlags = 0) const{
-			Attachment::cmdClear(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
+			Attachment::cmdClearColor(commandBuffer, clearColor, srcAccessFlags, VK_IMAGE_ASPECT_COLOR_BIT);
 		}
 	};
 }

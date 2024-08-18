@@ -251,7 +251,7 @@ export namespace Core::Vulkan{
 			const auto result = vkAcquireNextImageKHR(device, swapChain, timeout, semaphore, nullptr, &imageIndex);
 
 			if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-				recreate();
+				resized = true;
 			} else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
 				throw std::runtime_error("failed to acquire swap chain image!");
 			}

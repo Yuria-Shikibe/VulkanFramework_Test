@@ -120,6 +120,21 @@ namespace Core::Vulkan{
 				.primitiveRestartEnable = false
 			};
 
+		constexpr VkPipelineDepthStencilStateCreateInfo DefaultDepthStencilState{
+				.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.depthTestEnable = true,
+				.depthWriteEnable = true,
+				.depthCompareOp = VK_COMPARE_OP_LESS,
+				.depthBoundsTestEnable = false,
+				.stencilTestEnable = false,
+				.front = {},
+				.back = {},
+				.minDepthBounds = 0.f,
+				.maxDepthBounds = 1.f
+			};
+
 		template <std::uint32_t ViewportSize = 1>
 		constexpr VkPipelineViewportStateCreateInfo DynamicViewportState{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,

@@ -48,10 +48,15 @@ export namespace Graphic{
 		std::function<void(PostProcessor&)> commandRecorder{};
 		std::function<void(PostProcessor&)> appendCommandRecorder{};
 		std::function<void(PostProcessor&)> descriptorSetUpdator{};
+		std::function<void(PostProcessor&)> resizeCallback{};
+
+		using PortProv = std::function<AttachmentPort()>;
+		PortProv portProv{};
+
 
 		[[nodiscard]] PostProcessor() = default;
 
-		[[nodiscard]] explicit PostProcessor(const Core::Vulkan::Context& context, AttachmentPort&& port = {}) : context{&context}, port{std::move(port)}{
+		[[nodiscard]] explicit PostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv) : context{&context}, portProv{std::move(portProv)}{
 			transientCommandPool = Core::Vulkan::CommandPool{
 					context.device, context.physicalDevice.queues.graphicsFamily,
 					VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
@@ -63,6 +68,10 @@ export namespace Graphic{
 				};
 
 			commandBuffer = commandPool.obtain();
+
+			if(this->portProv){
+				port = this->portProv();
+			}
 
 			renderProcedure.init(context);
 			processCompleteSemaphore = Core::Vulkan::Semaphore{context.device};
@@ -91,7 +100,14 @@ export namespace Graphic{
 		}
 
 		void resize(Geom::USize2 size){
+			if(resizeCallback)resizeCallback(*this);
 			renderProcedure.resize(size);
+			framebuffer.setRenderPass(renderProcedure.renderPass);
+
+			if(portProv){
+				port = portProv();
+			}
+
 			framebuffer.resize(
 				size,
 				transientCommandPool.obtainTransient(context->device.getGraphicsQueue()),
@@ -110,20 +126,25 @@ export namespace Graphic{
 		}
 
 		void submitCommand(VkSemaphore toWait) const{
-			auto lowerBound = appendCommandBuffers.lower_bound(0);
-
 			std::vector<VkCommandBuffer> commandBuffers{};
 			commandBuffers.reserve(appendCommandBuffers.size() + 1);
 
-			std::ranges::transform(
-				std::ranges::subrange{appendCommandBuffers.begin(), lowerBound} | std::views::values,
-				std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
+			if(appendCommandBuffers.empty()){
+				commandBuffers.push_back(commandBuffer.get());
+			}else{
+				auto lowerBound = appendCommandBuffers.lower_bound(0);
 
-			commandBuffers.push_back(commandBuffer);
+				std::ranges::transform(
+					std::ranges::subrange{appendCommandBuffers.begin(), lowerBound} | std::views::values,
+					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
 
-			std::ranges::transform(
-				std::ranges::subrange{lowerBound, appendCommandBuffers.end()} | std::views::values,
-				std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
+				commandBuffers.push_back(commandBuffer);
+
+				std::ranges::transform(
+					std::ranges::subrange{lowerBound, appendCommandBuffers.end()} | std::views::values,
+					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
+			}
+
 
 			std::array<VkPipelineStageFlags, 1> stage{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
 
@@ -146,10 +167,10 @@ export namespace Graphic{
 
 	struct PostProcessorFactory{
 		const Core::Vulkan::Context* context{};
-		std::function<PostProcessor(const PostProcessorFactory&, AttachmentPort&&, Geom::USize2)> creator{};
+		std::function<PostProcessor(const PostProcessorFactory&, PostProcessor::PortProv&&, Geom::USize2)> creator{};
 
-		PostProcessor generate(AttachmentPort&& port, Geom::USize2 size) const{
-			return creator(*this, std::move(port), size);
+		PostProcessor generate(const Geom::USize2 size, PostProcessor::PortProv&& portProv) const{
+			return creator(*this, std::move(portProv), size);
 		}
 	};
 }

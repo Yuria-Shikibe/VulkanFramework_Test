@@ -20,19 +20,23 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	using namespace Core::Vulkan;
 
 	Factory::blurProcessorFactory = Graphic::PostProcessorFactory{&context};
+	Factory::mergeBloomFactory = Graphic::PostProcessorFactory{&context};
 
 	Factory::blurProcessorFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::AttachmentPort&& port, Geom::USize2 size){
-			Graphic::PostProcessor processor{*factory.context, std::move(port)};
-			static constexpr std::uint32_t Passes = 1;
+		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, Geom::USize2 size){
+			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+			static constexpr std::uint32_t Passes = 3;
+			static constexpr float Scale = 0.5f;
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
+
 				{
 					renderPass.pushAttachment( //port.in[0]
 						VkAttachmentDescription{}
 						| AttachmentDesc::Default
 						| AttachmentDesc::Stencil_DontCare
-						| AttachmentDesc::ImportAttachment<>);
+						| AttachmentDesc::ImportAttachment<>
+						| AttachmentDesc::Store_Store);
 
 					renderPass.pushAttachment( //Pingpong 1
 						VkAttachmentDescription{}
@@ -90,8 +94,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
 				});
 
-				data.pushConstant({VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(BlurConstants_Step)});
-				data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 16, sizeof(BlurConstants_Scl)});
+				data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BlurConstants)});
 
 				data.createDescriptorSet(3);
 
@@ -112,14 +115,15 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.createFramebuffer([&](FramebufferLocal& framebuffer){
 				constexpr auto PingPongUsage =
-					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 				auto command = processor.obtainTransientCommand();
 
 				ColorAttachment pingpong1{factory.context->physicalDevice, factory.context->device};
+				pingpong1.setScale(Scale);
 				pingpong1.create(size, command, PingPongUsage);
 
 				ColorAttachment pingpong2{factory.context->physicalDevice, factory.context->device};
+				pingpong2.setScale(Scale);
 				pingpong2.create(size, command, PingPongUsage);
 
 				//submit command
@@ -159,30 +163,28 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				const auto unitStep = ~postProcessor.size().as<float>();
 
-				constexpr BlurConstants_Scl scl{};
-
 				const std::array arr{
-						BlurConstants_Step{
+						BlurConstants{
 							//sample X
-							unitStep * Geom::norXVec2<float> * BlurConstants_Step::UnitNear,
-							unitStep * Geom::norXVec2<float> * BlurConstants_Step::UnitFar,
+							unitStep * Geom::norXVec2<float> * BlurConstants::UnitNear,
+							unitStep * Geom::norXVec2<float> * BlurConstants::UnitFar,
 						},
-						BlurConstants_Step{
+						BlurConstants{
 							//sample Y
-							unitStep * Geom::norYVec2<float> * BlurConstants_Step::UnitNear,
-							unitStep * Geom::norYVec2<float> * BlurConstants_Step::UnitFar,
+							unitStep * Geom::norYVec2<float> * BlurConstants::UnitNear,
+							unitStep * Geom::norYVec2<float> * BlurConstants::UnitFar,
 						}
 					};
 
 				cmdContext.data().bindDescriptorTo(scopedCommand, 0);
-				cmdContext.data().bindConstantToSeq(scopedCommand, arr[0], scl);
+				cmdContext.data().bindConstantToSeq(scopedCommand, arr[0]);
 				scopedCommand->blitDraw();
 				cmdContext.next();
 
 				for(bool flag{false}; const auto& step : arr){
 					for(std::uint32_t i = 0; i < Passes - 1; ++i){
 						cmdContext.data().bindDescriptorTo(scopedCommand, 1 + flag);
-						cmdContext.data().bindConstantToSeq(scopedCommand, step, scl);
+						cmdContext.data().bindConstantToSeq(scopedCommand, step);
 						scopedCommand->blitDraw();
 						cmdContext.next();
 						flag = !flag;
@@ -190,9 +192,104 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				}
 
 				cmdContext.data().bindDescriptorTo(scopedCommand, 1);
-				cmdContext.data().bindConstantToSeq(scopedCommand, arr[1], scl);
+				cmdContext.data().bindConstantToSeq(scopedCommand, arr[1]);
 				scopedCommand->blitDraw();
 				cmdContext.next();
+
+				vkCmdEndRenderPass(scopedCommand);
+			};
+
+			processor.updateDescriptors();
+			processor.recordCommand();
+
+			return processor;
+		};
+
+	Factory::mergeBloomFactory.creator = [](
+		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, Geom::USize2 size){
+			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+
+			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
+				{
+					renderPass.pushAttachment( //port.in[0] source
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ImportAttachment<>);
+
+					renderPass.pushAttachment( //port.in[1] blurred
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ImportAttachment<VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL>);
+
+					renderPass.pushAttachment( //port.out[0]
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ExportAttachment
+						| AttachmentDesc::Load_DontCare);
+				}
+
+				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
+					subpass.addInput(0);
+					subpass.addInput(1);
+					subpass.addOutput(2);
+				});
+			});
+
+			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+				data.createDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+				});
+
+				// data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BlurConstants)});
+
+				data.createDescriptorSet(1);
+
+				data.createPipelineLayout();
+
+				data.builder = [](RenderProcedure::PipelineData& pipeline){
+					PipelineTemplate pipelineTemplate{};
+					pipelineTemplate
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
+						.setShaderChain({&Shader::blitSingleVert, &Shader::blitMergeFrag})
+						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+
+					pipeline.createPipeline(pipelineTemplate);
+				};
+			});
+
+			processor.renderProcedure.resize(size);
+
+			processor.createFramebuffer([](FramebufferLocal& framebuffer){
+				//using externals
+			});
+
+			processor.descriptorSetUpdator = [](Graphic::PostProcessor& postProcessor){
+				auto& set = postProcessor.renderProcedure.front().descriptorSets;
+
+				DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
+
+				auto infoSrc = postProcessor.framebuffer.getInputInfo(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				auto infoBlur = postProcessor.framebuffer.getInputInfo(1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				updator.pushAttachment(infoSrc);
+				updator.pushAttachment(infoBlur);
+				updator.update();
+			};
+
+			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
+				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+
+				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
+				vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
+
+				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
+
+
+				cmdContext.data().bindDescriptorTo(scopedCommand);
+				scopedCommand->blitDraw();
 
 				vkCmdEndRenderPass(scopedCommand);
 			};

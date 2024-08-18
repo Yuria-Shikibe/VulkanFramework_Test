@@ -160,6 +160,12 @@ export namespace Core::Vulkan{
 
 		std::vector<std::pair<VkPipeline, PipelineData*>> pipelines{};
 
+		[[nodiscard]] RenderProcedure() = default;
+
+		[[nodiscard]] explicit RenderProcedure(const Context& context) : context{&context}{
+			renderPass = RenderPass{context.device};
+		}
+
 		void init(const Context& context){
 			this->context = &context;
 
@@ -265,6 +271,38 @@ export namespace Core::Vulkan{
 			if(std::ranges::any_of(pipelines | std::views::keys, std::not_fn(std::identity{}))){
 				throw std::runtime_error("VkPipeline is NULL");
 			}
+		}
+
+		RenderProcedure(const RenderProcedure& other) = delete;
+
+		RenderProcedure(RenderProcedure&& other) noexcept
+			: context{other.context},
+			  renderPass{std::move(other.renderPass)},
+			  size{std::move(other.size)},
+			  pipelinesLocal{std::move(other.pipelinesLocal)},
+			  pipelinesExternal{std::move(other.pipelinesExternal)},
+			  pipelines{std::move(other.pipelines)}{
+			for (auto& pipe : pipelines | std::views::values){
+				pipe->group = this;
+			}
+		}
+
+		RenderProcedure& operator=(const RenderProcedure& other) = delete;
+
+		RenderProcedure& operator=(RenderProcedure&& other) noexcept{
+			if(this == &other) return *this;
+			context = other.context;
+			renderPass = std::move(other.renderPass);
+			size = std::move(other.size);
+			pipelinesLocal = std::move(other.pipelinesLocal);
+			pipelinesExternal = std::move(other.pipelinesExternal);
+			pipelines = std::move(other.pipelines);
+
+			for (auto& pipe : pipelines | std::views::values){
+				pipe->group = this;
+			}
+
+			return *this;
 		}
 
 		//TODO make it as iterator??

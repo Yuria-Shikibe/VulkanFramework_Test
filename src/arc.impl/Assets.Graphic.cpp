@@ -31,6 +31,10 @@ void Assets::Shader::load(VkDevice device){
 	blitBlurVert = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit_blur.vert.spv)"
 	};
+
+	blitMergeFrag = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(blit_merge.frag.spv)"
+	};
 }
 
 void Assets::Sampler::load(VkDevice device){
