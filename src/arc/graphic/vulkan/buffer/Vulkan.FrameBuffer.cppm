@@ -33,6 +33,8 @@ export namespace Core::Vulkan{
 			};
 		}
 
+		[[nodiscard]] Geom::USize2 getSize() const noexcept{ return size; }
+
 		void setSize(const Geom::USize2 size){
 			this->size = size;
 		}

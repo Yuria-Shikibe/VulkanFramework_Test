@@ -10,6 +10,7 @@ import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 
 import Geom.Vector2D;
+import ext.Concepts;
 import std;
 
 export namespace Core::Vulkan{
@@ -63,7 +64,7 @@ export namespace Core::Vulkan{
 			image.transitionImageLayout(
 				commandBuffer,
 				format,
-				VK_IMAGE_LAYOUT_UNDEFINED, bestLayout, 1, aspects);
+				VK_IMAGE_LAYOUT_UNDEFINED, bestLayout, 1, 1, aspects);
 
 			defaultView = ImageView{device, image, format, {
 				.aspectMask = aspects,
@@ -76,41 +77,11 @@ export namespace Core::Vulkan{
 
 		//TODO merge two below to one template function
 		void cmdClearColor(VkCommandBuffer commandBuffer,
-			VkClearColorValue clearColor,
+			VkClearColorValue clearValue,
 			VkAccessFlags srcAccessFlags,
 			VkImageAspectFlags aspect
 		) const{
-			VkImageSubresourceRange imageSubresourceRange{
-				aspect,
-				0, 1, 0, layers
-			};
-
-			VkImageMemoryBarrier imageMemoryBarrier{
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-				nullptr,
-				srcAccessFlags,
-				VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED,
-				VK_QUEUE_FAMILY_IGNORED,
-				image,
-				imageSubresourceRange
-			};
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
-
-
-			vkCmdClearColorImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearColor, 1, &imageSubresourceRange);
-
-			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			imageMemoryBarrier.dstAccessMask = 0;
-			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrier.newLayout = bestLayout;
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+			cmdClear(vkCmdClearColorImage, commandBuffer, clearValue, srcAccessFlags, aspect);
 		}
 
 		void cmdClearDepthStencil(VkCommandBuffer commandBuffer,
@@ -118,37 +89,7 @@ export namespace Core::Vulkan{
 			VkAccessFlags srcAccessFlags,
 			VkImageAspectFlags aspect
 		) const{
-			VkImageSubresourceRange imageSubresourceRange{
-				aspect,
-				0, 1, 0, layers
-			};
-
-			VkImageMemoryBarrier imageMemoryBarrier{
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-				nullptr,
-				srcAccessFlags,
-				VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED,
-				VK_QUEUE_FAMILY_IGNORED,
-				image,
-				imageSubresourceRange
-			};
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
-
-
-			vkCmdClearDepthStencilImage(commandBuffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &imageSubresourceRange);
-
-			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			imageMemoryBarrier.dstAccessMask = 0;
-			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrier.newLayout = bestLayout;
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+			cmdClear(vkCmdClearDepthStencilImage, commandBuffer, clearValue, srcAccessFlags, aspect);
 		}
 
 		using CombinedImage::CombinedImage;
@@ -179,6 +120,45 @@ export namespace Core::Vulkan{
 				.imageView = defaultView,
 				.imageLayout = layout
 			};
+		}
+
+	protected:
+		template <typename Fn>
+		void cmdClear(Fn fn, VkCommandBuffer commandBuffer,
+			std::add_lvalue_reference_t<std::remove_pointer_t<std::tuple_element_t<3, typename Concepts::FunctionTraits<std::remove_pointer_t<Fn>>::ArgsTuple>>> clearValue,
+			VkAccessFlags srcAccessFlags,
+			VkImageAspectFlags aspect
+		) const{
+			VkImageSubresourceRange imageSubresourceRange{
+				aspect,
+				0, 1, 0, layers
+			};
+
+			VkImageMemoryBarrier imageMemoryBarrier{
+				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+				nullptr,
+				srcAccessFlags,
+				VK_ACCESS_TRANSFER_WRITE_BIT,
+				VK_IMAGE_LAYOUT_UNDEFINED,
+				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				VK_QUEUE_FAMILY_IGNORED,
+				VK_QUEUE_FAMILY_IGNORED,
+				image,
+				imageSubresourceRange
+			};
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+
+			fn(commandBuffer, image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &imageSubresourceRange);
+
+			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			imageMemoryBarrier.dstAccessMask = 0;
+			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageMemoryBarrier.newLayout = bestLayout;
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
+				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 		}
 	};
 

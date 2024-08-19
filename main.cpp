@@ -17,10 +17,13 @@ import Core.InitAndTerminate;
 import OS.File;
 import Graphic.Color;
 import Graphic.Batch;
+import Graphic.Pixmap;
 
 import Assets.Graphic;
 
 std::array<Core::Vulkan::Texture, 3> textures{};
+
+Core::Vulkan::Texture textureArray{};
 
 int main(){
 	using namespace Core;
@@ -31,6 +34,12 @@ int main(){
 				Vulkan::DefaultCompilerPath, file, Vulkan::TargetCompilerPath
 			}.compile();
 	});
+
+	std::array<Graphic::Pixmap, 3> texArr{};
+	for(const auto& [i, texture] : texArr | std::views::enumerate){
+		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\t{}.png)", i);
+		texture.loadFrom(p);
+	}
 
 	Core::init();
 
@@ -47,6 +56,9 @@ int main(){
 			};
 	}
 
+	textureArray = Core::Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
+	textureArray.loadPixmap(vulkanManager->obtainTransientCommand(), texArr);
+
 	{
 		Graphic::Batch<Vulkan::BatchVertex> batch{};
 
@@ -60,11 +72,7 @@ int main(){
 
 		batch.descriptorChangedCallback = [](auto data){
 			vulkanManager->updateDescriptorSet(data);
-			if(vulkanManager->swapChain.isResized()){
-				vulkanManager->swapChain.recreate();
-			}else{
-				vulkanManager->createDrawCommands();
-			}
+			vulkanManager->createDrawCommands();
 		};
 
 		batch.updateDescriptorSets();
@@ -82,13 +90,13 @@ int main(){
 
 			for(std::uint32_t x = 0; x < 10; ++x){
 				for(const auto& [i, texture] : textures | std::views::enumerate){
-					Geom::Vec2 off{x * 300.f + t * 10.f, 500.f * i};
-					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texture.getView());
+					Geom::Vec2 off{x * 300.f, 500.f * i};
+					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(textureArray.getView());
 					new(dataPtr) std::array{
-						Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{500, 0  }.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{500, 500}.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::CLEAR, {1.0f, 0.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{0  , 500}.add(off), 0.9f - i / 10.f, imageIndex, Graphic::Colors::CLEAR, {0.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::WHITE, {0.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{500, 0  }.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::WHITE, {1.0f, 1.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{500, 500}.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::CLEAR, {1.0f, 0.0f}},
+						Vulkan::BatchVertex{Geom::Vec2{0  , 500}.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::CLEAR, {0.0f, 0.0f}},
 					};
 				}
 			}
@@ -103,6 +111,7 @@ int main(){
 		vkDeviceWaitIdle(vulkanManager->context.device);
 	}
 
+	textureArray = {};
 	textures = {};
 
 	Assets::dispose();

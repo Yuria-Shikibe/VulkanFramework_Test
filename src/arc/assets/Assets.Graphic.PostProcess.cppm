@@ -25,6 +25,7 @@ export namespace Assets{
 		namespace Factory{
 			Graphic::PostProcessorFactory blurProcessorFactory{};
 			Graphic::PostProcessorFactory mergeBloomFactory{};
+			Graphic::PostProcessorFactory nfaaFactory{};
 		}
 
 		void load(const Core::Vulkan::Context& context);

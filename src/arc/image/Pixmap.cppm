@@ -12,9 +12,8 @@ import Graphic.Color;
 import Math;
 import std;
 
-
-
 export namespace Graphic{
+    //TODO PixmapView
     class Pixmap{
     public:
         using Color = Graphic::Color;
@@ -30,6 +29,7 @@ export namespace Graphic{
         std::unique_ptr<DataType[]> bitmapData{nullptr};
 
     public:
+        //TODO channel support
         static constexpr size_type Channels = 4; //FOR RGBA
 
         [[nodiscard]] Pixmap() = default;
@@ -222,7 +222,7 @@ export namespace Graphic{
             return width * height;
         }
 
-        [[nodiscard]] constexpr auto size() const {
+        [[nodiscard]] constexpr std::size_t size() const {
             return width * height * Channels;
         }
 

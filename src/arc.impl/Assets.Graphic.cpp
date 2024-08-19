@@ -8,32 +8,40 @@ import Core.Vulkan.Context;
 import Assets.Graphic.PostProcess;
 
 void Assets::Shader::load(VkDevice device){
-	batchVertShader = Core::Vulkan::ShaderModule{
+	Vert::batchShader = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(test.vert.spv)"
 	};
 
-	batchFragShader = Core::Vulkan::ShaderModule{
+	Frag::batchShader = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(test.frag.spv)"
 	};
 
-	blitSingleVert = Core::Vulkan::ShaderModule{
+	Vert::blitSingle = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit.vert.spv)"
 	};
 
-	blitSingleFrag = Core::Vulkan::ShaderModule{
+	Frag::blitSingle = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit.frag.spv)"
 	};
 
-	blitBlurFrag = Core::Vulkan::ShaderModule{
+	Frag::blitBlur = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit_blur.frag.spv)"
 	};
 
-	blitBlurVert = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit_blur.vert.spv)"
+	Vert::blitUV = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(blit_uv.vert.spv)"
 	};
 
-	blitMergeFrag = Core::Vulkan::ShaderModule{
+	Frag::blitMerge = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit_merge.frag.spv)"
+	};
+
+	Frag::FXAA = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(fxaa.frag.spv)"
+	};
+
+	Frag::NFAA = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(nfaa.frag.spv)"
 	};
 }
 

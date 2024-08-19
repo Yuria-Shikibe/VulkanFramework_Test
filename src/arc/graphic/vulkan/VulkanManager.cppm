@@ -375,7 +375,7 @@ export namespace Core::Vulkan{
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
-						.setShaderChain({&Assets::Shader::blitSingleVert, &Assets::Shader::blitSingleFrag})
+						.setShaderChain({&Assets::Shader::Frag::blitSingle, &Assets::Shader::Frag::blitSingle})
 						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);
@@ -438,7 +438,7 @@ export namespace Core::Vulkan{
 						.setDepthStencilState(Default::DefaultDepthStencilState)
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::AlphaBlend}>)
 						.setVertexInputInfo<VertBindInfo>()
-						.setShaderChain({&Assets::Shader::batchVertShader, &Assets::Shader::batchFragShader})
+						.setShaderChain({&Assets::Shader::Vert::batchShader, &Assets::Shader::Frag::batchShader})
 						.setStaticScissors({{}, std::bit_cast<VkExtent2D>(pipeline.size())})
 						.setStaticViewport(float(pipeline.size().x), float(pipeline.size().y));
 

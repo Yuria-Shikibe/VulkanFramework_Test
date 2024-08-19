@@ -19,7 +19,7 @@ export namespace Core::Vulkan{
 		Dependency<VkPhysicalDevice> physicalDevice{};
 		Dependency<VkDevice> device{};
 
-		std::uint32_t layers{};
+		std::uint32_t layers{1};
 
 		Geom::USize2 size{};
 
@@ -41,5 +41,7 @@ export namespace Core::Vulkan{
 		[[nodiscard]] std::uint32_t getLayers() const noexcept{ return layers; }
 
 		[[nodiscard]] Geom::USize2 getSize() const noexcept{ return size; }
+
+
 	};
 }

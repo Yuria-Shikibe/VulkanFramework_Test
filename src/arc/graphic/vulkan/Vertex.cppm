@@ -16,10 +16,17 @@ import ext.MetaProgramming;
 
 export namespace Core::Vulkan{
 
+	struct TextureIndex{
+		std::uint8_t textureIndex{};
+		std::uint8_t textureLayer{};
+		std::uint8_t reserved1{};
+		std::uint8_t reserved2{};
+	};
+
 	struct BatchVertex {
 		Geom::Vec2 position{};
 		float depth{};
-		std::uint32_t textureID{};
+		TextureIndex textureParam{};
 		Graphic::Color color{};
 		Geom::Vec2 texCoord{};
 	};
@@ -30,7 +37,7 @@ export namespace Core::Vulkan{
 
 	using VertBindInfo = Util::VertexBindInfo<BatchVertex, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX,
 		std::pair{&BatchVertex::position, VK_FORMAT_R32G32B32_SFLOAT},
-		std::pair{&BatchVertex::textureID, VK_FORMAT_R32_UINT},
+		std::pair{&BatchVertex::textureParam, VK_FORMAT_R8G8B8A8_UINT},
 		// std::pair{&Vertex::depth, VK_FORMAT_R32_SFLOAT},
 		std::pair{&BatchVertex::texCoord, VK_FORMAT_R32G32_SFLOAT},
 		std::pair{&BatchVertex::color, VK_FORMAT_R32G32B32A32_SFLOAT}

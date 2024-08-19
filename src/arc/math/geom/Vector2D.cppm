@@ -514,7 +514,7 @@ export namespace Geom{
 		constexpr Vector2D& scl(const V val) noexcept {
 			V rstX = static_cast<V>(x) * val;
 			V rstY = static_cast<V>(y) * val;
-			return this->set(static_cast<T>(x), static_cast<T>(y));
+			return this->set(static_cast<T>(rstX), static_cast<T>(rstY));
 		}
 
 		constexpr Vector2D& scl(const T ox, const T oy) noexcept {

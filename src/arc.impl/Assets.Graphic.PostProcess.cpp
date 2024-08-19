@@ -21,12 +21,13 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 	Factory::blurProcessorFactory = Graphic::PostProcessorFactory{&context};
 	Factory::mergeBloomFactory = Graphic::PostProcessorFactory{&context};
+	Factory::nfaaFactory = Graphic::PostProcessorFactory{&context};
 
 	Factory::blurProcessorFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, Geom::USize2 size){
+		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
 			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
 			static constexpr std::uint32_t Passes = 3;
-			static constexpr float Scale = 0.5f;
+			// static constexpr float Scale = 0.5f;
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
 
@@ -104,7 +105,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
-						.setShaderChain({&Shader::blitBlurVert, &Shader::blitBlurFrag})
+						.setShaderChain({&Shader::Vert::blitUV, &Shader::Frag::blitBlur})
 						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);
@@ -119,11 +120,11 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				auto command = processor.obtainTransientCommand();
 
 				ColorAttachment pingpong1{factory.context->physicalDevice, factory.context->device};
-				pingpong1.setScale(Scale);
+				// pingpong1.setScale(Scale);
 				pingpong1.create(size, command, PingPongUsage);
 
 				ColorAttachment pingpong2{factory.context->physicalDevice, factory.context->device};
-				pingpong2.setScale(Scale);
+				// pingpong2.setScale(Scale);
 				pingpong2.create(size, command, PingPongUsage);
 
 				//submit command
@@ -206,7 +207,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 		};
 
 	Factory::mergeBloomFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, Geom::USize2 size){
+		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
 			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
@@ -254,7 +255,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
-						.setShaderChain({&Shader::blitSingleVert, &Shader::blitMergeFrag})
+						.setShaderChain({&Shader::Vert::blitSingle, &Shader::Frag::blitMerge})
 						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);
@@ -289,6 +290,84 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 
 				cmdContext.data().bindDescriptorTo(scopedCommand);
+				scopedCommand->blitDraw();
+
+				vkCmdEndRenderPass(scopedCommand);
+			};
+
+			processor.updateDescriptors();
+			processor.recordCommand();
+
+			return processor;
+		};
+
+	Factory::nfaaFactory.creator = [](
+		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+
+			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
+				renderPass.pushAttachment( //port.out[0]
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ExportAttachment
+						| AttachmentDesc::Load_DontCare);
+
+				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
+					subpass.addOutput(0);
+				});
+			});
+
+			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+				data.createDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+				});
+
+				data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(Geom::Vec2)});
+
+				data.createDescriptorSet(1);
+
+				data.createPipelineLayout();
+
+				data.builder = [](RenderProcedure::PipelineData& pipeline){
+					PipelineTemplate pipelineTemplate{};
+					pipelineTemplate
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
+						.setShaderChain({&Shader::Vert::blitUV, &Shader::Frag::NFAA})
+						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+
+					pipeline.createPipeline(pipelineTemplate);
+				};
+			});
+
+			processor.renderProcedure.resize(size);
+
+			processor.createFramebuffer([](FramebufferLocal&){
+				//using externals
+			});
+
+			processor.descriptorSetUpdator = [](Graphic::PostProcessor& postProcessor){
+				auto& set = postProcessor.renderProcedure.front().descriptorSets;
+
+				DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
+
+				auto info = Sampler::blitSampler.getDescriptorInfo_ShaderRead(postProcessor.framebuffer.at(0));
+				updator.pushSampledImage(info);
+				updator.update();
+			};
+
+			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
+				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+
+				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
+				vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
+
+				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
+
+				auto step = ~postProcessor.size().as<float>();;
+				cmdContext.data().bindDescriptorTo(scopedCommand);
+				cmdContext.data().bindConstantToSeq(scopedCommand, step);
+
 				scopedCommand->blitDraw();
 
 				vkCmdEndRenderPass(scopedCommand);

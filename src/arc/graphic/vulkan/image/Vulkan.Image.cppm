@@ -8,6 +8,7 @@ import Core.Vulkan.Memory;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Dependency;
+import Core.Vulkan.Concepts;
 import std;
 
 
@@ -107,7 +108,9 @@ export namespace Core::Vulkan{
 		void transitionImageLayout(
 			VkCommandBuffer commandBuffer,
 			VkImage image, VkFormat format,
-			VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels, VkImageAspectFlags aspect){
+			VkImageLayout oldLayout, VkImageLayout newLayout,
+			const std::uint32_t mipLevels, const std::uint32_t layers,
+			VkImageAspectFlags aspect){
 			VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
 			barrier.oldLayout = oldLayout;
 			barrier.newLayout = newLayout;
@@ -118,7 +121,7 @@ export namespace Core::Vulkan{
 			barrier.subresourceRange.baseMipLevel = 0;
 			barrier.subresourceRange.levelCount = mipLevels;
 			barrier.subresourceRange.baseArrayLayer = 0;
-			barrier.subresourceRange.layerCount = 1;
+			barrier.subresourceRange.layerCount = layers;
 
 			const auto [srcAccessMask, dstAccessMask, sourceStage, destinationStage] =
 				Util::imageFormatTransferCond.find(oldLayout, newLayout);
@@ -145,9 +148,13 @@ export namespace Core::Vulkan{
 
 		void generateMipmaps(
 			VkCommandBuffer commandBuffer,
-			VkImage image, VkFormat imageFormat, std::uint32_t texWidth, std::uint32_t texHeight, std::uint32_t mipLevels){
+			VkImage image,
+			VkFormat imageFormat,
+			const std::uint32_t texWidth, const std::uint32_t texHeight,
+			const std::uint32_t mipLevels,
+			const std::uint32_t layerCount = 1
+		){
 			VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-			constexpr std::uint32_t layerCount = 1;
 
 
 			barrier.image = image;
@@ -273,7 +280,7 @@ export namespace Core::Vulkan{
 		}
 
 		Image(VkPhysicalDevice physicalDevice, VkDevice device, VkMemoryPropertyFlags properties,
-		      uint32_t width, uint32_t height, std::uint32_t mipLevels,
+		      std::uint32_t width, std::uint32_t height, std::uint32_t mipLevels,
 		      VkFormat format, VkImageTiling tiling,
 		      VkImageUsageFlags usage
 		) : Image{
@@ -298,16 +305,18 @@ export namespace Core::Vulkan{
 
 		void loadBuffer(
 			VkCommandBuffer commandBuffer, VkBuffer src,
-			VkExtent3D extent, VkOffset3D offset = {}) const{
+			VkExtent3D extent, VkOffset3D offset = {}, std::uint32_t layers = 1) const{
 			VkBufferImageCopy region{};
 			region.bufferOffset = 0;
 			region.bufferRowLength = 0;
 			region.bufferImageHeight = 0;
 
-			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			region.imageSubresource.mipLevel = 0;
-			region.imageSubresource.baseArrayLayer = 0;
-			region.imageSubresource.layerCount = 1;
+			region.imageSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = 0,
+				.baseArrayLayer = 0,
+				.layerCount = layers
+			};
 
 			region.imageOffset = offset;
 			region.imageExtent = extent;
@@ -321,8 +330,30 @@ export namespace Core::Vulkan{
 
 		void transitionImageLayout(
 			VkCommandBuffer commandBuffer, VkFormat format,
-			VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels = 1, VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT) const{
-			Util::transitionImageLayout(commandBuffer, handle, format, oldLayout, newLayout, mipLevels, aspectFlags);
+			VkImageLayout oldLayout, VkImageLayout newLayout,
+			const std::uint32_t mipLevels = 1, const std::uint32_t layers = 1, VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT) const{
+			Util::transitionImageLayout(commandBuffer, handle, format, oldLayout, newLayout, mipLevels, layers, aspectFlags);
+		}
+
+		template <ContigiousRange<VkImageBlit> Rng = std::vector<VkImageBlit>>
+		void blit(VkCommandBuffer commandBuffer, VkImage src, VkFilter filter, Rng&& rng){
+			::vkCmdBlitImage(commandBuffer,
+						   src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+						   handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						   std::ranges::size(rng), std::ranges::data(rng), filter);
+		}
+
+		void blit(VkCommandBuffer commandBuffer, VkImage src, VkFilter filter){
+			VkImageBlit blitInfo{
+				.srcSubresource = {},
+				.srcOffsets = {},
+				.dstSubresource = {},
+				.dstOffsets = {}
+			};
+			::vkCmdBlitImage(commandBuffer,
+						   src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+						   handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						   1, &blitInfo, filter);
 		}
 	};
 

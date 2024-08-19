@@ -26,13 +26,13 @@ export namespace Graphic{
 	struct Batch{
 		static constexpr std::size_t MaximumAllowedSamplersSize{8};
 
-		using ImageIndex = std::uint32_t;
+		using ImageIndex = std::uint8_t;
 		using ImageSet = std::array<VkImageView, MaximumAllowedSamplersSize>;
 
 		static constexpr std::uint32_t VerticesGroupCount{4};
 		static constexpr std::uint32_t IndicesGroupCount{6};
 
-		static constexpr ImageIndex InvalidImageIndex{~0U};
+		static constexpr ImageIndex InvalidImageIndex{static_cast<ImageIndex>(~0U)};
 		static constexpr std::ptrdiff_t UnitOffset = sizeof(Vertex) * VerticesGroupCount;
 
 		Core::Vulkan::Context* context{};

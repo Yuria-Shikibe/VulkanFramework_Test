@@ -17,28 +17,41 @@ namespace Core::Vulkan{
 export namespace Assets{
 	namespace Shader{
 		OS::File builtinShaderDir{};
-		Core::Vulkan::ShaderModule batchVertShader{};
-		Core::Vulkan::ShaderModule batchFragShader{};
 
-		Core::Vulkan::ShaderModule blitSingleFrag{};
-		Core::Vulkan::ShaderModule blitSingleVert{};
+		namespace Vert{
+			Core::Vulkan::ShaderModule batchShader{};
+			Core::Vulkan::ShaderModule blitSingle{};
+			Core::Vulkan::ShaderModule blitUV{};
+		}
 
-		Core::Vulkan::ShaderModule blitBlurFrag{};
-		Core::Vulkan::ShaderModule blitBlurVert{};
+		namespace Frag{
+			Core::Vulkan::ShaderModule blitSingle{};
+			Core::Vulkan::ShaderModule batchShader{};
 
-		Core::Vulkan::ShaderModule blitMergeFrag{};
+			Core::Vulkan::ShaderModule blitBlur{};
+
+			Core::Vulkan::ShaderModule blitMerge{};
+
+			Core::Vulkan::ShaderModule FXAA{};
+			Core::Vulkan::ShaderModule NFAA{};
+		}
+
+
+
 
 		void load(VkDevice device);
 
 		void dispose(){
-			batchVertShader = {};
-			batchFragShader = {};
-			blitSingleFrag = {};
-			blitSingleVert = {};
+			Vert::batchShader = {};
+			Vert::blitSingle = {};
+			Vert::blitUV = {};
 
-			blitBlurFrag = {};
-			blitBlurVert = {};
-			blitMergeFrag = {};
+			Frag::batchShader = {};
+			Frag::blitBlur = {};
+			Frag::blitMerge = {};
+			Frag::blitSingle = {};
+			Frag::FXAA = {};
+			Frag::NFAA = {};
 		}
 	}
 
