@@ -22,7 +22,7 @@ namespace Core::Vulkan{
 
 		constexpr VkPipelineColorBlendAttachmentState Discard{.colorWriteMask = 0};
 
-		constexpr VkPipelineColorBlendAttachmentState AlphaBlend{
+		constexpr VkPipelineColorBlendAttachmentState ScaledAlphaBlend{
 				.blendEnable = true,
 
 				.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
@@ -31,6 +31,19 @@ namespace Core::Vulkan{
 				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
 				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 				.alphaBlendOp = VK_BLEND_OP_ADD,
+
+				.colorWriteMask = DefaultMask
+			};
+
+		constexpr VkPipelineColorBlendAttachmentState AlphaBlend{
+				.blendEnable = true,
+
+				.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				.colorBlendOp = VK_BLEND_OP_ADD,
+				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+		        .alphaBlendOp = VK_BLEND_OP_ADD,
 
 				.colorWriteMask = DefaultMask
 			};
@@ -126,7 +139,7 @@ namespace Core::Vulkan{
 				.flags = 0,
 				.depthTestEnable = true,
 				.depthWriteEnable = true,
-				.depthCompareOp = VK_COMPARE_OP_LESS,
+				.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
 				.depthBoundsTestEnable = false,
 				.stencilTestEnable = false,
 				.front = {},

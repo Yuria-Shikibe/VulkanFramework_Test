@@ -19,45 +19,34 @@ import Graphic.Color;
 import Graphic.Batch;
 import Graphic.Pixmap;
 
+import Core.Vulkan.Shader.Compile;
+
 import Assets.Graphic;
 
-std::array<Core::Vulkan::Texture, 3> textures{};
-
-Core::Vulkan::Texture textureArray{};
+Core::Vulkan::Texture texturePester{};
+Core::Vulkan::Texture texturePesterLight{};
 
 int main(){
 	using namespace Core;
 	Assets::Shader::builtinShaderDir = Vulkan::TargetCompilerPath;
 
-	OS::File{Vulkan::DefaultSrcPath}.forSubs([](OS::File&& file){
-		Vulkan::ShaderCompileTask{
-				Vulkan::DefaultCompilerPath, file, Vulkan::TargetCompilerPath
-			}.compile();
+    Core::Vulkan::ShaderRuntimeCompiler compiler{};
+    Core::Vulkan::CompilerAdaptor adaptor{compiler, Vulkan::TargetCompilerPath};
+
+	OS::File{Vulkan::DefaultSrcPath}.forSubs([&](OS::File&& file){
+	    adaptor.compile(file);
 	});
 
-	std::array<Graphic::Pixmap, 3> texArr{};
-	for(const auto& [i, texture] : texArr | std::views::enumerate){
-		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\t{}.png)", i);
-		texture.loadFrom(p);
-	}
-
 	Core::init();
-
 	Assets::load(vulkanManager->context);
-
 	vulkanManager->initVulkan();
 
-	for(const auto& [i, texture] : textures | std::views::enumerate){
-		std::string p = std::format(R"(D:\projects\vulkan_framework\properties\texture\t{}.png)", i);
-		texture = Core::Vulkan::Texture{
-				vulkanManager->context.physicalDevice, vulkanManager->context.device,
-				OS::File{p},
-				vulkanManager->obtainTransientCommand()
-			};
-	}
 
-	textureArray = Core::Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
-	textureArray.loadPixmap(vulkanManager->obtainTransientCommand(), texArr);
+	texturePester = Core::Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
+	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), R"(D:\projects\vulkan_framework\properties\texture\pester.png)");
+
+	texturePesterLight = Core::Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
+	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), R"(D:\projects\vulkan_framework\properties\texture\pester.light.png)");
 
 	{
 		Graphic::Batch<Vulkan::BatchVertex> batch{};
@@ -81,27 +70,48 @@ int main(){
 			window->pollEvents();
 
 			float t = glfwGetTime();
-			// vulkanManager->drawBegin();
 
 			Geom::Matrix3D matrix3D{};
 			matrix3D.setOrthogonal(vulkanManager->swapChain.getTargetWindow()->getSize().as<float>());
+            matrix3D.rotate(30);
 
 			vulkanManager->updateUniformBuffer(Vulkan::UniformBlock{matrix3D, 0.f});
 
-			for(std::uint32_t x = 0; x < 10; ++x){
-				for(const auto& [i, texture] : textures | std::views::enumerate){
-					Geom::Vec2 off{x * 300.f, 500.f * i};
-					auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(textureArray.getView());
-					new(dataPtr) std::array{
-						Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::WHITE, {0.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{500, 0  }.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::WHITE, {1.0f, 1.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{500, 500}.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::CLEAR, {1.0f, 0.0f}},
-						Vulkan::BatchVertex{Geom::Vec2{0  , 500}.add(off), 0.9f - i / 10.f, {imageIndex, static_cast<std::uint8_t>(i), 0, 0}, Graphic::Colors::CLEAR, {0.0f, 0.0f}},
-					};
-				}
+            constexpr auto baseColor = Graphic::Colors::WHITE;
+            constexpr auto lightColor = Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::AQUA_SKY);
+
+			{
+			    Geom::Vec2 off{200 + t * 5.f, 200};
+			    auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texturePester.getView());
+			    new(dataPtr) std::array{
+			        Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                };
 			}
 
+			{
+			    Geom::Vec2 off{250 + t * 5.f, 250};
+			    auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texturePester.getView());
+			    new(dataPtr) std::array{
+			        Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                };
+			}
 
+		    {
+			    Geom::Vec2 off{250 + t * 5.f, 250};
+			    auto [imageIndex, dataPtr, captureLock] = batch.getDrawArgs(texturePesterLight.getView());
+			    new(dataPtr) std::array{
+			        Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
+                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
+                };
+			}
 
 			batch.consumeAll();
 
@@ -111,8 +121,8 @@ int main(){
 		vkDeviceWaitIdle(vulkanManager->context.device);
 	}
 
-	textureArray = {};
-	textures = {};
+	texturePester = {};
+	texturePesterLight = {};
 
 	Assets::dispose();
 

@@ -19,6 +19,8 @@ export namespace Graphic{
 	 */
 	class Color{
 	public:
+	    static constexpr float LightColorRange = 2550.f;
+
 		static constexpr auto maxVal           = std::numeric_limits<unsigned char>::max();
 		static constexpr float maxValF         = std::numeric_limits<unsigned char>::max();
 		static constexpr unsigned int r_Offset = 24;
@@ -67,6 +69,15 @@ export namespace Graphic{
 		}
 
 	public:
+
+	    constexpr Color& appendLightColor(const Color& color) {
+	        r += static_cast<float>(Math::floor(LightColorRange * color.r, 10));
+	        g += static_cast<float>(Math::floor(LightColorRange * color.g, 10));
+	        b += static_cast<float>(Math::floor(LightColorRange * color.b, 10));
+	        a += static_cast<float>(Math::floor(LightColorRange * color.a, 10));
+
+	        return *this;
+	    }
 
 		[[nodiscard]] const float* asRaw() const noexcept{
 			return reinterpret_cast<const float*>(this);

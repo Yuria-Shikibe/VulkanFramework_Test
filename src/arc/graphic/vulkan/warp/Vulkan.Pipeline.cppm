@@ -54,7 +54,7 @@ export namespace Core::Vulkan{
 			pInputAssemblyState = &Default::InputAssembly;
 			pRasterizationState = &Default::Rasterizer;
 			pMultisampleState = &Default::Multisampling;
-			pColorBlendState = &Default::ColorBlending<std::array{Blending::AlphaBlend}>;
+			pColorBlendState = &Default::ColorBlending<std::array{Blending::ScaledAlphaBlend}>;
 
 			return *this;
 		}

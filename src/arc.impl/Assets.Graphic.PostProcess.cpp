@@ -346,16 +346,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				//using externals
 			});
 
-			processor.descriptorSetUpdator = [](Graphic::PostProcessor& postProcessor){
-				auto& set = postProcessor.renderProcedure.front().descriptorSets;
-
-				DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
-
-				auto info = Sampler::blitSampler.getDescriptorInfo_ShaderRead(postProcessor.framebuffer.at(0));
-				updator.pushSampledImage(info);
-				updator.update();
-			};
-
 			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
 				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
@@ -364,7 +354,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
 
-				auto step = ~postProcessor.size().as<float>();;
+				auto step = ~postProcessor.size().as<float>();
 				cmdContext.data().bindDescriptorTo(scopedCommand);
 				cmdContext.data().bindConstantToSeq(scopedCommand, step);
 
@@ -372,9 +362,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				vkCmdEndRenderPass(scopedCommand);
 			};
-
-			processor.updateDescriptors();
-			processor.recordCommand();
 
 			return processor;
 		};

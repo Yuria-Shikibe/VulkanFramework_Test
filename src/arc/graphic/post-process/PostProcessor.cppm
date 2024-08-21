@@ -10,6 +10,7 @@ export import Core.Vulkan.RenderPassGroup;
 export import Core.Vulkan.Buffer.CommandBuffer;
 export import Core.Vulkan.CommandPool;
 export import Core.Vulkan.Semaphore;
+export import Core.Vulkan.Preinstall;
 
 import Geom.Vector2D;
 import std;
@@ -28,6 +29,7 @@ export namespace Graphic{
 		 */
 		AttachmentPort port{};
 
+	    //TODO uses a pool in some global place??
 		Core::Vulkan::CommandPool transientCommandPool{};
 		Core::Vulkan::CommandPool commandPool{};
 
@@ -125,9 +127,14 @@ export namespace Graphic{
 			commandRecorder(*this);
 		}
 
-		void submitCommand(VkSemaphore toWait) const{
+	    template <std::ranges::range Rng = std::initializer_list<VkSemaphore>>
+	        requires (std::convertible_to<VkSemaphore, std::ranges::range_value_t<Rng>>)
+		void submitCommand(Rng&& toWait, const VkPipelineStageFlags* stageFlags = Core::Vulkan::Seq::StageFlagBits<VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT>) const{
 			std::vector<VkCommandBuffer> commandBuffers{};
 			commandBuffers.reserve(appendCommandBuffers.size() + 1);
+
+		    std::vector<VkSemaphore> semaphores{};
+		    std::ranges::transform(toWait, std::back_inserter(semaphores), [](const auto& s){return static_cast<VkSemaphore>(s);});
 
 			if(appendCommandBuffers.empty()){
 				commandBuffers.push_back(commandBuffer.get());
@@ -145,14 +152,11 @@ export namespace Graphic{
 					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
 			}
 
-
-			std::array<VkPipelineStageFlags, 1> stage{VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-
 			context->commandSubmit_Graphics(VkSubmitInfo{
 				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-				.waitSemaphoreCount = static_cast<bool>(toWait),
-				.pWaitSemaphores = toWait ? &toWait : nullptr,
-				.pWaitDstStageMask = stage.data(),
+				.waitSemaphoreCount = static_cast<std::uint32_t>(semaphores.size()),
+				.pWaitSemaphores = semaphores.data(),
+				.pWaitDstStageMask = stageFlags,
 				.commandBufferCount = static_cast<std::uint32_t>(commandBuffers.size()),
 				.pCommandBuffers = commandBuffers.data(),
 				.signalSemaphoreCount = 1,

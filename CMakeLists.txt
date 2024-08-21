@@ -88,10 +88,27 @@ add_executable(
 
 )
 
-target_link_libraries(${PROJECT_NAME}
-    ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/glfw3.lib
-    ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}/vulkan-1.lib
+target_link_directories(
+    ${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}
 )
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    glfw3.lib
+    vulkan-1.lib
+    shaderc_util.lib
+)
+
+
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        shaderc_shared.lib
+    )
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        shaderc_combinded.lib
+    )
+endif()
 
 target_sources(${PROJECT_NAME}
     PRIVATE

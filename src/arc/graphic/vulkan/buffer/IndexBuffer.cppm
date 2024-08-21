@@ -53,7 +53,7 @@ export namespace Core::Vulkan{
 
 		constexpr std::array StandardIndexBase{0u, 1u, 2u, 2u, 3u, 0u};
 		template <std::size_t size = 16'384>
-		constexpr std::array BatchIndices = generateIndexReferences<size, std::uint16_t>(StandardIndexBase);
+		constexpr std::array BatchIndices = generateIndexReferences<size, std::uint32_t>(StandardIndexBase);
 
 		constexpr std::uint32_t PrimitiveVertCount = StandardIndexBase.size();
 

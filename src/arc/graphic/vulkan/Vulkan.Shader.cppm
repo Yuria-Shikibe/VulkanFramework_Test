@@ -4,9 +4,9 @@ module;
 
 export module Core.Vulkan.Shader;
 
-import std;
 import Core.Vulkan.Dependency;
 import OS.File;
+import std;
 
 export namespace Core::Vulkan{
 	struct ShaderModule{
@@ -106,10 +106,10 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		template <std::ranges::contiguous_range T>
-		void createShaderModule(const T& code){
+		template <std::ranges::contiguous_range Rng>
+		void createShaderModule(const Rng& code){
 			VkShaderModuleCreateInfo createInfo{VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO};
-			createInfo.codeSize = std::ranges::size(code);
+			createInfo.codeSize = std::ranges::size(code) * sizeof(std::ranges::range_value_t<Rng>);
 			createInfo.pCode = reinterpret_cast<const std::uint32_t*>(std::ranges::data(code));
 
 			if(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS){

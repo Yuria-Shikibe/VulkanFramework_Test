@@ -10,9 +10,15 @@ layout(location = 3) in vec4 inColor;
 
 //layout(location = 3) in int textureID;
 
-layout(location = 0) out vec4 fragColor;
-layout(location = 1) out vec2 fragTexCoord;
-layout(location = 2) flat out uvec4 textureID;
+layout(location = 0) out vec2 fragTexCoord;
+layout(location = 1) flat out uvec4 textureID;
+
+layout(location = 2) out vec4 baseColor;
+layout(location = 3) out vec4 mixColor;
+layout(location = 4) out vec4 lightColor;
+
+const float Overflow = .001f;
+const float LightColorRange = 2550.f;
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -23,13 +29,11 @@ layout(set = 0, binding = 0) uniform UBO {
     float v;
 } ubo;
 
-//layout(push_constant) uniform pushConstants {
-//    vec2 mul;
-//};
-
 void main() {
     gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z, 1.0);
-    fragColor = inColor + ubo.v;
+    baseColor =mod(inColor, 10.f);
+    lightColor = inColor / LightColorRange;
+
     fragTexCoord = inTexCoord;
 
     textureID = inTextureID;

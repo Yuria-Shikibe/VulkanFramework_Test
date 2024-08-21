@@ -38,7 +38,6 @@ export namespace Graphic{
 		Core::Vulkan::Context* context{};
 
 		Core::Vulkan::CommandPool transientCommandPool{};
-		Core::Vulkan::CommandPool commandPool{};
 
 		VkSampler sampler{};
 
@@ -48,8 +47,6 @@ export namespace Graphic{
 		Core::Vulkan::ExclusiveBuffer buffer_vertex{};
 
 		Core::Vulkan::CommandBuffer command_flush{};
-		Core::Vulkan::CommandBuffer command_empty{};
-		Core::Vulkan::CommandBuffer command_rebindDescriptorSet{};
 
 		ImageSet usedImages_old{};
 		ImageSet usedImages{};
@@ -197,21 +194,13 @@ export namespace Graphic{
 					VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 				};
 
-			commandPool = CommandPool{
-					context->device,
-					context->physicalDevice.queues.graphicsFamily,
-					VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-				};
-
 			semaphore_copyDone = Semaphore{context->device};
 			semaphore_drawDone = Semaphore{context->device};
 			fence = Fence{context->device, Fence::CreateFlags::signal};
 
-			command_empty = commandPool.obtain();
-			{ScopedCommand scopedCommand{command_empty, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};}
+			auto command_empty = transientCommandPool.obtain();
+			{ScopedCommand scopedCommand{command_empty, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};}
 			context->triggerSemaphore(command_empty, semaphore_drawDone.asSeq());
-			command_rebindDescriptorSet = commandPool.obtain(VK_COMMAND_BUFFER_LEVEL_SECONDARY);
-
 
 			buffer_index = Util::createIndexBuffer(
 				*context, transientCommandPool, Core::Vulkan::Util::BatchIndices<maxGroupCount>);

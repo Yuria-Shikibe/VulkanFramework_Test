@@ -1,5 +1,5 @@
 #version 460 core
-#pragma shader_stage(vertex)
+#pragma shader_stage(fragment)
 #extension GL_ARB_separate_shader_objects : enable
 
 layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput source;
@@ -15,5 +15,6 @@ void main() {
     vec4 bloom = subpassLoad(blur) * intensity_blo;
     original = mix(original, original * (vec4(1.0) - bloom), 0.5f);
 
-    outColor = (original + bloom) * 0.5f;
+//    outColor = (original + bloom) * 0.5f;
+    outColor = subpassLoad(source);
 }

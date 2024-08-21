@@ -15,9 +15,13 @@
 #ifndef SHADERC_SHADERC_HPP_
 #define SHADERC_SHADERC_HPP_
 
+#ifdef __cpp_modules
+import std;
+#elif __cpp_modules
 #include <memory>
 #include <string>
 #include <vector>
+#endif
 
 #include "shaderc.h"
 

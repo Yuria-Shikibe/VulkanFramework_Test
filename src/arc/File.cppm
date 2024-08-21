@@ -231,11 +231,9 @@ namespace OS{
 		/**
 		 * Warning: This does not do append but erase and write!
 		 * */
-		void writeString(const std::string& data, const bool autoFlush = true) const{
+		void writeString(const std::string_view data) const{
 			if(std::ofstream ofStream(getPath()); ofStream.is_open()){
 				ofStream << data;
-
-				if(autoFlush) ofStream.flush();
 			}
 		}
 

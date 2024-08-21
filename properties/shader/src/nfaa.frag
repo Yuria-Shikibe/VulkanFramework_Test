@@ -23,7 +23,7 @@ float lumRGB(vec3 v) {
     return dot(v, vec3(0.212, 0.716, 0.072));
 }
 
-const float fScale = 1.0;
+const float fScale = 0.85f;
 
 vec4 nfaa(sampler2D tex, vec2 texCoords, vec2 uvStep) {
     // Offset coordinates
@@ -59,8 +59,10 @@ vec4 nfaa(sampler2D tex, vec2 texCoords, vec2 uvStep) {
     vec4 scene4 = texture(tex, texCoords - vec2(Normal.x, -Normal.y) * 0.5);
 
     return vec4((scene0.rgb + scene1.rgb + scene2.rgb + scene3.rgb + scene4.rgb) * 0.2, scene0.a);
+//    return vec4(Normal.xy * 5, scene0.a, scene0.a);
 }
 
 void main() {
     fragColor = nfaa(targetTexture, inTexCoords, unitStep);
+//    fragColor = texture(targetTexture, inTexCoords);
 }
