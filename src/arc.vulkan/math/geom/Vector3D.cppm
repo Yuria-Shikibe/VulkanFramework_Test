@@ -13,17 +13,15 @@ export namespace Geom {
 
 		using PassType = Concepts::ParamPassType<Vector3D, sizeof(T) * 3>;
 
-		/** @return The euclidean length */
 		[[nodiscard]] static constexpr float len(const T x, const T y, const T z) {
 			return std::sqrtf(static_cast<float>(x * x + y * y + z * z));
 		}
 
-		/** @return The squared euclidean length */
 		[[nodiscard]] static constexpr T len2(const T x, const T y, const T z) {
 			return x * x + y * y + z * z;
 		}
 
-		/** @return The euclidean distance between the two specified vectors */
+		/** @return The Euclidean distance between the two specified vectors */
 		[[nodiscard]] static constexpr float dst(const T x1, const T y1, const T z1, const T x2, const T y2, const T z2) {
 			const T a = Math::safeDst(x2 - x1);
 			const T b = Math::safeDst(y2 - y1);
@@ -42,23 +40,6 @@ export namespace Geom {
 		/** @return The dot product between the two vectors */
 		[[nodiscard]] static constexpr T dot(const T x1, const T y1, const T z1, const T x2, const T y2, const T z2) {
 			return x1 * x2 + y1 * y2 + z1 * z2;
-		}
-
-		constexpr Vector3D& operator=(const Vector3D& other) {
-			if(this == &other) return *this;
-			x = other.x;
-			y = other.y;
-			z = other.z;
-
-			return *this;
-		}
-
-		constexpr Vector3D& operator=(Vector3D&& other) noexcept {
-			if(this == &other) return *this;
-			x = other.x;
-			y = other.y;
-			z = other.z;
-			return *this;
 		}
 
 		constexpr Vector3D& div(const Vector3D& other) {
@@ -265,7 +246,7 @@ export namespace Geom {
 		 * @param vector The other vector
 		 * @return This vector for chaining
 		 */
-		Vector3D& crs(const Vector3D& vector) const {
+		Vector3D& cross(const Vector3D& vector) {
 			return this->set(y * vector.z - z * vector.y, z * vector.x - x * vector.z, x * vector.y - y * vector.x);
 		}
 
@@ -276,7 +257,7 @@ export namespace Geom {
 		 * @param z The z-component of the other vector
 		 * @return This vector for chaining
 		 */
-		Vector3D& crs(const T x, const T y, const T z) const {
+		Vector3D& cross(const T x, const T y, const T z) const {
 			return this->set(this->y * z - this->z * y, this->z * x - this->x * z, this->x * y - this->y * x);
 		}
 
@@ -452,7 +433,6 @@ export namespace Geom {
 			if(len2 < min2) return this->scl(std::sqrtf(min2 / len2));
 			return this;
 		}
-
 
 		// public int hashCode(){
 		//     const int prime = 31;

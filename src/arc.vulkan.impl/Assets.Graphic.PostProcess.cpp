@@ -26,7 +26,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	Factory::blurProcessorFactory.creator = [](
 		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
 			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
-			static constexpr std::uint32_t Passes = 3;
+			static constexpr std::uint32_t Passes = 5;
 			// static constexpr float Scale = 0.5f;
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
@@ -105,7 +105,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
-						.setShaderChain({&Shader::Vert::blitUV, &Shader::Frag::blitBlur})
+						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::blitBlur})
 						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);
@@ -119,11 +119,11 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 				auto command = processor.obtainTransientCommand();
 
-				ColorAttachment pingpong1{factory.context->physicalDevice, factory.context->device};
+				ColorAttachment pingpong1{processor.context->physicalDevice, processor.context->device};
 				// pingpong1.setScale(Scale);
 				pingpong1.create(size, command, PingPongUsage);
 
-				ColorAttachment pingpong2{factory.context->physicalDevice, factory.context->device};
+				ColorAttachment pingpong2{processor.context->physicalDevice, processor.context->device};
 				// pingpong2.setScale(Scale);
 				pingpong2.create(size, command, PingPongUsage);
 
@@ -162,7 +162,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
 
-				const auto unitStep = ~postProcessor.size().as<float>();
+				const auto unitStep = ~postProcessor.size().as<float>() * 1.15f;
 
 				const std::array arr{
 						BlurConstants{
@@ -212,18 +212,36 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
 				{
-					renderPass.pushAttachment( //port.in[0] source
+					renderPass.pushAttachment( //port.in[0] tex source
 						VkAttachmentDescription{}
 						| AttachmentDesc::Default
 						| AttachmentDesc::Stencil_DontCare
 						| AttachmentDesc::ImportAttachment<>);
 
-					renderPass.pushAttachment( //port.in[1] blurred
+				    renderPass.pushAttachment( //port.in[1] light source
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ImportAttachment<>);
+
+					renderPass.pushAttachment( //port.in[2] blurred
 						VkAttachmentDescription{}
 						| AttachmentDesc::Default
 						| AttachmentDesc::Stencil_DontCare
 						| AttachmentDesc::ImportAttachment<VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL>);
 
+					renderPass.pushAttachment( //local [3] SSAO result
+						VkAttachmentDescription{
+						    .format = VK_FORMAT_R8G8B8A8_UNORM,
+						    .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+						    .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ReadAndWrite
+						);
+
+				    //TODO shade
 					renderPass.pushAttachment( //port.out[0]
 						VkAttachmentDescription{}
 						| AttachmentDesc::Default
@@ -232,15 +250,63 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						| AttachmentDesc::Load_DontCare);
 				}
 
+			    //SSAO
+				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
+				    //TODO
+				    // subpass.addDependency(VkSubpassDependency{
+        //                 .srcSubpass = subpass.index,
+        //                 .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        //                 .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        //                 .srcAccessMask = 0,
+        //                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
+        //                 .dependencyFlags = VK_DEPENDENCY_VIEW_LOCAL_BIT | VK_DEPENDENCY_BY_REGION_BIT
+        //             });
+
+					subpass.addOutput(3);
+				});
+
+			    //Merge
 				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
 					subpass.addInput(0);
 					subpass.addInput(1);
-					subpass.addOutput(2);
+					subpass.addInput(2);
+					subpass.addInput(3);
+					subpass.addOutput(4);
+
+				    subpass.addDependency(VkSubpassDependency{
+				        .srcSubpass = subpass.getPrevIndex()
+				    } | Subpass::Dependency::Blit);
 				});
+			});
+
+	        //SSAO
+			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+				data.createDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+				});
+
+				// data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BlurConstants)});
+
+				data.createDescriptorSet(1);
+			    data.addUniformBuffer(sizeof(UniformBlock_SSAO));
+				data.createPipelineLayout();
+
+				data.builder = [](RenderProcedure::PipelineData& pipeline){
+					PipelineTemplate pipelineTemplate{};
+					pipelineTemplate
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
+						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::SSAO})
+						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+
+					pipeline.createPipeline(pipelineTemplate);
+				};
 			});
 
 			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
 				});
@@ -264,39 +330,15 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.renderProcedure.resize(size);
 
-			processor.createFramebuffer([](FramebufferLocal& framebuffer){
-				//using externals
+			processor.createFramebuffer([&](FramebufferLocal& framebuffer){
+			    ColorAttachment SSAO_Result{processor.context->physicalDevice, processor.context->device};
+			    auto command = processor.obtainTransientCommand();
+
+                SSAO_Result.create(size, command, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+			    command = {};
+
+			    framebuffer.addCapturedAttachments(3, std::move(SSAO_Result));
 			});
-
-			processor.descriptorSetUpdator = [](Graphic::PostProcessor& postProcessor){
-				auto& set = postProcessor.renderProcedure.front().descriptorSets;
-
-				DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
-
-				auto infoSrc = postProcessor.framebuffer.getInputInfo(0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				auto infoBlur = postProcessor.framebuffer.getInputInfo(1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-				updator.pushAttachment(infoSrc);
-				updator.pushAttachment(infoBlur);
-				updator.update();
-			};
-
-			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
-				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-
-				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
-				vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
-
-				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
-
-
-				cmdContext.data().bindDescriptorTo(scopedCommand);
-				scopedCommand->blitDraw();
-
-				vkCmdEndRenderPass(scopedCommand);
-			};
-
-			processor.updateDescriptors();
-			processor.recordCommand();
 
 			return processor;
 		};
@@ -333,7 +375,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
-						.setShaderChain({&Shader::Vert::blitUV, &Shader::Frag::NFAA})
+						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::NFAA})
 						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
 
 					pipeline.createPipeline(pipelineTemplate);

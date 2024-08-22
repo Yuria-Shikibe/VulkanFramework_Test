@@ -103,7 +103,97 @@ export namespace Core::Vulkan{
 						VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
 					}
 				},
+		        {
+					{
+						VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					    VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL
+					},
+					{
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+						VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+						VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+					}
+				},
+		        {
+					{
+					    VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL,
+					    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					},
+					{
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+						VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+					    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+					}
+				},
+		        {
+					{
+						VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+					    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					},
+					{
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+						VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+						VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+					}
+				},
+		        {
+					{
+					    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+					    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+					},
+					{
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT,
+						VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+						VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+					    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+					}
+				},
 			};
+
+	    struct TransitionInfo {
+	        VkFormat format;
+	        VkImageAspectFlags aspect;
+	        VkImageLayout oldLayout;
+	        VkImageLayout newLayout;
+	        VkAccessFlags srcAccessMask;
+	        VkAccessFlags dstAccessMask;
+	        VkPipelineStageFlags srcStageMask;
+            VkPipelineStageFlags dstStageMask;
+	    };
+
+        void transitionImageLayout(
+            VkCommandBuffer commandBuffer,
+            VkImage image, const TransitionInfo &info,
+            const std::uint32_t mipLevels = 1, const std::uint32_t layers = 1
+            ) {
+
+            VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+            barrier.oldLayout = info.oldLayout;
+            barrier.newLayout = info.newLayout;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image;
+            barrier.subresourceRange.aspectMask = info.aspect;
+            barrier.subresourceRange.baseMipLevel = 0;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = layers;
+
+            barrier.srcAccessMask = info.srcAccessMask;
+            barrier.dstAccessMask = info.dstAccessMask;
+
+            vkCmdPipelineBarrier(
+                commandBuffer,
+                info.srcStageMask, info.dstStageMask,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+        }
 
 		void transitionImageLayout(
 			VkCommandBuffer commandBuffer,
@@ -111,32 +201,19 @@ export namespace Core::Vulkan{
 			VkImageLayout oldLayout, VkImageLayout newLayout,
 			const std::uint32_t mipLevels, const std::uint32_t layers,
 			VkImageAspectFlags aspect){
-			VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
-			barrier.oldLayout = oldLayout;
-			barrier.newLayout = newLayout;
-			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier.image = image;
-			barrier.subresourceRange.aspectMask = aspect;
-			barrier.subresourceRange.baseMipLevel = 0;
-			barrier.subresourceRange.levelCount = mipLevels;
-			barrier.subresourceRange.baseArrayLayer = 0;
-			barrier.subresourceRange.layerCount = layers;
-
 			const auto [srcAccessMask, dstAccessMask, sourceStage, destinationStage] =
 				Util::imageFormatTransferCond.find(oldLayout, newLayout);
 
-			barrier.srcAccessMask = srcAccessMask;
-			barrier.dstAccessMask = dstAccessMask;
-
-			vkCmdPipelineBarrier(
-				commandBuffer,
-				sourceStage, destinationStage,
-				0,
-				0, nullptr,
-				0, nullptr,
-				1, &barrier
-			);
+            transitionImageLayout(commandBuffer, image, {
+                .format = format,
+                .aspect = aspect,
+                .oldLayout = oldLayout,
+                .newLayout = newLayout,
+                .srcAccessMask = srcAccessMask,
+                .dstAccessMask = dstAccessMask,
+                .srcStageMask = sourceStage,
+                .dstStageMask = destinationStage
+            }, mipLevels, layers);
 		}
 
 
@@ -334,6 +411,14 @@ export namespace Core::Vulkan{
 			const std::uint32_t mipLevels = 1, const std::uint32_t layers = 1, VkImageAspectFlags aspectFlags = VK_IMAGE_ASPECT_COLOR_BIT) const{
 			Util::transitionImageLayout(commandBuffer, handle, format, oldLayout, newLayout, mipLevels, layers, aspectFlags);
 		}
+
+        void transitionImageLayout(
+            VkCommandBuffer commandBuffer,
+            const Util::TransitionInfo &info,
+            const std::uint32_t mipLevels = 1, const std::uint32_t layers = 1) const {
+            Util::transitionImageLayout(commandBuffer, handle, info, mipLevels, layers);
+        }
+
 
 		template <ContigiousRange<VkImageBlit> Rng = std::vector<VkImageBlit>>
 		void blit(VkCommandBuffer commandBuffer, VkImage src, VkFilter filter, Rng&& rng){

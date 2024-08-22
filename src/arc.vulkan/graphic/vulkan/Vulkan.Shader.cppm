@@ -118,7 +118,7 @@ export namespace Core::Vulkan{
 		}
 
 		void createShaderModule(const OS::File& file){
-			createShaderModule(file.readString());
+			createShaderModule(file.readBytes<std::uint32_t>());
 		}
 	};
 

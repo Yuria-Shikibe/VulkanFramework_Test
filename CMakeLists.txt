@@ -96,7 +96,7 @@ target_link_directories(
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glfw3.lib
     vulkan-1.lib
-    shaderc_util.lib
+#    shaderc_util.lib
 )
 
 
@@ -106,7 +106,7 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     )
 else()
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        shaderc_combinded.lib
+        shaderc_shared.lib
     )
 endif()
 

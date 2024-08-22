@@ -231,9 +231,19 @@ namespace OS{
 		/**
 		 * Warning: This does not do append but erase and write!
 		 * */
-		void writeString(const std::string_view data) const{
+	    template <std::ranges::contiguous_range Rng>
+		void writeByte(const Rng& range) const{
+			if(std::ofstream ofStream(getPath(), std::ios::binary); ofStream.is_open()){
+			    ofStream.write(reinterpret_cast<const char *>(std::ranges::data(range)), sizeof(std::ranges::range_value_t<Rng>) * std::ranges::size(range));
+			}
+		}
+
+	    /**
+		 * Warning: This does not do append but erase and write!
+		 * */
+		void writeString(const std::string_view string) const{
 			if(std::ofstream ofStream(getPath()); ofStream.is_open()){
-				ofStream << data;
+			    ofStream << string;
 			}
 		}
 
@@ -321,11 +331,11 @@ namespace OS{
 			return std::move(file_contents).str();
 		}
 
-		[[nodiscard]] std::string readString() const{
+		[[nodiscard]] std::string readString(std::size_t padding = 1) const{
 			std::ifstream file_stream(getPath(), std::ios::binary | std::ios::ate);
 			if(!file_stream.is_open()) return "";
 
-			const auto length = file_stream.tellg();
+			const std::size_t length = file_stream.tellg();
 			file_stream.seekg(std::ios::beg);
 
 			std::string str{};
@@ -334,6 +344,21 @@ namespace OS{
 				file_stream.read(buf, static_cast<std::streamsize>(buf_size));
 				return buf_size;
 			});
+
+			return str;
+		}
+
+	    template <typename T = std::byte>
+		[[nodiscard]] std::vector<T> readBytes() const{
+			std::ifstream file_stream(getPath(), std::ios::binary | std::ios::ate);
+			if(!file_stream.is_open()) return {};
+
+			const std::size_t length = file_stream.tellg();
+			file_stream.seekg(std::ios::beg);
+
+			std::vector<T> str((length - 1) / sizeof(T) + 1);
+
+		    file_stream.read(reinterpret_cast<char *>(str.data()), static_cast<std::streamsize>(str.size() * sizeof(T)));
 
 			return str;
 		}

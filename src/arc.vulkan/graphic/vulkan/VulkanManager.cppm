@@ -45,6 +45,7 @@ import Core.Vulkan.BatchData;
 
 import Graphic.PostProcessor;
 
+import Math;
 import OS.File;
 
 import Assets.Graphic;
@@ -70,17 +71,21 @@ export namespace Core::Vulkan{
 		}
 
 		FramebufferLocal batchFrameBuffer{};
+	    ImageView depthImageView{};
 
 		ColorAttachment blurResultAttachment{};
 		ColorAttachment mergeResultAttachment{};
 	    ColorAttachment nfaaResultAttachment{};
 
-		std::atomic_bool descriptorSetUpdated{false};
-		Fence batchFence{};
+        //TODO move this into batch?
+        std::atomic_bool descriptorSetUpdated{false};
+        Fence batchFence{};
+
+
 		CommandBuffer batchDrawCommand{};
 
 		Graphic::PostProcessor processBlur{};
-		Graphic::PostProcessor processBloom{};
+		Graphic::PostProcessor processMerge{};
 		Graphic::PostProcessor nfaa{};
 
 		struct InFlightData{
@@ -96,8 +101,8 @@ export namespace Core::Vulkan{
 		BatchData batchVertexData{};
 
 		void drawFrame(bool isLast, const Fence& fence){
-			auto currentFrame = swapChain.getCurrentInFlightImage();
-			auto& currentFrameData = frameDataArr[currentFrame];
+			const auto currentFrame = swapChain.getCurrentInFlightImage();
+			const auto& currentFrameData = frameDataArr[currentFrame];
 
 			VkSubmitInfo submitInfo{
 					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -131,8 +136,8 @@ export namespace Core::Vulkan{
 
 
             processBlur.submitCommand({currentFrameData.renderFinishedSemaphore.get()});
-            processBloom.submitCommand({processBlur.getToWait()});
-            nfaa.submitCommand({processBloom.getToWait()});
+            processMerge.submitCommand({processBlur.getToWait()});
+            nfaa.submitCommand({processMerge.getToWait()});
 
             currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
@@ -200,6 +205,7 @@ export namespace Core::Vulkan{
 			setBatchGroup();
 
 			createFrameBuffers();
+		    createDepthView();
 			updateInputDescriptorSet();
 
 			swapChain.recreateCallback = [this](SwapChain& swapChain){
@@ -214,18 +220,19 @@ export namespace Core::Vulkan{
 			std::cout.flush();
 		}
 
-		void updateDescriptorSet(std::span<VkDescriptorImageInfo> imageInfo){
-			DescriptorSetUpdator updator{context.device, batchDrawPass.front().descriptorSets[0]};
+		void updateBatchDescriptorSet(std::span<const VkImageView> imageViews){
+			DescriptorSetUpdator updator{context.device, batchDrawPass.front().descriptorSets.front()};
 
-			auto bufferInfo = batchDrawPass.front().uniformBuffers[0].getDescriptorInfo();
+			auto bufferInfo = batchDrawPass.front().uniformBuffers.front().getDescriptorInfo();
+		    auto imageInfo =
+                Util::getDescriptorInfoRange_ShaderRead(Assets::Sampler::textureDefaultSampler,
+            	imageViews | std::views::take_while([](VkImageView imageView){ return imageView != nullptr; }));
 
 			updator.push(bufferInfo);
 			if(!imageInfo.empty())updator.push(imageInfo);
 
-			if(!imageInfo.empty()){
-				batchFence.waitAndReset();
-				descriptorSetUpdated = true;
-			}
+		    batchFence.waitAndReset();
+		    descriptorSetUpdated = true;
 
 			updator.update();
 		}
@@ -314,18 +321,18 @@ export namespace Core::Vulkan{
 		    mergeResultAttachment.resize(swapChain.size2D(), cmd);
 		    batchFrameBuffer.resize(swapChain.size2D(), cmd);
 		    nfaaResultAttachment.resize(swapChain.size2D(), cmd);
-
             bindSwapChainFrameBuffer();
 
             cmd = {};
+		    createDepthView();
 
-            processBloom.resize(swapChain.size2D());
+            processMerge.resize(swapChain.size2D());
 		    processBlur.resize(swapChain.size2D());
 		    nfaa.resize(swapChain.size2D());
 
 		    updateInputDescriptorSet();
 
-		    createDrawCommands();
+		    createBatchDrawCommands();
 		    createFlushCommands();
 		}
 
@@ -475,15 +482,124 @@ export namespace Core::Vulkan{
 				return port;
 			});
 
+		    {
+		        processMerge = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
+                    Graphic::AttachmentPort port{};
+                    port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
+                    port.in.insert_or_assign(1u, batchFrameBuffer.atLocal(1).getView());
+                    port.in.insert_or_assign(2u, blurResultAttachment.getView());
+                    // port.in.insert_or_assign(3u, batchFrameBuffer.atLocal(2).getView());
 
-			processBloom = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
-				Graphic::AttachmentPort port{};
-				port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(1).getView());
-				port.in.insert_or_assign(1u, blurResultAttachment.getView());
-				port.out.insert_or_assign(2u, mergeResultAttachment.getView());
+                    port.out.insert_or_assign(4u, mergeResultAttachment.getView());
 
-				return port;
-			});
+                    return port;
+                });
+
+			    processMerge.descriptorSetUpdator = [this](Graphic::PostProcessor& postProcessor){
+			        {
+			            auto& set = postProcessor.renderProcedure.atLocal(0).descriptorSets;
+
+			            DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
+
+                        const auto& ubo = postProcessor.renderProcedure.atLocal(0).uniformBuffers[0];
+
+			            auto* data = static_cast<Assets::PostProcess::UniformBlock_SSAO *>(ubo.memory.map());
+			            new (data) Assets::PostProcess::UniformBlock_SSAO;
+
+			            const auto scale = ~postProcessor.size().as<float>();
+
+			            for (std::size_t count{}; const auto & param : Assets::PostProcess::UniformBlock_SSAO::SSAO_Params) {
+                            for(std::size_t i = 0; i < param.count; ++i) {
+                                data->kernal[count].first.setPolar((Math::DEG_FULL / static_cast<float>(param.count)) * static_cast<float>(i), param.distance) *= scale;
+                                data->kernal[count].second.x = param.weight;
+                                count++;
+                            }
+			            }
+
+			            ubo.memory.unmap();
+
+			            auto uniformInfo = ubo.getDescriptorInfo();
+			            auto depthInfo = VkDescriptorImageInfo{
+			                .sampler = Assets::Sampler::blitSampler,
+                            .imageView = depthImageView,
+                            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                        };
+
+			            updator.push(uniformInfo);
+			            updator.pushSampledImage(depthInfo);
+			            updator.update();
+			        }
+
+			        {
+			            auto& set = postProcessor.renderProcedure.atLocal(1).descriptorSets;
+
+			            DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
+
+			            std::array layouts{
+			                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        };
+
+			            std::array<VkDescriptorImageInfo, std::ssize(layouts)> infos{};
+
+			            for(const auto& [index, layout] : layouts | std::views::enumerate) {
+			                infos[index] = postProcessor.framebuffer.getInputInfo(index, layout);
+			            }
+
+			            for (auto && [index, inputAttachmentImageInfo] : infos | std::views::enumerate) {
+			                updator.pushAttachment(inputAttachmentImageInfo);
+			            }
+
+			            updator.update();
+			        }
+			    };
+
+			    processMerge.commandRecorder = [this](Graphic::PostProcessor& postProcessor){
+			        ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+
+			        batchFrameBuffer.atLocal(2).getImage().transitionImageLayout(
+                    scopedCommand, {
+                        .aspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                        .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        .srcAccessMask = 0,
+                        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+                        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                    });
+
+			        const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
+			        vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
+                    auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
+
+                    cmdContext.data().bindDescriptorTo(scopedCommand);
+			        scopedCommand->blitDraw();
+
+			        cmdContext.next();
+
+			        cmdContext.data().bindDescriptorTo(scopedCommand);
+			        scopedCommand->blitDraw();
+
+			        vkCmdEndRenderPass(scopedCommand);
+
+                    processMerge.framebuffer.atLocal(0).getImage().transitionImageLayout(
+                        scopedCommand, {
+                            .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
+                            .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                            .srcAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+                            .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+                            .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                            .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+                        });
+
+			    };
+
+			    processMerge.updateDescriptors();
+			    processMerge.recordCommand();
+		    }
 
 			nfaa = Assets::PostProcess::Factory::nfaaFactory.generate(swapChain.size2D(), [this]{
 				Graphic::AttachmentPort port{};
@@ -498,7 +614,7 @@ export namespace Core::Vulkan{
                 DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
 
                 auto info = Assets::Sampler::blitSampler.getDescriptorInfo_ShaderRead(
-                    batchFrameBuffer.atLocal(0).getView(), VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
+                    mergeResultAttachment.getView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 updator.pushSampledImage(info);
                 updator.update();
             };
@@ -517,17 +633,38 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createDrawCommands(){
+	    void createDepthView() {
+		    depthImageView = ImageView{context.device, {
+                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                .pNext = nullptr,
+                .flags = 0,
+                .image = batchFrameBuffer.atLocal(2).getImage(),
+                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                .format = VK_FORMAT_D24_UNORM_S8_UINT,
+                .components = {},
+                .subresourceRange = VkImageSubresourceRange{
+                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+		    }};
+		}
+
+		void createBatchDrawCommands(){
 			const ScopedCommand scopedCommand{batchDrawCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
 			const auto renderPassInfo = batchDrawPass.getBeginInfo(batchFrameBuffer);
-
 			vkCmdBeginRenderPass(scopedCommand, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+
 			const auto pipelineContext = batchDrawPass.startCmdContext(scopedCommand);
 
 			pipelineContext.data().bindDescriptorTo(scopedCommand);
 
 			batchVertexData.bindTo(scopedCommand);
+
 
 			vkCmdEndRenderPass(scopedCommand);
 		}

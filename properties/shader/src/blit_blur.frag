@@ -6,7 +6,7 @@ layout(location = 0) out vec4 outColor;
 
 layout(location = 0) in vec2 fragCoord;
 
-layout(binding = 0) uniform  sampler2D tex;
+layout(binding = 0) uniform sampler2D tex;
 
 layout(push_constant) uniform PushConstants1 {
     vec2 offset[2];

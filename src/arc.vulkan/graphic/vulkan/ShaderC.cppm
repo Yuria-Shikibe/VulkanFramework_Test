@@ -7,7 +7,7 @@ import std;
 import OS.File;
 
 export namespace Core::Vulkan {
-    const std::filesystem::path DefaultCompilerPath{R"(D:\projects\vulkan_framework\properties\shader\glslangValidator.exe)"};
+    // const std::filesystem::path DefaultCompilerPath{R"(D:\projects\vulkan_framework\properties\shader\glslangValidator.exe)"};
     const std::filesystem::path TargetCompilerPath{R"(D:\projects\vulkan_framework\properties\shader\spv)"};
     const std::filesystem::path DefaultSrcPath{R"(D:\projects\vulkan_framework\properties\shader\src)"};
 
@@ -65,11 +65,16 @@ export namespace Core::Vulkan {
     public:
         ShaderRuntimeCompiler() {
             options.SetSourceLanguage(shaderc_source_language_glsl);
+            options.SetWarningsAsErrors();
+            options.SetGenerateDebugInfo();
+            options.SetTargetEnvironment(shaderc_target_env_vulkan, shaderc_env_version_vulkan_1_3);
+            options.SetTargetSpirv(shaderc_spirv_version_1_6);
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
+
             options.SetIncluder(std::make_unique<Includer>());
         }
-
-        std::string compile(const std::span<const char> code, const char *filepath, const char *entry = "main") const {
+        //C:\VulkanSDK\1.3.290.0\Bin\spirv-val.exe D:\projects\vulkan_framework\properties\shader\spv\fxaa.frag.spv
+        auto compile(const std::span<const char> code, const char *filepath, const char *entry = "main") const {
             const shaderc::SpvCompilationResult result =
                 compiler.CompileGlslToSpv(
                     code.data(), code.size(),
@@ -79,10 +84,12 @@ export namespace Core::Vulkan {
             auto err = result.GetErrorMessage();
             if(!err.empty())std::println(std::cerr, "{}", result.GetErrorMessage());
 
-            return {result.begin(), result.end()};
+            std::vector<std::uint32_t> bin{result.begin(), result.end()};
+
+            return bin;
         }
 
-        std::string compile(const OS::File &file, const char *entry = "main") const {
+        decltype(auto) compile(const OS::File &file, const char *entry = "main") const {
             const auto pStr = file.absolutePath().string();
             const auto code = file.readString();
 
@@ -107,11 +114,11 @@ export namespace Core::Vulkan {
 
     };
 
-    struct CompilerAdaptor {
+    struct ShaderCompilerWriter {
         const ShaderRuntimeCompiler& compiler;
         OS::File outputDirectory{};
 
-        [[nodiscard]] CompilerAdaptor(const ShaderRuntimeCompiler& compiler, const OS::File& outputDirectory) :
+        [[nodiscard]] ShaderCompilerWriter(const ShaderRuntimeCompiler& compiler, const OS::File& outputDirectory) :
             compiler{compiler},
             outputDirectory{outputDirectory} {
             if(!outputDirectory.isDir()) {
@@ -123,7 +130,7 @@ export namespace Core::Vulkan {
             const auto rst = compiler.compile(file);
 
             const auto target = outputDirectory.subFile(file.filename() + ".spv");
-            target.writeString(rst);
+            target.writeByte(rst);
         }
     };
 }

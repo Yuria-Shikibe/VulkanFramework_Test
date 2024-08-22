@@ -12,37 +12,52 @@ import Geom.Vector2D;
 import Math;
 
 export namespace Math {
+    template <Concepts::Number N>
+    struct Packable {
+        using PackValueType = N;
+
+        Geom::Rect_Orthogonal<N>& getBound() = delete;
+    };
+
+    struct T : Packable<std::uint32_t>{
+        Geom::Rect_Orthogonal<PackValueType>& getBound() {
+
+        }
+    };
+
 	/**
      * @brief
      * @tparam T Should Avoid Copy When Tgt Type is provided
-     * @tparam N pack arithmetic type
-     * @tparam trans Trans the Tgt to a non-temp rect
      */
-    template <typename T, Concepts::Number N, auto trans>
-		requires requires(){
-    		requires std::is_pointer_v<T>;
-    		requires std::same_as<Geom::Rect_Orthogonal<N>&, std::invoke_result_t<decltype(trans), T>>;
+    template <Concepts::SpecDeriveOf<Packable> T>
+		requires requires(T& t){
+    		requires std::derived_from<T, Packable<typename T::PackValueType>>;
+            { t.getBound() } -> std::same_as<Geom::Rect_Orthogonal<typename T::PackValueType>&>;
 	    }
 	struct StripPacker2D {
     protected:
+        using N = typename T::PackValueType;
 		using Rect = Geom::Rect_Orthogonal<N>;
     	using SubRectArr = std::array<Rect, 3>;
+        using SizeTy = Geom::Vector2D<N>;
+        using Ref = std::add_pointer_t<T>;
 
-    	static Rect& obtain(T cont) noexcept {
-			return std::invoke(trans, cont);
+    	static Rect& obtain(Ref cont) noexcept {
+			return cont->getBound();
 		}
 
-    	[[nodiscard]] bool contains(T cont) const noexcept {return all.contains(cont);}
+    	[[nodiscard]] bool contains(Ref cont) const noexcept {
+    	    return all.contains(cont);
+    	}
 
-    	std::vector<T> boxes_widthAscend{};
-    	std::vector<T> boxes_heightAscend{};
-    	std::unordered_set<T> all{};
+    	std::vector<Ref> boxes_widthAscend{};
+    	std::vector<Ref> boxes_heightAscend{};
+    	std::unordered_set<Ref> all{};
+        std::vector<Ref> packed{};
 
-    	using SizeTy = Geom::Vector2D<N>;
+
     public:
-    	std::vector<T> packed{};
-
-    	SizeTy exportSize{};
+        SizeTy exportSize{};
     	SizeTy maxSize{};
 
     	N margin{0};
@@ -57,34 +72,31 @@ export namespace Math {
 
 		[[nodiscard]] StripPacker2D() = default;
 
-    	template <Concepts::Iterable<T> Rng>
-			requires std::ranges::sized_range<Rng>
-		[[nodiscard]] explicit StripPacker2D(Rng& targets){
-    		this->template push<Rng>(targets);
+        template <std::ranges::sized_range Rng>
+            requires (std::same_as<Ref, std::ranges::range_value_t<Rng>>)
+		[[nodiscard]] explicit StripPacker2D(Rng&& targets){
+    		this->push<Rng>(std::forward<Rng>(targets));
     	}
 
-    	template <Concepts::Iterable<T> Rng>
-    		requires std::ranges::sized_range<Rng>
-    	void push(Rng& targets){
-    		all.reserve(targets.size());
-    		boxes_widthAscend.reserve(targets.size());
-    		boxes_heightAscend.reserve(targets.size());
+    	template <std::ranges::sized_range Rng>
+    		requires (std::same_as<Ref, std::ranges::range_value_t<Rng>>)
+    	void push(Rng&& targets){
+    	    auto size = std::ranges::size(targets);
+    		all.reserve(size);
+            packed.reserve(size);
 
-    		for(auto& element : targets) { //Why transform crashes?
-    			all.insert(element);
-    			boxes_widthAscend.push_back(element);
-    			boxes_heightAscend.push_back(element);
-    		}
+            boxes_widthAscend = {std::ranges::begin(targets), std::ranges::end(targets)};
+            boxes_heightAscend = {std::ranges::begin(targets), std::ranges::end(targets)};
 
-    		packed.reserve(all.size());
+    	    std::ranges::transform(targets, std::inserter(all, all.end()));
     	}
 
 		void sortData() {
-    		std::ranges::sort(boxes_widthAscend , std::greater<N>{}, [](const T& t){
+    		std::ranges::sort(boxes_widthAscend , std::greater<N>{}, [](const Ref& t){
     			return StripPacker2D::obtain(t).getWidth();
     		});
 
-    		std::ranges::sort(boxes_heightAscend, std::greater<N>{}, [](const T& t){
+    		std::ranges::sort(boxes_heightAscend, std::greater<N>{}, [](const Ref& t){
 				return StripPacker2D::obtain(t).getHeight();
 			});
     	}
@@ -111,12 +123,14 @@ export namespace Math {
 
     	Geom::Vector2D<N> getResultSize() const noexcept {return exportSize;}
 
-    	std::unordered_set<T>& getRemains() noexcept {return all;}
+    	auto& getRemains() noexcept {return all;}
+
+    	auto& getPacked() noexcept {return packed;}
 
     protected:
     	[[nodiscard]] bool shouldStop() const noexcept {return all.empty();}
 
-    	Rect* tryPlace(const Rect& bound, std::vector<T>& targets) noexcept {
+    	Rect* tryPlace(const Rect& bound, const std::vector<Ref>& targets) noexcept {
     		for(auto& cont : targets){
     			if(!this->contains(cont))continue;
 
@@ -128,7 +142,6 @@ export namespace Math {
 					rect.getEndX() <= bound.getEndX() &&
 					rect.getEndY() <= bound.getEndY()
 				){
-
     				all.erase(cont);
     				packed.push_back(cont);
 
@@ -156,9 +169,9 @@ export namespace Math {
     	 *              |                                                                        
     	 * @endcode 
     	 */
-    	constexpr SubRectArr splitQuad(const Rect& bound, const Rect& box) {
+        static constexpr SubRectArr splitQuad(const Rect& bound, const Rect& box) {
 #if DEBUG_CHECK
-    		if(bound.getSrcX() != box.getSrcX() || box.getSrcY() != box.getSrcY())throw ext::IllegalArguments{"The source of the box and the bound doesn't match"};
+    		if(bound.getSrcX() != box.getSrcX() || bound.getSrcY() != box.getSrcY())throw ext::IllegalArguments{"The source of the box and the bound doesn't match"};
 #endif
     		return SubRectArr{
     			Rect{bound.getSrcX(),   box.getEndY(),   box.getWidth()                 , bound.getHeight() - box.getHeight()},
@@ -178,7 +191,7 @@ export namespace Math {
 				for(const auto& [i, bound] : currentBound | std::ranges::views::enumerate){
 					if(bound.area() == 0)continue;
 
-					if(const Rect* const result = this->tryPlace(bound, (i & 1) ? boxes_widthAscend : boxes_heightAscend)){
+					if(const Rect* result = this->tryPlace(bound, (i & 1) ? boxes_widthAscend : boxes_heightAscend)){
 						//if(result != nullptr)
 						auto arr = this->splitQuad(bound, *result);
 						if(arr[0].area() == 0 && arr[1].area() == 0 && arr[2].area() == 0)continue;
@@ -190,4 +203,5 @@ export namespace Math {
     		if(!next.empty())this->tryPlace(std::move(next));
     	}
     };
+
 }

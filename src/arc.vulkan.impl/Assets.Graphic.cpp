@@ -28,7 +28,7 @@ void Assets::Shader::load(VkDevice device){
 		device, builtinShaderDir / R"(blit_blur.frag.spv)"
 	};
 
-	Vert::blitUV = Core::Vulkan::ShaderModule{
+	Vert::blitWithUV = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(blit_uv.vert.spv)"
 	};
 
@@ -43,11 +43,25 @@ void Assets::Shader::load(VkDevice device){
 	Frag::NFAA = Core::Vulkan::ShaderModule{
 		device, builtinShaderDir / R"(nfaa.frag.spv)"
 	};
+
+	Frag::SSAO = Core::Vulkan::ShaderModule{
+		device, builtinShaderDir / R"(ssao.frag.spv)"
+	};
 }
 
 void Assets::Sampler::load(VkDevice device){
 	textureDefaultSampler = Core::Vulkan::Sampler(device, Core::Vulkan::SamplerInfo::TextureSampler);
-	blitSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
+
+    textureLowpSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
+		| Core::Vulkan::SamplerInfo::Default
+		| Core::Vulkan::SamplerInfo::LOD_Max
+		| Core::Vulkan::SamplerInfo::AddressMode_Clamp
+		| Core::Vulkan::SamplerInfo::Filter_Nearest
+		| Core::Vulkan::SamplerInfo::Anisotropy<0>
+		| Core::Vulkan::SamplerInfo::CompareOp<>
+	);
+
+    blitSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
 		| Core::Vulkan::SamplerInfo::Default
 		| Core::Vulkan::SamplerInfo::LOD_None
 		| Core::Vulkan::SamplerInfo::AddressMode_Clamp
@@ -55,6 +69,18 @@ void Assets::Sampler::load(VkDevice device){
 		| Core::Vulkan::SamplerInfo::Anisotropy<0>
 		| Core::Vulkan::SamplerInfo::CompareOp<>
 	);
+
+    // auto info = VkSamplerCreateInfo{}
+    // | Core::Vulkan::SamplerInfo::Default
+    // | Core::Vulkan::SamplerInfo::LOD_None
+    // | Core::Vulkan::SamplerInfo::AddressMode_Clamp
+    // | Core::Vulkan::SamplerInfo::Filter_Linear
+    // | Core::Vulkan::SamplerInfo::Anisotropy<0>
+    // | Core::Vulkan::SamplerInfo::CompareOp<>;
+    //
+    // info.
+    //
+    // depthSampler = Core::Vulkan::Sampler(device, info);
 }
 
 void Assets::load(const Core::Vulkan::Context& context){

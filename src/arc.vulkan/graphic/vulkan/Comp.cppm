@@ -157,7 +157,14 @@ namespace Core::Vulkan{
 		template <VkImageLayout imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL>
 		constexpr Util::Component ImportAttachment{
 				VkAttachmentDescription{
-					.format = VK_FORMAT_R8G8B8A8_UNORM,
+					.format = [] {
+					    switch(imageLayout) {
+					        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL :
+					            return VK_FORMAT_D24_UNORM_S8_UINT;
+
+					        default: return VK_FORMAT_R8G8B8A8_UNORM;
+					    }
+					}(),
 					.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 					.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 

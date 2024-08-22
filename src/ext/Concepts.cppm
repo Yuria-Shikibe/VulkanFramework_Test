@@ -140,6 +140,10 @@ namespace Concepts {
 		Concepts::derived_from_specialization_impl<Template>(obj);
 	};
 
+    template <typename T>
+    concept Complete = requires{
+        sizeof(T);
+    };
 
 	export template <typename T, typename Type>
 	concept Iterator = requires(T t){

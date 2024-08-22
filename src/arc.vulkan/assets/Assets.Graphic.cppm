@@ -21,7 +21,7 @@ export namespace Assets{
 		namespace Vert{
 			Core::Vulkan::ShaderModule batchShader{};
 			Core::Vulkan::ShaderModule blitSingle{};
-			Core::Vulkan::ShaderModule blitUV{};
+			Core::Vulkan::ShaderModule blitWithUV{};
 		}
 
 		namespace Frag{
@@ -34,6 +34,7 @@ export namespace Assets{
 
 			Core::Vulkan::ShaderModule FXAA{};
 			Core::Vulkan::ShaderModule NFAA{};
+			Core::Vulkan::ShaderModule SSAO{};
 		}
 
 
@@ -44,7 +45,7 @@ export namespace Assets{
 		void dispose(){
 			Vert::batchShader = {};
 			Vert::blitSingle = {};
-			Vert::blitUV = {};
+			Vert::blitWithUV = {};
 
 			Frag::batchShader = {};
 			Frag::blitBlur = {};
@@ -52,18 +53,23 @@ export namespace Assets{
 			Frag::blitSingle = {};
 			Frag::FXAA = {};
 			Frag::NFAA = {};
+			Frag::SSAO = {};
 		}
 	}
 
 	namespace Sampler{
 		Core::Vulkan::Sampler textureDefaultSampler{};
+		Core::Vulkan::Sampler textureLowpSampler{};
 		Core::Vulkan::Sampler blitSampler{};
+		Core::Vulkan::Sampler depthSampler{};
 
 		void load(VkDevice device);
 
 		void dispose(){
 			textureDefaultSampler = {};
+			textureLowpSampler = {};
 			blitSampler = {};
+			depthSampler = {};
 		}
 	}
 
