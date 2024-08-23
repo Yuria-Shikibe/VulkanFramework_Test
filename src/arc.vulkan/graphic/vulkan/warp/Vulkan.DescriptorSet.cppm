@@ -205,7 +205,7 @@ export namespace Core::Vulkan{
 				.pSetLayouts = layouts.data()
 			};
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, reinterpret_cast<VkDescriptorSet*>(descriptors.data())) != VK_SUCCESS) {
+			if (auto rst = vkAllocateDescriptorSets(device, &allocInfo, reinterpret_cast<VkDescriptorSet*>(descriptors.data())); rst != VK_SUCCESS) {
 				throw std::runtime_error("Failed to allocate descriptor sets!");
 			}
 
@@ -242,6 +242,14 @@ export namespace Core::Vulkan{
 		void push(VkDescriptorBufferInfo& uniformBufferInfo){
 			const auto index = descriptorWrites.size();
 
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+			current.pBufferInfo = &uniformBufferInfo;
+		}
+
+		void add(std::uint32_t index, VkDescriptorBufferInfo& uniformBufferInfo){
 			auto& current = descriptorWrites.emplace_back(DefaultSet);
 			current.dstSet = descriptorSets;
 			current.dstBinding = index;

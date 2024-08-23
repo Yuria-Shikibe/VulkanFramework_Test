@@ -59,10 +59,14 @@ export namespace Core{
 			return glfwWindowShouldClose(handle);
 		}
 
+	    void registerResizeCallback(const std::string_view name, std::function<void(const ResizeEvent&)>&& callback) {
+		    callback(ResizeEvent{size});
+		    eventManager.on<ResizeEvent>(name, std::move(callback));
+		}
+
 		void pollEvents() const{
 			glfwPollEvents();
 		}
-
 
 		void waitEvent() const{
 			glfwWaitEvents();

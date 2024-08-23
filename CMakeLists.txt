@@ -24,6 +24,7 @@ file(COPY ${MSVC_MODULE_DIR} DESTINATION
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+set(RES_DIR properties)
 set(SRC_DIR src)
 set(INCLUDES include)
 set(LIB_DIR lib)
@@ -48,6 +49,8 @@ add_link_options("/NODEFAULTLIB:library")
 message(STATUS "Loading...")
 
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    add_compile_definitions(ASSETS_DIR=\"${CMAKE_CURRENT_SOURCE_DIR}/${RES_DIR}\")
+
     add_compile_definitions(DEBUG_CHECK=1)
 else()
     add_compile_definitions(DEBUG_CHECK=0)
@@ -96,7 +99,14 @@ target_link_directories(
 target_link_libraries(${PROJECT_NAME} PRIVATE
     glfw3.lib
     vulkan-1.lib
-#    shaderc_util.lib
+    shaderc_util.lib
+)
+
+
+target_sources(${PROJECT_NAME}
+    PRIVATE
+    ${FAST_MODULES}      #[[Modules]]
+    ${MODULE_DIR}/std.ixx
 )
 
 
@@ -104,17 +114,24 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
     target_link_libraries(${PROJECT_NAME} PRIVATE
         shaderc_shared.lib
     )
-else()
+
+#    set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
+#    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+#        COMMAND ${CMAKE_COMMAND} -E remove ${FILE_TO_DELETE}
+#        COMMENT "Deleting ${FILE_TO_DELETE}"
+#    )
+elseif(${CMAKE_BUILD_TYPE} STREQUAL "Release")
+    message(STATUS "Copy Properties Setup")
+
     target_link_libraries(${PROJECT_NAME} PRIVATE
         shaderc_shared.lib
     )
+
+    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/${RES_DIR}/ ${EXE_DIR}
+    )
 endif()
 
-target_sources(${PROJECT_NAME}
-    PRIVATE
-    ${FAST_MODULES}      #[[Modules]]
-    ${MODULE_DIR}/std.ixx
-)
 
 #set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
 #add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD

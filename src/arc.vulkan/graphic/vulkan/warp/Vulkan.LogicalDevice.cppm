@@ -16,9 +16,14 @@ export namespace Core::Vulkan{
 		VkQueue computeQueue{};
 
 	public:
-		static constexpr VkPhysicalDeviceFeatures RequiredFeatures{
-			.samplerAnisotropy = true
-		};
+	    static constexpr VkPhysicalDeviceFeatures RequiredFeatures{[]{
+	        VkPhysicalDeviceFeatures features{};
+
+	        features.samplerAnisotropy = true;
+	        features.independentBlend = true;
+
+	        return features;
+	    }()};
 
 		static constexpr VkPhysicalDeviceDescriptorIndexingFeatures RequiredDescriptorIndexingFeatures{[](){
 			VkPhysicalDeviceDescriptorIndexingFeatures features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES};

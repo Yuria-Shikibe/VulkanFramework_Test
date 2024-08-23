@@ -1,0 +1,65 @@
+#version 460 core
+#pragma shader_stage(fragment)
+#extension GL_ARB_separate_shader_objects : enable
+
+layout(input_attachment_index = 0, set = 0, binding = 0) uniform subpassInput sourceTex;
+layout(input_attachment_index = 1, set = 0, binding = 1) uniform subpassInput lightSourceTex;
+layout(input_attachment_index = 2, set = 0, binding = 2) uniform subpassInput blurredLightTex;
+layout(input_attachment_index = 3, set = 0, binding = 3) uniform subpassInput ssaoResultTex;
+
+layout(location = 0) out vec4 outColor;
+
+const float intensity_blo = 1.125f;
+const float intensity_ori = 0.95f;
+
+const float lightScl = 1.5f;
+
+vec4 lerp_smooth(vec4 a){
+    a = a * a * (3.0f - 2.0f * a);
+    return a * a * (3.0f - 2.0f * a);
+}
+
+float lerp_smooth(float a){
+    a = a * a * (3.0f - 2.0f * a);
+    return a * a * (3.0f - 2.0f * a);
+}
+
+vec4 toPremultipliedAlpha(vec4 color) {
+    return vec4(color.rgb * color.a, color.a);
+}
+
+vec4 premultipliedAlphaBlend(vec4 src, vec4 dst) {
+    vec4 result = toPremultipliedAlpha(src) + toPremultipliedAlpha(dst) * (1.0 - src.a);
+    return result;
+}
+
+void main() {
+    vec4 baseColor = subpassLoad(sourceTex);
+    vec4 original = subpassLoad(lightSourceTex) * intensity_ori;
+    vec4 bloom = subpassLoad(blurredLightTex) * intensity_blo;
+    vec4 ssao = subpassLoad(ssaoResultTex);
+
+    original = original * (vec4(1.0) - bloom);
+    vec4 combined = original + bloom;
+
+    float mx = min(max(combined.r, max(combined.g, combined.b)), 1.0);
+
+    vec4 lightColor = vec4(combined.rgb / max(mx, 0.0001), mx);
+
+    float lightness = lightColor.a * lightScl;
+    ssao.a -= lightness;
+
+/**
+.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
+				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				.colorBlendOp = VK_BLEND_OP_ADD,
+				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+				.alphaBlendOp = VK_BLEND_OP_ADD,
+*/
+
+    outColor = premultipliedAlphaBlend(lightColor, vec4(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), baseColor.a));
+//    mix(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), lightColor.rgb, lightColor.a),
+//    mix(baseColor.a, 1.f, lightColor.a));
+//    outColor = subpassLoad(sourceTex);
+}

@@ -7,7 +7,7 @@ export module Assets.Graphic;
 import Core.Vulkan.Shader;
 import Core.Vulkan.Sampler;
 
-import OS.File;
+import Core.File;
 
 namespace Core::Vulkan{
 	export class Context;
@@ -16,8 +16,6 @@ namespace Core::Vulkan{
 
 export namespace Assets{
 	namespace Shader{
-		OS::File builtinShaderDir{};
-
 		namespace Vert{
 			Core::Vulkan::ShaderModule batchShader{};
 			Core::Vulkan::ShaderModule blitSingle{};
@@ -36,9 +34,6 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule NFAA{};
 			Core::Vulkan::ShaderModule SSAO{};
 		}
-
-
-
 
 		void load(VkDevice device);
 
@@ -59,6 +54,7 @@ export namespace Assets{
 
 	namespace Sampler{
 		Core::Vulkan::Sampler textureDefaultSampler{};
+		Core::Vulkan::Sampler textureNearestSampler{};
 		Core::Vulkan::Sampler textureLowpSampler{};
 		Core::Vulkan::Sampler blitSampler{};
 		Core::Vulkan::Sampler depthSampler{};
@@ -67,6 +63,7 @@ export namespace Assets{
 
 		void dispose(){
 			textureDefaultSampler = {};
+			textureNearestSampler = {};
 			textureLowpSampler = {};
 			blitSampler = {};
 			depthSampler = {};

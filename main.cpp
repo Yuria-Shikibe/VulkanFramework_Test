@@ -1,6 +1,8 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
+// #include "src/application_head.h"
+
 import std;
 import Core.Window;
 import Core.Vulkan.Manager;
@@ -11,18 +13,23 @@ import Core.Vulkan.Image;
 import Core.Vulkan.Texture;
 import Core.Vulkan.Attachment;
 
-import Core.InitAndTerminate;
 
-import OS.File;
+import Core.File;
 import Graphic.Color;
 import Graphic.Batch;
 import Graphic.Pixmap;
+
+import Core.Input;
+import Graphic.Camera2D;
+import Core.InitAndTerminate;
+import Core.Global;
 
 import Geom.Matrix4D;
 
 import Core.Vulkan.Shader.Compile;
 
 import Assets.Graphic;
+import Assets.Directories;
 
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
@@ -31,28 +38,25 @@ Core::Vulkan::Texture texturePesterLight{};
 int main(){
     using namespace Core;
 
-
+	init();
 
     {
-        Vulkan::ShaderRuntimeCompiler compiler{};
-        Vulkan::ShaderCompilerWriter adaptor{compiler, Vulkan::TargetCompilerPath};
+        const Vulkan::ShaderRuntimeCompiler compiler{};
+        const Vulkan::ShaderCompilerWriter adaptor{compiler, Assets::Dir::shader_spv};
 
-        OS::File{Vulkan::DefaultSrcPath}.forSubs([&](OS::File&& file){
+        File{Assets::Dir::shader_src}.forSubs([&](Core::File&& file){
             adaptor.compile(file);
         });
     }
 
-    Assets::Shader::builtinShaderDir = Vulkan::TargetCompilerPath;
-
-	init();
 	Assets::load(vulkanManager->context);
 	vulkanManager->initVulkan();
 
 	texturePester = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
-	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), R"(D:\projects\vulkan_framework\properties\texture\pester.png)");
+	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.png)");
 
 	texturePesterLight = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
-	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), R"(D:\projects\vulkan_framework\properties\texture\pester.light.png)");
+	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
 
     auto* batch = new Graphic::Batch{vulkanManager->context, sizeof(Vulkan::BatchVertex)};
 
@@ -68,20 +72,18 @@ int main(){
     };
 
     while(window && !window->shouldClose()) {
+        timer.fetchApplicationTime();
         window->pollEvents();
+        input->update(timer.globalDeltaTick());
+        mainCamera->update(timer.globalDeltaTick());
 
-        float t = glfwGetTime();
-
-        Geom::Matrix3D matrix3D{};
-        matrix3D.setOrthogonal(vulkanManager->swapChain.getTargetWindow()->getSize().as<float>());
-        matrix3D.rotate(30);
-
-        vulkanManager->updateUniformBuffer(Vulkan::UniformBlock{matrix3D, 0.f});
+        vulkanManager->updateBatchUniformBuffer(Vulkan::UniformBlock{mainCamera->getWorldToScreen(), 0.f});
+        vulkanManager->updateCameraScale(mainCamera->getScale());
 
         constexpr auto baseColor = Graphic::Colors::WHITE;
         constexpr auto lightColor = Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
 
-        Geom::Vec2 off{200 + t * 5.f + 300, -100};
+        Geom::Vec2 off{ timer.getGlobalTime() * 5.f + 0, 0};
         Geom::Vec2 off2 = off.copy().add(50, 50);
 
         {
@@ -138,7 +140,6 @@ int main(){
 	Assets::dispose();
 
 	terminate();
-	GLFW::terminate();
 
 	return 0;//just for main func test swap...
 }

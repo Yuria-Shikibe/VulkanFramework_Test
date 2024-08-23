@@ -46,7 +46,7 @@ import Core.Vulkan.BatchData;
 import Graphic.PostProcessor;
 
 import Math;
-import OS.File;
+import Core.File;
 
 import Assets.Graphic;
 import Assets.Graphic.PostProcess;
@@ -81,19 +81,19 @@ export namespace Core::Vulkan{
         std::atomic_bool descriptorSetUpdated{false};
         Fence batchFence{};
 
-
 		CommandBuffer batchDrawCommand{};
 
 		Graphic::PostProcessor processBlur{};
 		Graphic::PostProcessor processMerge{};
 		Graphic::PostProcessor nfaa{};
 
+	    UniformBuffer scaleBuffer{};
+
 		struct InFlightData{
 			Fence inFlightFence{};
 			Semaphore imageAvailableSemaphore{};
 			Semaphore renderFinishedSemaphore{};
 			Semaphore flushFinishedSemaphore{};
-
 		};
 
 		std::array<InFlightData, MAX_FRAMES_IN_FLIGHT> frameDataArr{};
@@ -201,6 +201,7 @@ export namespace Core::Vulkan{
 		}
 
 		void initVulkan(){
+		    scaleBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
 			setFlushGroup();
 			setBatchGroup();
 
@@ -225,8 +226,7 @@ export namespace Core::Vulkan{
 
 			auto bufferInfo = batchDrawPass.front().uniformBuffers.front().getDescriptorInfo();
 		    auto imageInfo =
-                Util::getDescriptorInfoRange_ShaderRead(Assets::Sampler::textureDefaultSampler,
-            	imageViews | std::views::take_while([](VkImageView imageView){ return imageView != nullptr; }));
+                Util::getDescriptorInfoRange_ShaderRead(Assets::Sampler::textureDefaultSampler, imageViews);
 
 			updator.push(bufferInfo);
 			if(!imageInfo.empty())updator.push(imageInfo);
@@ -300,7 +300,31 @@ export namespace Core::Vulkan{
 		    bindSwapChainFrameBuffer();
         }
 
-	    void bindSwapChainFrameBuffer() {
+        void resize(SwapChain& swapChain){
+            flushPass.resize(swapChain.size2D());
+            batchDrawPass.resize(swapChain.size2D());
+
+            auto cmd = obtainTransientCommand();
+            blurResultAttachment.resize(swapChain.size2D(), cmd);
+            mergeResultAttachment.resize(swapChain.size2D(), cmd);
+            batchFrameBuffer.resize(swapChain.size2D(), cmd);
+            nfaaResultAttachment.resize(swapChain.size2D(), cmd);
+            cmd = {};
+
+            bindSwapChainFrameBuffer();
+            createDepthView();
+
+            processMerge.resize(swapChain.size2D());
+            processBlur.resize(swapChain.size2D());
+            nfaa.resize(swapChain.size2D());
+
+            updateInputDescriptorSet();
+
+            createBatchDrawCommands();
+            createFlushCommands();
+        }
+
+        void bindSwapChainFrameBuffer() {
 		    for(const auto& [i, group] : swapChain.getImageData() | std::ranges::views::enumerate){
 		        group.framebuffer = FramebufferLocal{context.device, swapChain.size2D(), flushPass.renderPass};
 
@@ -312,31 +336,7 @@ export namespace Core::Vulkan{
 		    }
 		}
 
-		void resize(SwapChain& swapChain){
-            flushPass.resize(swapChain.size2D());
-            batchDrawPass.resize(swapChain.size2D());
-
-            auto cmd = obtainTransientCommand();
-            blurResultAttachment.resize(swapChain.size2D(), cmd);
-		    mergeResultAttachment.resize(swapChain.size2D(), cmd);
-		    batchFrameBuffer.resize(swapChain.size2D(), cmd);
-		    nfaaResultAttachment.resize(swapChain.size2D(), cmd);
-            bindSwapChainFrameBuffer();
-
-            cmd = {};
-		    createDepthView();
-
-            processMerge.resize(swapChain.size2D());
-		    processBlur.resize(swapChain.size2D());
-		    nfaa.resize(swapChain.size2D());
-
-		    updateInputDescriptorSet();
-
-		    createBatchDrawCommands();
-		    createFlushCommands();
-		}
-
-	public:
+    public:
 
 		void setFlushGroup(){
 			flushPass.init(context);
@@ -458,7 +458,7 @@ export namespace Core::Vulkan{
 						.useDefaultFixedStages()
 						.setDepthStencilState(Default::DefaultDepthStencilState)
 						.setColorBlend(&Default::ColorBlending<std::array{
-						    Blending::ScaledAlphaBlend,
+						    Blending::AlphaBlend,
 						    Blending::ScaledAlphaBlend,
 						    // Blending::AlphaBlend,
 						}>)
@@ -475,12 +475,40 @@ export namespace Core::Vulkan{
 		}
 
 		void createPostEffectPipeline(){
-			processBlur = Assets::PostProcess::Factory::blurProcessorFactory.generate(swapChain.size2D(), [this]{
-				Graphic::AttachmentPort port{};
-				port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(1).getView());
-				port.out.insert_or_assign(3u, blurResultAttachment.getView());
-				return port;
-			});
+            {
+                processBlur = Assets::PostProcess::Factory::blurProcessorFactory.generate(swapChain.size2D(), [this] {
+                    Graphic::AttachmentPort port{};
+                    port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(1).getView());
+                    port.out.insert_or_assign(3u, blurResultAttachment.getView());
+                    return port;
+                });
+
+                processBlur.descriptorSetUpdator = [this](Graphic::PostProcessor &postProcessor) {
+                    auto &set = postProcessor.renderProcedure.front().descriptorSets;
+
+                    constexpr std::array layouts{
+                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
+                        };
+
+                    for(std::size_t i = 0; i < layouts.size(); ++i) {
+                        DescriptorSetUpdator updator{postProcessor.context->device, set[i]};
+                        auto imageInfo = Assets::Sampler::blitSampler.getDescriptorInfo_ShaderRead(
+                            postProcessor.framebuffer.at(i),
+                            layouts[i]
+                            );
+                        auto uniformInfo = scaleBuffer.getDescriptorInfo();
+
+                        updator.pushSampledImage(imageInfo);
+                        updator.push(uniformInfo);
+                        updator.update();
+                    }
+                };
+
+                processBlur.updateDescriptors();
+                processBlur.recordCommand();
+            }
 
 		    {
 		        processMerge = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
@@ -518,16 +546,18 @@ export namespace Core::Vulkan{
 
 			            ubo.memory.unmap();
 
-			            auto uniformInfo = ubo.getDescriptorInfo();
+			            auto uniformInfo1 = ubo.getDescriptorInfo();
+			            auto uniformInfo2 = scaleBuffer.getDescriptorInfo();
 			            auto depthInfo = VkDescriptorImageInfo{
 			                .sampler = Assets::Sampler::blitSampler,
                             .imageView = depthImageView,
                             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                         };
 
-			            updator.push(uniformInfo);
-			            updator.pushSampledImage(depthInfo);
-			            updator.update();
+			            updator.push(uniformInfo1);
+                        updator.pushSampledImage(depthInfo);
+                        updator.push(uniformInfo2);
+                        updator.update();
 			        }
 
 			        {
@@ -694,13 +724,15 @@ export namespace Core::Vulkan{
 				batchFrameBuffer.atLocal(0).cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 				batchFrameBuffer.atLocal(1).cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
 				batchFrameBuffer.atLocal(2).cmdClearDepthStencil(scopedCommand, {1.f}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-
-
 			}
 		}
 
-		void updateUniformBuffer(const UniformBlock& data) const{
+		void updateBatchUniformBuffer(const UniformBlock& data) const{
 			batchDrawPass.front().uniformBuffers[0].memory.loadData(data);
+		}
+
+		void updateCameraScale(const float scale) const{
+		    scaleBuffer.memory.loadData(scale);
 		}
 	};
 }

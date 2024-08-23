@@ -3,54 +3,65 @@ module;
 #include <vulkan/vulkan.h>
 
 module Assets.Graphic;
+import Assets.Directories;
 
 import Core.Vulkan.Context;
 import Assets.Graphic.PostProcess;
 
-void Assets::Shader::load(VkDevice device){
+void Assets::Shader::load(const VkDevice device){
+    const auto& dir = Dir::shader_spv;
+
 	Vert::batchShader = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(test.vert.spv)"
+		device, dir / R"(test.vert.spv)"
 	};
 
 	Frag::batchShader = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(test.frag.spv)"
+		device, dir / R"(test.frag.spv)"
 	};
 
 	Vert::blitSingle = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit.vert.spv)"
+		device, dir / R"(blit.vert.spv)"
 	};
 
 	Frag::blitSingle = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit.frag.spv)"
+		device, dir / R"(blit.frag.spv)"
 	};
 
 	Frag::blitBlur = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit_blur.frag.spv)"
+		device, dir / R"(blit_blur.frag.spv)"
 	};
 
 	Vert::blitWithUV = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit_uv.vert.spv)"
+		device, dir / R"(blit_uv.vert.spv)"
 	};
 
 	Frag::blitMerge = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(blit_merge.frag.spv)"
+		device, dir / R"(blit_merge.frag.spv)"
 	};
 
 	Frag::FXAA = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(fxaa.frag.spv)"
+		device, dir / R"(fxaa.frag.spv)"
 	};
 
 	Frag::NFAA = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(nfaa.frag.spv)"
+		device, dir / R"(nfaa.frag.spv)"
 	};
 
 	Frag::SSAO = Core::Vulkan::ShaderModule{
-		device, builtinShaderDir / R"(ssao.frag.spv)"
+		device, dir / R"(ssao.frag.spv)"
 	};
 }
 
-void Assets::Sampler::load(VkDevice device){
-	textureDefaultSampler = Core::Vulkan::Sampler(device, Core::Vulkan::SamplerInfo::TextureSampler);
+void Assets::Sampler::load(const VkDevice device){
+    textureDefaultSampler = Core::Vulkan::Sampler(device, Core::Vulkan::SamplerInfo::TextureSampler);
+
+    textureNearestSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
+        | Core::Vulkan::SamplerInfo::Default
+        | Core::Vulkan::SamplerInfo::Filter_Nearest
+        | Core::Vulkan::SamplerInfo::AddressMode_Clamp
+        | Core::Vulkan::SamplerInfo::LOD_Max_Nearest
+        | Core::Vulkan::SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>
+        | Core::Vulkan::SamplerInfo::Anisotropy<0>);
 
     textureLowpSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
 		| Core::Vulkan::SamplerInfo::Default

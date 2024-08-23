@@ -8,6 +8,7 @@ export namespace Core{
 
 	using TimerSetter = double(*)();
 	using DeltaSetter = double(*)(double);
+	using TimeReseter = void(*)(double);
 
 	template <typename T = float, typename Ratio = std::ratio<1>>
 	struct DirectAccessTimeUnit : std::chrono::duration<T, Ratio>{
@@ -16,10 +17,10 @@ export namespace Core{
 		using std::chrono::duration<T, Ratio>::duration;
 		[[nodiscard]] constexpr DirectAccessTimeUnit() noexcept = default;
 
-		[[nodiscard]] constexpr DirectAccessTimeUnit(const T Val) noexcept
+		[[nodiscard]] constexpr explicit(false) DirectAccessTimeUnit(const T Val) noexcept
 			: std::chrono::duration<T, Ratio>(Val) {}
 
-		[[nodiscard]] constexpr operator T() const noexcept{
+		[[nodiscard]] constexpr explicit(false) operator T() const noexcept{
 			return this->count();
 		}
 

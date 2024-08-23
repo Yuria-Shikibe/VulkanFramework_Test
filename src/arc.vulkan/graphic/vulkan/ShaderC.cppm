@@ -4,13 +4,9 @@ module;
 
 export module Core.Vulkan.Shader.Compile;
 import std;
-import OS.File;
+import Core.File;
 
 export namespace Core::Vulkan {
-    // const std::filesystem::path DefaultCompilerPath{R"(D:\projects\vulkan_framework\properties\shader\glslangValidator.exe)"};
-    const std::filesystem::path TargetCompilerPath{R"(D:\projects\vulkan_framework\properties\shader\spv)"};
-    const std::filesystem::path DefaultSrcPath{R"(D:\projects\vulkan_framework\properties\shader\src)"};
-
     class ShaderRuntimeCompiler {
         static constexpr std::array ValidStages{
             std::string_view{"vertex"},
@@ -30,7 +26,7 @@ export namespace Core::Vulkan {
                 auto &filepath = result.filepath;
                 auto &code = result.code;
 
-                const OS::File file{filepath};
+                const Core::File file{filepath};
 
                 filepath = requesting_source;
                 size_t pos = filepath.rfind('/');
@@ -89,7 +85,7 @@ export namespace Core::Vulkan {
             return bin;
         }
 
-        decltype(auto) compile(const OS::File &file, const char *entry = "main") const {
+        decltype(auto) compile(const Core::File &file, const char *entry = "main") const {
             const auto pStr = file.absolutePath().string();
             const auto code = file.readString();
 
@@ -116,9 +112,9 @@ export namespace Core::Vulkan {
 
     struct ShaderCompilerWriter {
         const ShaderRuntimeCompiler& compiler;
-        OS::File outputDirectory{};
+        Core::File outputDirectory{};
 
-        [[nodiscard]] ShaderCompilerWriter(const ShaderRuntimeCompiler& compiler, const OS::File& outputDirectory) :
+        [[nodiscard]] ShaderCompilerWriter(const ShaderRuntimeCompiler& compiler, const Core::File& outputDirectory) :
             compiler{compiler},
             outputDirectory{outputDirectory} {
             if(!outputDirectory.isDir()) {
@@ -126,7 +122,7 @@ export namespace Core::Vulkan {
             }
         }
 
-        void compile(const OS::File& file) const {
+        void compile(const Core::File& file) const {
             const auto rst = compiler.compile(file);
 
             const auto target = outputDirectory.subFile(file.filename() + ".spv");

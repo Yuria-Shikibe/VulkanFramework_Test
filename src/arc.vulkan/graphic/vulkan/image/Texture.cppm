@@ -12,7 +12,7 @@ import Core.Vulkan.Buffer.ExclusiveBuffer;
 import std;
 
 import Graphic.Pixmap;
-import OS.File;
+import Core.File;
 import Geom.Vector2D;
 
 export namespace Core::Vulkan{
@@ -28,7 +28,7 @@ export namespace Core::Vulkan{
 			loadPixmap(std::move(commandBuffer), pixmap);
 		}
 
-		[[nodiscard]] Texture(VkPhysicalDevice physicalDevice, VkDevice device, const OS::File& file,
+		[[nodiscard]] Texture(VkPhysicalDevice physicalDevice, VkDevice device, const Core::File& file,
 		                      TransientCommand&& commandBuffer)
 			: Texture{physicalDevice, device}{
 			const Graphic::Pixmap pixmap{file};
@@ -60,7 +60,7 @@ export namespace Core::Vulkan{
 			});
 		}
 
-		void loadPixmap(TransientCommand&& commandBuffer, const OS::File& file){
+		void loadPixmap(TransientCommand&& commandBuffer, const Core::File& file){
 			loadPixmap(std::move(commandBuffer), Graphic::Pixmap(file));
 		}
 

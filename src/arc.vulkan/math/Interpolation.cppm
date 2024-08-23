@@ -4,6 +4,7 @@ import std;
 import Math;
 import ext.Concepts;
 
+//TODO wrap in a struct and expose friend apply operator |
 //TODO uses constexpr program to enhance the effiency
 export namespace Math::Interp::Func{
 	// template <std::floating_point T, std::floating_point ...ArgT>

@@ -18,6 +18,14 @@ export namespace Core::Vulkan{
 				&VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter
 			};
 
+	    constexpr Util::Component Filter_PIXEL_Linear{
+				VkSamplerCreateInfo{
+					.magFilter = VK_FILTER_NEAREST,
+					.minFilter = VK_FILTER_LINEAR
+				},
+				&VkSamplerCreateInfo::magFilter, &VkSamplerCreateInfo::minFilter
+			};
+
 		constexpr Util::Component Filter_Nearest{
 				VkSamplerCreateInfo{
 					.magFilter = VK_FILTER_NEAREST,
@@ -47,6 +55,17 @@ export namespace Core::Vulkan{
 		constexpr Util::Component LOD_Max{
 				VkSamplerCreateInfo{
 					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+					.mipLodBias = 0,
+					.minLod = 0,
+					.maxLod = VK_LOD_CLAMP_NONE,
+				},
+				&VkSamplerCreateInfo::mipmapMode, &VkSamplerCreateInfo::minLod,
+				&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias
+			};
+
+		constexpr Util::Component LOD_Max_Nearest{
+				VkSamplerCreateInfo{
+					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
 					.mipLodBias = 0,
 					.minLod = 0,
 					.maxLod = VK_LOD_CLAMP_NONE,
@@ -99,7 +118,7 @@ export namespace Core::Vulkan{
 
 		constexpr VkSamplerCreateInfo TextureSampler = VkSamplerCreateInfo{}
 			| SamplerInfo::Default
-			| SamplerInfo::Filter_Linear
+			| SamplerInfo::Filter_PIXEL_Linear
 			| SamplerInfo::AddressMode_Clamp
 			| SamplerInfo::LOD_Max
 			| SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>

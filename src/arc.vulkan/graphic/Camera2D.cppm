@@ -1,24 +1,18 @@
-//
-// Created by Matrix on 2023/11/19.
-//
-//TODO camera and viewport system are total mess, arrange it if possilbe
-module ;
+export module Graphic.Camera2D;
 
-export module Core.Camera;
-
-import ext.Concepts;
 import Graphic.Resizeable;
 import Geom.Rect_Orthogonal;
 import Geom.Vector2D;
 import Geom.Matrix3D;
-import std;
 import Math.Rand;
 import Math;
 
-export namespace Core{
+import std;
+
+export namespace Graphic{
 	//TODO poor design
 	//TODO 3D support maybe in the future?
-	class Camera2D final : public Graphic::ResizeableUInt {
+	class Camera2D final : public ResizeableUInt {
 	public:
 		static constexpr float DefMaximumScale = 5.0f;
 		static constexpr float DefMinimumScale = 0.2f;
@@ -162,10 +156,6 @@ export namespace Core{
 			return screenToWorld * vec2;
 		}
 
-		void setWorldToScreen(const Geom::Matrix3D& worldToScreen) noexcept{
-			this->worldToScreen = worldToScreen;
-		}
-
 		[[nodiscard]] Geom::Matrix3D& getScreenToWorld() noexcept {
 			return screenToWorld;
 		}
@@ -173,11 +163,6 @@ export namespace Core{
 		[[nodiscard]] const Geom::Matrix3D& getScreenToWorld() const  noexcept {
 			return screenToWorld;
 		}
-
-		void setScreenToWorld(const Geom::Matrix3D& screenToWorld) noexcept{
-			this->screenToWorld = screenToWorld;
-		}
-
 
 		[[nodiscard]] float getScale() const noexcept{
 			return scale;

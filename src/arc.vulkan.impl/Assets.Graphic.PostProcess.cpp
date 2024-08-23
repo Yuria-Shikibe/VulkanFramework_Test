@@ -26,7 +26,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	Factory::blurProcessorFactory.creator = [](
 		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
 			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
-			static constexpr std::uint32_t Passes = 5;
+			static constexpr std::uint32_t Passes = 4;
 			// static constexpr float Scale = 0.5f;
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
@@ -93,6 +93,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
 				});
 
 				data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BlurConstants)});
@@ -134,26 +135,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				framebuffer.addCapturedAttachments(2, std::move(pingpong2));
 			});
 
-			processor.descriptorSetUpdator = [](Graphic::PostProcessor& postProcessor){
-				auto& set = postProcessor.renderProcedure.front().descriptorSets;
-
-				constexpr std::array layouts{
-					VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-					VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-					VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-				};
-
-				for(std::size_t i = 0; i < set.size(); ++i){
-					DescriptorSetUpdator updator{postProcessor.context->device, set[i]};
-					auto imageInfo = Sampler::blitSampler.getDescriptorInfo_ShaderRead(
-						postProcessor.framebuffer.at(i),
-						layouts[i]
-						);
-					updator.pushSampledImage(imageInfo);
-					updator.update();
-				}
-			};
-
 			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
 				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
@@ -162,7 +143,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
 
-				const auto unitStep = ~postProcessor.size().as<float>() * 1.15f;
+				const auto unitStep = ~postProcessor.size().as<float>() * 1.25f;
 
 				const std::array arr{
 						BlurConstants{
@@ -199,9 +180,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				vkCmdEndRenderPass(scopedCommand);
 			};
-
-			processor.updateDescriptors();
-			processor.recordCommand();
 
 			return processor;
 		};
@@ -283,8 +261,9 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-				});
+                    layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+                    layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+                });
 
 				// data.pushConstant({VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(BlurConstants)});
 

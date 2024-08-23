@@ -1,13 +1,30 @@
-//
-// Created by Matrix on 2024/8/3.
-//
-
 export module Core.Global;
 
-export import Core.Vulkan.Manager;
-export import Core.Window;
+export import Core.ApplicationTimer;
 
-export namespace Core{
-	Window* window{};
+export namespace Graphic {
+    class Camera2D;
+}
+
+
+export namespace Core {
+    namespace Ctrl {
+        class Input;
+    }
+
+
+    namespace Vulkan {
+        class VulkanManager;
+    }
+
+    struct Window;
+}
+
+
+export namespace Core {
+    ApplicationTimer<float> timer{};
+    Ctrl::Input* input{};
+    Window* window{};
+    Graphic::Camera2D* mainCamera{};
 	Vulkan::VulkanManager* vulkanManager{};
 }

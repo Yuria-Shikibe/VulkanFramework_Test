@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Shader;
 
 import Core.Vulkan.Dependency;
-import OS.File;
+import Core.File;
 import std;
 
 export namespace Core::Vulkan{
@@ -30,7 +30,7 @@ export namespace Core::Vulkan{
 			createShaderModule(code);
 		}
 
-		[[nodiscard]] explicit ShaderModule(VkDevice device, const OS::File& path) : device(device){
+		[[nodiscard]] explicit ShaderModule(VkDevice device, const Core::File& path) : device(device){
 			createShaderModule(path);
 			declShaderStage(path);
 		}
@@ -67,7 +67,7 @@ export namespace Core::Vulkan{
 			return vertShaderStageInfo;
 		}
 
-		void load(VkDevice device, const OS::File& path){
+		void load(VkDevice device, const Core::File& path){
 			if(shaderModule && this->device)vkDestroyShaderModule(device, shaderModule, nullptr);
 
 			this->device = device;
@@ -95,7 +95,7 @@ export namespace Core::Vulkan{
 		}
 
 	private:
-		void declShaderStage(const OS::File& path){
+		void declShaderStage(const Core::File& path){
 			const auto fileName = path.filename();
 
 			for (const auto & [type, stage] : ShaderType){
@@ -117,7 +117,7 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createShaderModule(const OS::File& file){
+		void createShaderModule(const Core::File& file){
 			createShaderModule(file.readBytes<std::uint32_t>());
 		}
 	};
