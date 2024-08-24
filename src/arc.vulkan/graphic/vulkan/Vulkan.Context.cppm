@@ -10,6 +10,7 @@ export import Core.Vulkan.LogicalDevice;
 
 import Core.Vulkan.Validation;
 import Core.Vulkan.Concepts;
+import Core.Vulkan.Params;
 import Core.Vulkan.Util;
 
 import ext.MetaProgramming;
@@ -67,6 +68,14 @@ export namespace Core::Vulkan{
 			physicalDevice.cacheProperties(surface);
 
 			device = LogicalDevice{physicalDevice, physicalDevice.queues};
+		}
+
+	    explicit(false) operator Param::Device() const {
+		    return {device};
+		}
+
+	    explicit(false) operator Param::Device_WithPhysical() const {
+		    return {device, physicalDevice};
 		}
 
 		VkResult commandSubmit_Graphics(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{

@@ -49,17 +49,5 @@ void main() {
     float lightness = lightColor.a * lightScl;
     ssao.a -= lightness;
 
-/**
-.srcColorBlendFactor = VK_BLEND_FACTOR_ONE,
-				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-				.colorBlendOp = VK_BLEND_OP_ADD,
-				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-				.alphaBlendOp = VK_BLEND_OP_ADD,
-*/
-
     outColor = premultipliedAlphaBlend(lightColor, vec4(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), baseColor.a));
-//    mix(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), lightColor.rgb, lightColor.a),
-//    mix(baseColor.a, 1.f, lightColor.a));
-//    outColor = subpassLoad(sourceTex);
 }

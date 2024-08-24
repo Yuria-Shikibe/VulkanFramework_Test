@@ -216,6 +216,14 @@ namespace Core::Vulkan{
 
 
 	namespace Util{
+
+	    export struct TextureIndex{
+	        std::uint8_t textureIndex{};
+	        std::uint8_t textureLayer{};
+	        std::uint8_t reserved1{};
+	        std::uint8_t reserved2{};
+	    };
+
 		/**
 		 * @brief Only works for 4 Byte members!
 		 * @tparam Vertex Target Vertex

@@ -158,15 +158,15 @@ export namespace Math {
 
 
 	    /**
-    	 * \brief 
-    	 * @code                                                                                             
+    	 * @code
     	 *              |                                      
     	 *    array[0]  |  array[2]                            
     	 *              |                                
     	 * -------------|---------------
     	 *              |                      
     	 *      Box     |  array[1]                            
-    	 *              |                                                                        
+    	 *              |
+    	 *
     	 * @endcode 
     	 */
         static constexpr SubRectArr splitQuad(const Rect& bound, const Rect& box) {

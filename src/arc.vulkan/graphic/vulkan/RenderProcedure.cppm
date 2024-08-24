@@ -2,7 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Core.Vulkan.RenderPassGroup;
+export module Core.Vulkan.RenderProcedure;
 
 export import Core.Vulkan.Buffer.FrameBuffer;
 export import Core.Vulkan.Buffer.UniformBuffer;

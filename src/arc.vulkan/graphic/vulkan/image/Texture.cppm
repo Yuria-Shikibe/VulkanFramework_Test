@@ -60,7 +60,7 @@ export namespace Core::Vulkan{
 			});
 		}
 
-		void loadPixmap(TransientCommand&& commandBuffer, const Core::File& file){
+		void loadPixmap(TransientCommand&& commandBuffer, const File& file){
 			loadPixmap(std::move(commandBuffer), Graphic::Pixmap(file));
 		}
 

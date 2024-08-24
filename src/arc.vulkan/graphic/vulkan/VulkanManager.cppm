@@ -39,7 +39,7 @@ import Core.Vulkan.Buffer.FrameBuffer;
 import Core.Vulkan.Sampler;
 import Core.Vulkan.Image;
 import Core.Vulkan.Comp;
-import Core.Vulkan.RenderPassGroup;
+import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.Attachment;
 import Core.Vulkan.BatchData;
 
@@ -71,7 +71,7 @@ export namespace Core::Vulkan{
 		}
 
 		FramebufferLocal batchFrameBuffer{};
-	    ImageView depthImageView{};
+	    ImageView batchDepthImageView{};
 
 		ColorAttachment blurResultAttachment{};
 		ColorAttachment mergeResultAttachment{};
@@ -85,9 +85,9 @@ export namespace Core::Vulkan{
 
 		Graphic::PostProcessor processBlur{};
 		Graphic::PostProcessor processMerge{};
-		Graphic::PostProcessor nfaa{};
+		Graphic::PostProcessor nfaaPostEffect{};
 
-	    UniformBuffer scaleBuffer{};
+	    UniformBuffer cameraScaleUniformBuffer{};
 
 		struct InFlightData{
 			Fence inFlightFence{};
@@ -137,13 +137,13 @@ export namespace Core::Vulkan{
 
             processBlur.submitCommand({currentFrameData.renderFinishedSemaphore.get()});
             processMerge.submitCommand({processBlur.getToWait()});
-            nfaa.submitCommand({processMerge.getToWait()});
+            nfaaPostEffect.submitCommand({processMerge.getToWait()});
 
             currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			const std::array toWait{
-					currentFrameData.imageAvailableSemaphore.get(), nfaa.getToWait()
+					currentFrameData.imageAvailableSemaphore.get(), nfaaPostEffect.getToWait()
 				};
 
 			context.commandSubmit_Graphics(
@@ -201,13 +201,13 @@ export namespace Core::Vulkan{
 		}
 
 		void initVulkan(){
-		    scaleBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
+		    cameraScaleUniformBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
 			setFlushGroup();
 			setBatchGroup();
 
 			createFrameBuffers();
 		    createDepthView();
-			updateInputDescriptorSet();
+			updateNFAA_InputDescriptorSet();
 
 			swapChain.recreateCallback = [this](SwapChain& swapChain){
 				resize(swapChain);//createFrameBuffers();
@@ -249,7 +249,7 @@ export namespace Core::Vulkan{
 
 		void createFrameBuffers(){
 			auto cmd = obtainTransientCommand();
-			batchFrameBuffer = FramebufferLocal{context.device, swapChain.getTargetWindow()->getSize(), batchDrawPass.renderPass};
+			batchFrameBuffer = FramebufferLocal{context.device, swapChain.size2D(), batchDrawPass.renderPass};
 
             for(std::uint32_t i = 0; i < 2; ++i) {
                 ColorAttachment baseColorAttachment{context.physicalDevice, context.device};
@@ -316,9 +316,9 @@ export namespace Core::Vulkan{
 
             processMerge.resize(swapChain.size2D());
             processBlur.resize(swapChain.size2D());
-            nfaa.resize(swapChain.size2D());
+            nfaaPostEffect.resize(swapChain.size2D());
 
-            updateInputDescriptorSet();
+            updateNFAA_InputDescriptorSet();
 
             createBatchDrawCommands();
             createFlushCommands();
@@ -462,7 +462,7 @@ export namespace Core::Vulkan{
 						    Blending::ScaledAlphaBlend,
 						    // Blending::AlphaBlend,
 						}>)
-						.setVertexInputInfo<VertBindInfo>()
+						.setVertexInputInfo<WorldVertBindInfo>()
 						.setShaderChain({&Assets::Shader::Vert::batchShader, &Assets::Shader::Frag::batchShader})
 						.setStaticScissors({{}, std::bit_cast<VkExtent2D>(pipeline.size())})
 						.setStaticViewport(float(pipeline.size().x), float(pipeline.size().y));
@@ -498,7 +498,7 @@ export namespace Core::Vulkan{
                             postProcessor.framebuffer.at(i),
                             layouts[i]
                             );
-                        auto uniformInfo = scaleBuffer.getDescriptorInfo();
+                        auto uniformInfo = cameraScaleUniformBuffer.getDescriptorInfo();
 
                         updator.pushSampledImage(imageInfo);
                         updator.push(uniformInfo);
@@ -547,10 +547,10 @@ export namespace Core::Vulkan{
 			            ubo.memory.unmap();
 
 			            auto uniformInfo1 = ubo.getDescriptorInfo();
-			            auto uniformInfo2 = scaleBuffer.getDescriptorInfo();
+			            auto uniformInfo2 = cameraScaleUniformBuffer.getDescriptorInfo();
 			            auto depthInfo = VkDescriptorImageInfo{
 			                .sampler = Assets::Sampler::blitSampler,
-                            .imageView = depthImageView,
+                            .imageView = batchDepthImageView,
                             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                         };
 
@@ -591,14 +591,13 @@ export namespace Core::Vulkan{
 
 			        batchFrameBuffer.atLocal(2).getImage().transitionImageLayout(
                     scopedCommand, {
-                        .aspect = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
                         .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                         .srcAccessMask = 0,
                         .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
                         .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
                         .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                    });
+                    }, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 
 			        const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
 			        vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
@@ -616,14 +615,13 @@ export namespace Core::Vulkan{
 
                     processMerge.framebuffer.atLocal(0).getImage().transitionImageLayout(
                         scopedCommand, {
-                            .aspect = VK_IMAGE_ASPECT_COLOR_BIT,
                             .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                             .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
                             .srcAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
                             .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
                             .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                             .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                        });
+                        }, VK_IMAGE_ASPECT_COLOR_BIT);
 
 			    };
 
@@ -631,14 +629,14 @@ export namespace Core::Vulkan{
 			    processMerge.recordCommand();
 		    }
 
-			nfaa = Assets::PostProcess::Factory::nfaaFactory.generate(swapChain.size2D(), [this]{
+			nfaaPostEffect = Assets::PostProcess::Factory::nfaaFactory.generate(swapChain.size2D(), [this]{
 				Graphic::AttachmentPort port{};
 				port.in.insert_or_assign(0u, nfaaResultAttachment.getView());
 
 				return port;
 			});
 
-            nfaa.descriptorSetUpdator = [this](Graphic::PostProcessor &postProcessor) {
+            nfaaPostEffect.descriptorSetUpdator = [this](Graphic::PostProcessor &postProcessor) {
                 auto &set = postProcessor.renderProcedure.front().descriptorSets;
 
                 DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
@@ -649,11 +647,11 @@ export namespace Core::Vulkan{
                 updator.update();
             };
 
-		    nfaa.updateDescriptors();
-		    nfaa.recordCommand();
+		    nfaaPostEffect.updateDescriptors();
+		    nfaaPostEffect.recordCommand();
         }
 
-		void updateInputDescriptorSet(){
+		void updateNFAA_InputDescriptorSet(){
 			for(std::size_t i = 0; i < swapChain.size(); ++i){
 				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal[0].descriptorSets[i]};
 
@@ -664,7 +662,7 @@ export namespace Core::Vulkan{
 		}
 
 	    void createDepthView() {
-		    depthImageView = ImageView{context.device, {
+		    batchDepthImageView = ImageView{context.device, {
                 .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
                 .pNext = nullptr,
                 .flags = 0,
@@ -690,9 +688,7 @@ export namespace Core::Vulkan{
 
 
 			const auto pipelineContext = batchDrawPass.startCmdContext(scopedCommand);
-
 			pipelineContext.data().bindDescriptorTo(scopedCommand);
-
 			batchVertexData.bindTo(scopedCommand);
 
 
@@ -732,7 +728,7 @@ export namespace Core::Vulkan{
 		}
 
 		void updateCameraScale(const float scale) const{
-		    scaleBuffer.memory.loadData(scale);
+		    cameraScaleUniformBuffer.memory.loadData(scale);
 		}
 	};
 }

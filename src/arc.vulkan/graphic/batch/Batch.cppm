@@ -142,7 +142,11 @@ export namespace Graphic{
 	        unitOffset = vertexSize * VerticesGroupCount;
 	    }
 
-		[[nodiscard]] DrawArgs getDrawArgs(VkImageView imageView){
+	    [[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const {
+            return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
+        }
+
+		[[nodiscard]] DrawArgs acquire(VkImageView imageView){
 			std::shared_lock dependencyLk{frameSeekingMutex};
 			ImageIndex imageIndex = getMappedImageIndex(imageView);
 
@@ -188,7 +192,7 @@ export namespace Graphic{
 
 			[[nodiscard("Captured Shared Mutex Should be reserved until draw is done")]]
 			Acquirer(Batch& batch, VkImageView imageView) :
-				drawArgs{batch.getDrawArgs(imageView)}{}
+				drawArgs{batch.acquire(imageView)}{}
 
 			[[nodiscard]] std::pair<void*, ImageIndex> getArgs() const noexcept{
 				return {drawArgs.dataPtr, drawArgs.imageIndex};

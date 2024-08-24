@@ -6,7 +6,7 @@ export module Graphic.PostProcessor;
 
 export import Core.Vulkan.Context;
 export import Core.Vulkan.Buffer.FrameBuffer;
-export import Core.Vulkan.RenderPassGroup;
+export import Core.Vulkan.RenderProcedure;
 export import Core.Vulkan.Buffer.CommandBuffer;
 export import Core.Vulkan.CommandPool;
 export import Core.Vulkan.Semaphore;

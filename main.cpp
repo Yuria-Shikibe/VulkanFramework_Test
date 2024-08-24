@@ -25,6 +25,7 @@ import Core.InitAndTerminate;
 import Core.Global;
 
 import Geom.Matrix4D;
+import Geom.Rect_Orthogonal;
 
 import Core.Vulkan.Shader.Compile;
 
@@ -34,8 +35,32 @@ import Assets.Directories;
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
+import Graphic.RendererUI;
 
-int main(){
+import ext.Allocator2D;
+
+int main() {
+    ext::Allocator2D allocator{{5000, 5000}};
+
+    std::vector<Geom::OrthoRectUInt> rects{};
+
+    for(int i = 0; i < 100; ++i){
+        rects.push_back(allocator.allocate({500, 500}).value());
+    }
+
+
+
+    for (const auto & vector2Ds : rects){
+        allocator.deallocate(vector2Ds.vert_00());
+    }
+    // for (const auto & [i, valid_heightAscend] : allocator.valid_heightAscend | std::views::enumerate) {
+    //     std::println("{}, {}", i, valid_heightAscend.first);
+    // }
+
+    // auto t = map.erase(map.end());
+}
+
+int main_(){
     using namespace Core;
 
 	init();
@@ -52,13 +77,20 @@ int main(){
 	Assets::load(vulkanManager->context);
 	vulkanManager->initVulkan();
 
+    Graphic::RendererUI* rendererUi = new Graphic::RendererUI{vulkanManager->context};
+    window->registerResizeCallback("renderUICallback", [rendererUi](auto& e) {
+        rendererUi->resize(e.size);
+    }, [&rendererUi](auto e) {
+        rendererUi->initRenderPass(e);
+    });
+
 	texturePester = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
 	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.png)");
 
 	texturePesterLight = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
 	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
 
-    auto* batch = new Graphic::Batch{vulkanManager->context, sizeof(Vulkan::BatchVertex)};
+    auto* batch = new Graphic::Batch{vulkanManager->context, sizeof(Vulkan::Vertex_World)};
 
     vulkanManager->batchVertexData = batch->getBatchData();
 
@@ -71,7 +103,7 @@ int main(){
         vulkanManager->createBatchDrawCommands();
     };
 
-    while(window && !window->shouldClose()) {
+    while(!window->shouldClose()) {
         timer.fetchApplicationTime();
         window->pollEvents();
         input->update(timer.globalDeltaTick());
@@ -87,42 +119,42 @@ int main(){
         Geom::Vec2 off2 = off.copy().add(50, 50);
 
         {
-            auto [imageIndex, dataPtr, captureLock] = batch->getDrawArgs(texturePester.getView());
+            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePester.getView());
             new(dataPtr) std::array{
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
         }
 
         {
-            auto [imageIndex, dataPtr, captureLock] = batch->getDrawArgs(texturePesterLight.getView());
+            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePesterLight.getView());
             new(dataPtr) std::array{
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 0.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 0.0f}},
                 };
         }
 
         {
-            auto [imageIndex, dataPtr, captureLock] = batch->getDrawArgs(texturePester.getView());
+            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePester.getView());
             new(dataPtr) std::array{
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
         }
 
         {
-            auto [imageIndex, dataPtr, captureLock] = batch->getDrawArgs(texturePesterLight.getView());
+            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePesterLight.getView());
             new(dataPtr) std::array{
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
-                    Vulkan::BatchVertex{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
                 };
         }
 
@@ -134,6 +166,8 @@ int main(){
     vkDeviceWaitIdle(vulkanManager->context.device);
 
     delete batch;
+    delete rendererUi;
+
     texturePester = {};
 	texturePesterLight = {};
 

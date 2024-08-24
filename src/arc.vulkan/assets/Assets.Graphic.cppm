@@ -20,6 +20,8 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule batchShader{};
 			Core::Vulkan::ShaderModule blitSingle{};
 			Core::Vulkan::ShaderModule blitWithUV{};
+
+		    Core::Vulkan::ShaderModule uiBatch{};
 		}
 
 		namespace Frag{
@@ -29,6 +31,9 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule blitBlur{};
 
 			Core::Vulkan::ShaderModule blitMerge{};
+
+			Core::Vulkan::ShaderModule uiMerge{};
+			Core::Vulkan::ShaderModule uiBatch{};
 
 			Core::Vulkan::ShaderModule FXAA{};
 			Core::Vulkan::ShaderModule NFAA{};
@@ -41,11 +46,16 @@ export namespace Assets{
 			Vert::batchShader = {};
 			Vert::blitSingle = {};
 			Vert::blitWithUV = {};
+			Vert::uiBatch = {};
 
 			Frag::batchShader = {};
 			Frag::blitBlur = {};
 			Frag::blitMerge = {};
 			Frag::blitSingle = {};
+
+			Frag::uiMerge = {};
+			Frag::uiBatch = {};
+
 			Frag::FXAA = {};
 			Frag::NFAA = {};
 			Frag::SSAO = {};

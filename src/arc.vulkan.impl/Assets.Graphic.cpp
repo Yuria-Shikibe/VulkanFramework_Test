@@ -23,6 +23,10 @@ void Assets::Shader::load(const VkDevice device){
 		device, dir / R"(blit.vert.spv)"
 	};
 
+	Vert::uiBatch = Core::Vulkan::ShaderModule{
+		device, dir / R"(ui.batch.vert.spv)"
+	};
+
 	Frag::blitSingle = Core::Vulkan::ShaderModule{
 		device, dir / R"(blit.frag.spv)"
 	};
@@ -39,6 +43,10 @@ void Assets::Shader::load(const VkDevice device){
 		device, dir / R"(blit_merge.frag.spv)"
 	};
 
+	Frag::uiMerge = Core::Vulkan::ShaderModule{
+		device, dir / R"(ui.merge.frag.spv)"
+	};
+
 	Frag::FXAA = Core::Vulkan::ShaderModule{
 		device, dir / R"(fxaa.frag.spv)"
 	};
@@ -50,6 +58,10 @@ void Assets::Shader::load(const VkDevice device){
 	Frag::SSAO = Core::Vulkan::ShaderModule{
 		device, dir / R"(ssao.frag.spv)"
 	};
+
+    Frag::uiBatch = Core::Vulkan::ShaderModule{
+        device, dir / R"(ui.batch.frag.spv)"
+    };
 }
 
 void Assets::Sampler::load(const VkDevice device){

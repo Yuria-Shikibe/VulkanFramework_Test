@@ -351,7 +351,9 @@ namespace Core{
 	    template <typename T = std::byte>
 		[[nodiscard]] std::vector<T> readBytes() const{
 			std::ifstream file_stream(getPath(), std::ios::binary | std::ios::ate);
-			if(!file_stream.is_open()) return {};
+			if(!file_stream.is_open()) {
+                throw ext::RuntimeException{std::format("Failed to open file '{}'", filename()) };
+			};
 
 			const std::size_t length = file_stream.tellg();
 			file_stream.seekg(std::ios::beg);

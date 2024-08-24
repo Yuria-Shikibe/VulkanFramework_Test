@@ -27,9 +27,9 @@ export namespace Core{
 
 	struct Window{
 		struct ResizeEvent final : ext::EventType{
-			Geom::Vector2D<int> size{};
+			Geom::USize2 size{};
 
-			[[nodiscard]] explicit ResizeEvent(const Geom::Vector2D<int>& size)
+			[[nodiscard]] explicit ResizeEvent(const Geom::USize2& size)
 				: size{size}{}
 		};
 
@@ -58,9 +58,14 @@ export namespace Core{
 		[[nodiscard]] bool shouldClose() const{
 			return glfwWindowShouldClose(handle);
 		}
+	    template <std::regular_invocable<Geom::USize2> InitFunc>
+	    void registerResizeCallback(const std::string_view name, std::function<void(const ResizeEvent&)>&& callback, InitFunc initFunc) {
+		    initFunc(size.as<std::uint32_t>());
+		    eventManager.on<ResizeEvent>(name, std::move(callback));
+		}
 
 	    void registerResizeCallback(const std::string_view name, std::function<void(const ResizeEvent&)>&& callback) {
-		    callback(ResizeEvent{size});
+		    callback(ResizeEvent{size.as<std::uint32_t>()});
 		    eventManager.on<ResizeEvent>(name, std::move(callback));
 		}
 
@@ -88,7 +93,7 @@ export namespace Core{
 		void resize(const int w, const int h){
 			if(w == size.x && h == size.y)return;
 			size.set(w, h);
-			eventManager.fire(ResizeEvent{size});
+			eventManager.fire(ResizeEvent{size.as<std::uint32_t>()});
 		}
 
 		Window(const Window& other);
