@@ -14,6 +14,7 @@ import std;
 import Graphic.Pixmap;
 import Core.File;
 import Geom.Vector2D;
+import Geom.Rect_Orthogonal;
 
 export namespace Core::Vulkan{
 	class Texture : public CombinedImage{
@@ -60,6 +61,37 @@ export namespace Core::Vulkan{
 			});
 		}
 
+		void createEmpty(const Geom::USize2 size2, const std::uint32_t layers){
+			this->size = size2;
+			this->layers = layers;
+
+			setMipmap();
+
+			image = Image(
+				physicalDevice, device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+				{
+					.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+					.pNext = nullptr,
+					.flags = 0,
+					.imageType = VK_IMAGE_TYPE_2D,
+					.format = VK_FORMAT_R8G8B8A8_UNORM,
+					.extent = {
+						size.x, size.y, 1
+					},
+					.mipLevels = mipLevels,
+					.arrayLayers = layers,
+					.samples = VK_SAMPLE_COUNT_1_BIT,
+					.tiling = VK_IMAGE_TILING_OPTIMAL,
+					.usage = VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+					.sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+					.queueFamilyIndexCount = 0,
+					.pQueueFamilyIndices = nullptr,
+					.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+			});
+
+			setImageView();
+		}
+
 		void loadPixmap(TransientCommand&& commandBuffer, const File& file){
 			loadPixmap(std::move(commandBuffer), Graphic::Pixmap(file));
 		}
@@ -91,7 +123,7 @@ export namespace Core::Vulkan{
 
 			const StagingBuffer buffer(physicalDevice, device, pixmap.size() * layers);
 
-			Graphic::Pixmap::DataType* p = static_cast<Graphic::Pixmap::DataType*>(buffer.memory.map());
+			auto* p = static_cast<Graphic::Pixmap::DataType*>(buffer.memory.map());
 			for(const auto& [index, map] : pixmaps | std::views::enumerate){
 				if(map.size2D() != size){
 					throw std::runtime_error("Size Mismatch When Loading Image Array");
@@ -107,9 +139,48 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] std::uint32_t getMipLevels() const noexcept{ return mipLevels; }
 
+		void writeImage(VkCommandBuffer commandBuffer, VkImage src, const Geom::OrthoRectInt srcRegion, const Geom::OrthoRectInt dstRegion) const{
+			image.transitionImageLayout(
+							commandBuffer,
+							VK_FORMAT_R8G8B8A8_UNORM,
+							VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							mipLevels, layers,
+							VK_IMAGE_ASPECT_COLOR_BIT);
+
+			Util::blit(commandBuffer, src, image, srcRegion, dstRegion, VK_FILTER_LINEAR, 0, 0, layers);
+
+			Util::generateMipmaps(
+				commandBuffer,
+				image, dstRegion, mipLevels, layers);
+		}
+
+		void writeBuffer(VkCommandBuffer commandBuffer, VkBuffer src, const Geom::OrthoRectInt dstRegion) const{
+			image.transitionImageLayout(
+							commandBuffer,
+							VK_FORMAT_R8G8B8A8_UNORM,
+							VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							mipLevels, layers,
+							VK_IMAGE_ASPECT_COLOR_BIT);
+
+			image.loadBuffer(commandBuffer, src,
+			                 {
+				                 static_cast<std::uint32_t>(dstRegion.getWidth()),
+				                 static_cast<std::uint32_t>(dstRegion.getHeight()), 1
+			                 },
+			                 {dstRegion.getSrcX(), dstRegion.getSrcY()}, layers);
+
+			Util::generateMipmaps(
+				commandBuffer,
+				image, dstRegion, mipLevels, layers);
+		}
+
 	protected:
+		void setMipmap(){
+			mipLevels = std::min(Util::getMipLevel(size.x, size.y), 10u);
+		}
+
 		void completeLoad(TransientCommand&& commandBuffer, VkBuffer dataSource){
-			mipLevels = Util::getMipLevel(size.x, size.y);
+			setMipmap();
 
 			image = Image(
 				physicalDevice, device, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
@@ -142,10 +213,11 @@ export namespace Core::Vulkan{
 
 			image.loadBuffer(commandBuffer, dataSource, {size.x, size.y, 1}, {}, layers);
 
+			auto [w, h] = size.as<int>();
+
 			Util::generateMipmaps(
 				commandBuffer,
-				image,
-				VK_FORMAT_R8G8B8A8_UNORM, size.x, size.y, mipLevels, layers);
+				image, Geom::OrthoRectInt{w, h}, mipLevels, layers);
 
 			commandBuffer = {};
 			setImageView();

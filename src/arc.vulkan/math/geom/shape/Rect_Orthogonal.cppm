@@ -46,6 +46,9 @@ export namespace Geom{
 			this->setCenter(center.x, center.y);
 		}
 
+		/**
+		 * @warning Create by vertex [src, end] instead of [src, size]
+		 */
 		constexpr Rect_Orthogonal(const typename Vector2D<T>::PassType src, const typename Vector2D<T>::PassType end) noexcept{
 			this->setVert(src, end);
 		}
@@ -56,26 +59,7 @@ export namespace Geom{
 
 		constexpr Rect_Orthogonal() noexcept = default;
 
-		constexpr ~Rect_Orthogonal() noexcept = default;
-
-		Rect_Orthogonal(const Rect_Orthogonal& other) noexcept = default;
-
-		Rect_Orthogonal(Rect_Orthogonal&& other) noexcept = default;
-
-		Rect_Orthogonal& operator=(const Rect_Orthogonal& other) noexcept = default;
-
-		Rect_Orthogonal& operator=(Rect_Orthogonal&& other) noexcept = default;
-
-		friend constexpr bool operator==(const Rect_Orthogonal& lhs, const Rect_Orthogonal& rhs) noexcept{
-			return lhs.srcX == rhs.srcX
-			       && lhs.srcY == rhs.srcY
-			       && lhs.width == rhs.width
-			       && lhs.height == rhs.height;
-		}
-
-		friend constexpr bool operator!=(const Rect_Orthogonal& lhs, const Rect_Orthogonal& rhs) noexcept{
-			return !(lhs == rhs);
-		}
+		friend constexpr bool operator==(const Rect_Orthogonal& lhs, const Rect_Orthogonal& rhs) noexcept = default;
 
 		friend std::ostream& operator<<(std::ostream& os, const Rect_Orthogonal& obj) noexcept{
 			return os
@@ -187,14 +171,14 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires Concepts::Signed<T> {
-			this->template setWidth<T>(width + x);
-			this->template setHeight<T>(height + y);
+			this->setWidth<T>(width + x);
+			this->setHeight<T>(height + y);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& addWidth(const T x) noexcept requires Concepts::Signed<T> {
-			this->template setWidth<T>(width + x);
+			this->setWidth<T>(width + x);
 
 			return *this;
 		}
@@ -218,15 +202,15 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& addHeight(const T y) noexcept requires Concepts::Signed<T> {
-			this->template setHeight<T>(height + y);
+			this->setHeight<T>(height + y);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires Concepts::NonNegative<T> {
 			using S = std::make_signed_t<T>;
-			this->template setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
-			this->template setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
+			this->setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
+			this->setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
 
 			return *this;
 		}
@@ -234,8 +218,8 @@ export namespace Geom{
 		template <Concepts::Number N>
 		constexpr Rect_Orthogonal& addSize(const N x, const N y) noexcept{
 			using S = std::make_signed_t<T>;
-			this->template setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
-			this->template setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
+			this->setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
+			this->setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
 
 			return *this;
 		}
@@ -243,12 +227,12 @@ export namespace Geom{
 		constexpr void setLargerWidth(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
 				if(v > width) {
-					this->template setWidth<T>(v);
+					this->setWidth<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
 				if(abs > width) {
-					this->template setWidth<T>(v);
+					this->setWidth<T>(v);
 				}
 			}
 
@@ -257,12 +241,12 @@ export namespace Geom{
 		constexpr void setLargerHeight(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
 				if(v > height) {
-					this->template setHeight<T>(v);
+					this->setHeight<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
 				if(abs > height) {
-					this->template setHeight<T>(v);
+					this->setHeight<T>(v);
 				}
 			}
 		}
@@ -270,12 +254,12 @@ export namespace Geom{
 		constexpr void setShorterWidth(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
 				if(v < width) {
-					this->template setWidth<T>(v);
+					this->setWidth<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
 				if(abs < width) {
-					this->template setWidth<T>(v);
+					this->setWidth<T>(v);
 				}
 			}
 
@@ -284,12 +268,12 @@ export namespace Geom{
 		constexpr void setShorterHeight(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
 				if(v < height) {
-					this->template setHeight<T>(v);
+					this->setHeight<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
 				if(abs < height) {
-					this->template setHeight<T>(v);
+					this->setHeight<T>(v);
 				}
 			}
 		}
@@ -467,16 +451,16 @@ export namespace Geom{
 
 		template <Concepts::Number T1, Concepts::Number T2>
 		constexpr Rect_Orthogonal& scl(const T1 xScl, const T2 yScl) noexcept{
-			(void)this->template sclPos<T1, T2>(xScl, yScl);
-			(void)this->template sclSize<T1, T2>(xScl, yScl);
+			(void)this->sclPos<T1, T2>(xScl, yScl);
+			(void)this->sclSize<T1, T2>(xScl, yScl);
 
 			return *this;
 		}
 
 		template <Concepts::Number N>
 		constexpr Rect_Orthogonal& scl(const typename Vector2D<N>::PassType scl) noexcept{
-			(void)this->template sclPos<N, N>(scl.x, scl.y);
-			(void)this->template sclSize<N, N>(scl.x, scl.y);
+			(void)this->sclPos<N, N>(scl.x, scl.y);
+			(void)this->sclSize<N, N>(scl.x, scl.y);
 
 			return *this;
 		}
@@ -485,8 +469,8 @@ export namespace Geom{
 			srcX = srcx;
 			srcY = srcy;
 
-			this->template setWidth<T>(width);
-			this->template setHeight<T>(height);
+			this->setWidth<T>(width);
+			this->setHeight<T>(height);
 		}
 
 		template <std::integral N>

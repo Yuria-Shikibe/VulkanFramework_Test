@@ -183,7 +183,7 @@ export namespace Core::Vulkan{
 					.pNext = nullptr,
 					.descriptorPool = handle,
 					.descriptorSetCount = 1,
-					.pSetLayouts = layout.operator->()
+					.pSetLayouts = layout.asData()
 				};
 
 			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.operator->()) != VK_SUCCESS) {
@@ -195,7 +195,7 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] std::vector<DescriptorSet> obtain(const std::size_t size) const{
 			std::vector<DescriptorSet> descriptors(size);
-			std::vector layouts(size, layout.handler);
+			std::vector layouts(size, layout.handle);
 
 			VkDescriptorSetAllocateInfo allocInfo{
 				.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,

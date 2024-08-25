@@ -25,7 +25,9 @@ export namespace Core::Vulkan{
 
 		CommandPool(const CommandPool& other) = delete;
 
-		CommandPool(CommandPool&& other) noexcept = default;
+		CommandPool(CommandPool&& other) noexcept
+			: commandPool{other.commandPool},
+			  device{std::move(other.device)}{}
 
 		CommandPool& operator=(const CommandPool& other) = delete;
 
@@ -68,6 +70,43 @@ export namespace Core::Vulkan{
 			}
 
 			return arr;
+		}
+	};
+
+	struct MultiThreadedCommandPool{
+		std::mutex mutex{};
+		std::unordered_map<std::thread::id, CommandPool> commandPools{};
+
+		VkDevice device{};
+		std::uint32_t queue{};
+
+		[[nodiscard]] MultiThreadedCommandPool() = default;
+
+		[[nodiscard]] MultiThreadedCommandPool(VkDevice device, std::uint32_t queue)
+			: device{device},
+			  queue{queue}{}
+
+		MultiThreadedCommandPool(const MultiThreadedCommandPool& other) = delete;
+
+		MultiThreadedCommandPool(MultiThreadedCommandPool&& other) noexcept
+			:
+			  commandPools{std::move(other.commandPools)},
+			  device{other.device},
+			  queue{other.queue}{}
+
+		MultiThreadedCommandPool& operator=(const MultiThreadedCommandPool& other) = delete;
+
+		MultiThreadedCommandPool& operator=(MultiThreadedCommandPool&& other) noexcept{
+			if(this == &other) return *this;
+			commandPools = std::move(other.commandPools);
+			device = other.device;
+			queue = other.queue;
+			return *this;
+		}
+
+		[[nodiscard]] const CommandPool& obtain(const VkCommandPoolCreateFlags flags, const std::thread::id id = std::this_thread::get_id()){
+			std::lock_guard lk{mutex};
+			return (commandPools[id] = CommandPool{device, queue, flags});
 		}
 	};
 }

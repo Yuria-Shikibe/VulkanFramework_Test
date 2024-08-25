@@ -12,18 +12,86 @@ export namespace ext {
         using Rect = Geom::Rect_Orthogonal<T>;
         using SubRectArr = std::array<Rect, 3>;
 
+        struct Key{
+            T length{};
+            T depth{};
+            T area{};
+        };
+        struct Comp_Ascend{
+            constexpr bool operator()(const Key &a, const Key &b) const noexcept{
+                if(a.length == b.length && a.depth < b.depth)return true;
+                if(a.length < b.length)return true;
+                return false;
+            }
+        };
+
+        struct Comp_Descend{
+            constexpr bool operator()(const Key &a, const Key &b) const noexcept{
+                if(a.length == b.length && a.depth < b.depth)return true;
+                if(a.length > b.length)return true;
+                return false;
+            }
+        };
+
         SizeType size{};
         T remainArea{};
 
         class Node;
 
-        std::multimap<T, Node*> valid_widthAscend{};
-        std::multimap<T, Node*> valid_heightAscend{};
+        using TreeType = std::map<T, std::multimap<T, Node*>>;
+
+        TreeType nodes_XY{};
+        TreeType nodes_YX{};
 
         std::unique_ptr<Node> rootNode{std::make_unique<Node>(this)};
+
         std::unordered_map<PointType, Node*> allocatedNodes{};
 
-        using Itr = decltype(valid_widthAscend)::iterator;
+        using ItrOuter = TreeType::iterator;
+        using ItrInner = TreeType::mapped_type::iterator;
+
+        struct ItrPair{
+            ItrOuter outer{};
+            ItrInner inner{};
+
+            [[nodiscard]] auto* value() const{
+                return inner->second;
+            }
+
+            void erase(TreeType& tree) const{
+                auto itr = outer->second.erase(inner);
+                if(outer->second.empty()){
+                    tree.erase(outer);
+                }
+            }
+
+            void insert(TreeType& tree, Node* node, const T first, const T second){
+                outer = tree.try_emplace(first).first;
+                inner = outer->second.insert({second, node});
+            }
+
+            void locate(TreeType& tree, const T first, const T second){
+                outer = tree.lower_bound(first);
+                inner = outer->second.lower_bound(second);
+            }
+
+            /**
+             * @return [rst, possible to find]
+             */
+            void locateNextInner(const T second){
+                inner = outer->second.lower_bound(second);
+            }
+
+            bool locateNextOuter(TreeType& tree){
+                ++outer;
+                if(outer == tree.end())return false;
+                return true;
+            }
+
+            [[nodiscard]] bool valid(const TreeType& tree) const noexcept{
+                return outer != tree.end() && inner != outer->second.end();
+            }
+        };
 
         class Node{
             friend Allocator2D;
@@ -34,13 +102,13 @@ export namespace ext {
             Rect bound{};
             Rect allocatedRegion{};
 
-            Itr xItr{};
-            Itr yItr{};
+            ItrPair itrXY{};
+            ItrPair itrYX{};
 
             bool allocated{};
+            bool marked{};
             bool childrenCleared{true};
 
-        public:
             [[nodiscard]] Node() = default;
 
             [[nodiscard]] explicit Node(Allocator2D* packer) :
@@ -49,7 +117,8 @@ export namespace ext {
             [[nodiscard]] Node(Allocator2D* packer, Node* parent, const Rect& bound) :
                 packer{packer},
                 parent{parent},
-                bound{bound} {
+                bound{bound}
+            {
             }
 
             [[nodiscard]] bool isRoot() const noexcept{
@@ -116,43 +185,47 @@ export namespace ext {
                 allocated = false;
                 packer->allocatedNodes.erase(bound.getSrc());
                 const auto size = allocatedRegion.getSize();
-
-                if(isLeaf()) {
-                    tryUnsplit();
-                }else {
-                    if(!unsplit()) {
-                        //Can only remove self, mark allocatable
-                        insertSelf(true);
-                    }
-                }
-
                 allocatedRegion = {};
+
+                unsplit(size);
+
                 return size;
             }
 
-        private:
             void split() {
                 for (const auto & [i, rect] : splitQuad(bound, allocatedRegion) | std::views::enumerate) {
                     if(rect.area() == 0)continue;
+
                     subNodes[i] = std::make_unique<Node>(Node{packer,this, rect});
-                    subNodes[i]->insertWithHint(xItr, yItr);
+                    subNodes[i]->insertSelf(rect.getSize());
                 }
             }
 
-            void tryUnsplit(){ // NOLINT(*-no-recursion)
+            void unsplit(SizeType size){
+                if(isLeaf()) {
+                    callParentSplit();
+                }else {
+                    if(!tryMergeSelf()) {
+                        //Can only remove self, mark allocatable
+                        insertSelf(size);
+                    }
+                }
+            }
+
+            void callParentSplit(){ // NOLINT(*-no-recursion)
                 if(!isRoot()) {
-                    const auto rst = parent->unsplit();
+                    const auto rst = parent->tryMergeSelf();
                     if(!rst){ //maximum merge at self, mark allocatable
                         eraseSelf();
-                        insertSelf(false);
+                        insertSelf(bound.getSize());
                     }
                 }else {
                     eraseSelf();
-                    insertSelf(false);
+                    insertSelf(bound.getSize());
                 }
             }
 
-            bool unsplit() { // NOLINT(*-no-recursion)
+            bool tryMergeSelf() { // NOLINT(*-no-recursion)
                 if(isBranchEmpty()) {
                     childrenCleared = true;
                     for (auto && subNode : subNodes) {
@@ -161,7 +234,7 @@ export namespace ext {
                         subNode.reset();
                     }
 
-                    tryUnsplit();
+                    callParentSplit();
 
                     return true;
                 }
@@ -169,22 +242,18 @@ export namespace ext {
                 return false;
             }
 
-            void insertWithHint(const Itr& hintX, const Itr& hintY) {
-                xItr = packer->valid_widthAscend.emplace_hint(hintX, bound.getWidth(), this);
-                yItr = packer->valid_heightAscend.emplace_hint(hintY, bound.getHeight(), this);
-            }
-
             void eraseSelf() {
-                if(xItr != packer->valid_widthAscend.end())packer->valid_widthAscend.erase(xItr);
-                if(yItr != packer->valid_heightAscend.end())packer->valid_heightAscend.erase(yItr);
-                xItr = packer->valid_widthAscend.end();
-                yItr = packer->valid_heightAscend.end();
+                if(!marked)return;
+                itrXY.erase(packer->nodes_XY);
+                itrYX.erase(packer->nodes_YX);
+
+                marked = false;
             }
 
-            void insertSelf(const bool suppressed) {
-                const Rect& bound = suppressed ? this->allocatedRegion : this->bound;
-                xItr = packer->valid_widthAscend.emplace(bound.getWidth(), this);
-                yItr = packer->valid_heightAscend.emplace(bound.getHeight(), this);
+            void insertSelf(SizeType size) {
+                itrXY.insert(packer->nodes_XY, this, size.x, size.y);
+                itrYX.insert(packer->nodes_YX, this, size.y, size.x);
+                marked = true;
             }
         };
         friend Node;
@@ -192,33 +261,47 @@ export namespace ext {
     public:
         [[nodiscard]] explicit Allocator2D(const SizeType size) : size{size}, remainArea{size.area()} {
             rootNode->bound.setSize(size);
-            rootNode->insertSelf(false);
+            rootNode->insertSelf(size);
         }
 
+        //TODO double key -- with allocation region depth
         [[nodiscard]] std::optional<Rect> allocate(const SizeType size) {
             if(size.area() == 0)throw std::invalid_argument("Cannot allocate region with 0 area");
 
             if(remainArea < size.area()) {return std::nullopt;}
 
-            const Itr xItr = valid_widthAscend.lower_bound(size.x);
-            const Itr yItr = valid_heightAscend.lower_bound(size.y);
+            ItrPair itrPairXY{nodes_XY.lower_bound(size.x)};
+            ItrPair itrPairYX{nodes_YX.lower_bound(size.y)};
 
             Node* node{};
 
-            for(const auto xNode : std::ranges::subrange{xItr, valid_widthAscend.end()} | std::views::values) {
-                for(const auto yNode : std::ranges::subrange{yItr, valid_heightAscend.end()} | std::views::values) {
-                    if(xNode->bound.getSrc() == yNode->bound.getSrc()) {
+            bool possibleX{itrPairXY.outer != nodes_XY.end()};
+            bool possibleY{itrPairYX.outer != nodes_YX.end()};
 
-#if DEBUG_CHECK
-                        if(xNode != yNode) {
-                            throw std::runtime_error("Assertion Failure");
-                        }
-#endif
+            while(true)
+            {
+                if(!possibleX && !possibleY)break;
 
-                        node = xNode;
+                if(possibleX){
+                    itrPairXY.locateNextInner(size.y);
+                    if (itrPairXY.valid(nodes_XY)){
+                        node = itrPairXY.value();
                         break;
+                    }else{
+                        possibleX = possibleX && itrPairXY.locateNextOuter(nodes_XY);
                     }
                 }
+
+                if(possibleY){
+                    itrPairYX.locateNextInner(size.x);
+                    if (itrPairYX.valid(nodes_YX)){
+                        node = itrPairYX.value();
+                        break;
+                    }else{
+                        possibleY = possibleY && itrPairYX.locateNextOuter(nodes_YX);
+                    }
+                }
+
             }
 
             if(!node)return std::nullopt;
@@ -240,23 +323,23 @@ export namespace ext {
 
         Allocator2D(Allocator2D&& other) noexcept
             : size{std::move(other.size)},
-              valid_widthAscend{std::move(other.valid_widthAscend)},
-              valid_heightAscend{std::move(other.valid_heightAscend)},
+              remainArea{other.remainArea},
+              nodes_XY{std::move(other.nodes_XY)},
+              nodes_YX{std::move(other.nodes_YX)},
               rootNode{std::move(other.rootNode)},
               allocatedNodes{std::move(other.allocatedNodes)}{
-
             changePackerToThis();
         }
 
         Allocator2D& operator=(Allocator2D&& other) noexcept{
             if(this == &other) return *this;
             size = std::move(other.size);
-            valid_widthAscend = std::move(other.valid_widthAscend);
-            valid_heightAscend = std::move(other.valid_heightAscend);
+            remainArea = other.remainArea;
+            nodes_XY = std::move(other.nodes_XY);
+            nodes_YX = std::move(other.nodes_YX);
             rootNode = std::move(other.rootNode);
             allocatedNodes = std::move(other.allocatedNodes);
             changePackerToThis();
-
             return *this;
         }
 

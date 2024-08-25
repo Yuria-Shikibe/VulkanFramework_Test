@@ -36,32 +36,17 @@ Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
 import Graphic.RendererUI;
+import Graphic.ImageAtlas;
 
 import ext.Allocator2D;
 
-int main() {
-    ext::Allocator2D allocator{{5000, 5000}};
 
-    std::vector<Geom::OrthoRectUInt> rects{};
-
-    for(int i = 0; i < 100; ++i){
-        rects.push_back(allocator.allocate({500, 500}).value());
-    }
-
-
-
-    for (const auto & vector2Ds : rects){
-        allocator.deallocate(vector2Ds.vert_00());
-    }
-    // for (const auto & [i, valid_heightAscend] : allocator.valid_heightAscend | std::views::enumerate) {
-    //     std::println("{}, {}", i, valid_heightAscend.first);
-    // }
-
-    // auto t = map.erase(map.end());
-}
-
-int main_(){
+int main(){
     using namespace Core;
+
+    Geom::Rect_Orthogonal<std::uint32_t> rect{0, 0, 48, 48};
+
+    auto t = rect;
 
 	init();
 
@@ -77,12 +62,37 @@ int main_(){
 	Assets::load(vulkanManager->context);
 	vulkanManager->initVulkan();
 
-    Graphic::RendererUI* rendererUi = new Graphic::RendererUI{vulkanManager->context};
-    window->registerResizeCallback("renderUICallback", [rendererUi](auto& e) {
-        rendererUi->resize(e.size);
-    }, [&rendererUi](auto e) {
-        rendererUi->initRenderPass(e);
+    // Graphic::RendererUI* rendererUi = new Graphic::RendererUI{vulkanManager->context};
+    // window->registerResizeCallback("renderUICallback", [rendererUi](auto& e) {
+    //     rendererUi->resize(e.size);
+    // }, [&rendererUi](auto e) {
+    //     rendererUi->initRenderPass(e);
+    // });
+
+    Graphic::ImageAtlas imageAtlas{vulkanManager->context};
+
+    File file{R"(D:\projects\NewHorizonMod\assets)"};
+
+    imageAtlas.registerPage("main", {4096 * 2, 4096 * 2});
+
+    std::vector<Graphic::Pixmap> preLoads{};
+
+    auto rng = std::filesystem::recursive_directory_iterator{file};
+
+    std::ranges::for_each(rng, [&](std::filesystem::path const& path){
+        if(path.extension() != ".png")return;
+
+        Graphic::Pixmap pixmap{path};
+        preLoads.push_back(std::move(pixmap));
     });
+
+    std::ranges::sort(preLoads, std::greater{}, [](auto& p){return p.size2D().area();});
+
+    std::size_t i{};
+    for (const auto& p : preLoads){
+        imageAtlas.findPage("main")->registerNamedRegion(std::to_string(i++), imageAtlas.allocate("main", p));
+    }
+
 
 	texturePester = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
 	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.png)");
@@ -165,8 +175,9 @@ int main_(){
 
     vkDeviceWaitIdle(vulkanManager->context.device);
 
+    imageAtlas = {};
     delete batch;
-    delete rendererUi;
+    // delete rendererUi;
 
     texturePester = {};
 	texturePesterLight = {};

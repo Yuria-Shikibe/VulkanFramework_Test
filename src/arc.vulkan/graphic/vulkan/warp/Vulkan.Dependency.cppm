@@ -64,35 +64,35 @@ export namespace Core::Vulkan{
 	template <typename T>
 		requires std::is_pointer_v<T>
 	struct Dependency{
-		T handler{};
+		T handle{};
 
 		[[nodiscard]] constexpr Dependency() noexcept = default;
 
-		[[nodiscard]] constexpr Dependency(T device) noexcept : handler{device}{}
+		[[nodiscard]] constexpr Dependency(T device) noexcept : handle{device}{}
 
 		constexpr ~Dependency() = default;
 
-		[[nodiscard]] constexpr operator T() const noexcept{ return handler; }
+		[[nodiscard]] constexpr operator T() const noexcept{ return handle; }
 
-		[[nodiscard]] constexpr operator bool() const noexcept{ return handler != nullptr; }
+		[[nodiscard]] constexpr operator bool() const noexcept{ return handle != nullptr; }
+		//
+		[[nodiscard]] constexpr T operator->() const noexcept{ return handle; }
 
-		[[nodiscard]] constexpr const T* operator->() const noexcept{ return &handler; }
-
-		[[nodiscard]] constexpr T* operator->() noexcept{ return &handler; }
+		[[nodiscard]] constexpr const T* asData() const noexcept{ return &handle; }
 
 		Dependency(const Dependency& other) = delete;
 
 		Dependency(Dependency&& other) noexcept
-			: handler{other.handler}{
-			other.handler = nullptr;
+			: handle{other.handle}{
+			other.handle = nullptr;
 		}
 
 		constexpr Dependency& operator=(const Dependency& other) = delete;
 
 		constexpr Dependency& operator=(Dependency&& other) noexcept{
 			if(this == &other) return *this;
-			handler = other.handler;
-			other.handler = nullptr;
+			handle = other.handle;
+			other.handle = nullptr;
 			return *this;
 		}
 	};

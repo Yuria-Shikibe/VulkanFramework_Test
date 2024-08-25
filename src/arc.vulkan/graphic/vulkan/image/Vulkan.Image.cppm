@@ -253,8 +253,7 @@ export namespace Core::Vulkan{
 		void generateMipmaps(
 			VkCommandBuffer commandBuffer,
 			VkImage image,
-			VkFormat imageFormat,
-			const std::uint32_t texWidth, const std::uint32_t texHeight,
+			const Geom::OrthoRectInt region,
 			const std::uint32_t mipLevels,
 			const std::uint32_t layerCount = 1
 		){
@@ -267,7 +266,7 @@ export namespace Core::Vulkan{
 			barrier.subresourceRange.layerCount = layerCount;
 			barrier.subresourceRange.levelCount = 1;
 
-            Geom::OrthoRectInt srcRegion{static_cast<int>(texWidth), static_cast<int>(texHeight)};
+            Geom::OrthoRectInt srcRegion{region};
 
 			for(std::uint32_t i = 1; i < mipLevels; i++){
 				barrier.subresourceRange.baseMipLevel = i - 1;
@@ -284,15 +283,19 @@ export namespace Core::Vulkan{
 					0, nullptr,
 					1, &barrier);
 
-                const Geom::OrthoRectInt dstRegion{srcRegion.getWidth() > 1 ? srcRegion.getWidth() / 2 : 1, srcRegion.getHeight() > 1 ? srcRegion.getHeight() / 2 : 1};
+                const Geom::OrthoRectInt dstRegion{
+                	srcRegion.getSrcX() / 2, srcRegion.getSrcY() / 2,
+                	srcRegion.getWidth() / 2, srcRegion.getHeight() / 2};
 
-                blit(
-                    commandBuffer, image, image,
-                    srcRegion,
-                    dstRegion,
-                    VK_FILTER_LINEAR,
-                    i - 1, i
-                    );
+				if(dstRegion.area() > 0){
+					blit(
+					commandBuffer, image, image,
+					srcRegion,
+					dstRegion,
+					VK_FILTER_LINEAR,
+					i - 1, i
+					);
+				}
 
 				barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 				barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -306,7 +309,6 @@ export namespace Core::Vulkan{
 					0, nullptr,
 					0, nullptr,
 					1, &barrier);
-
 
 			    srcRegion = dstRegion;
 			}
