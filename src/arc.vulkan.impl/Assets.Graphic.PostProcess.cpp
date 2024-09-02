@@ -19,13 +19,15 @@ import std;
 void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	using namespace Core::Vulkan;
 
-	Factory::blurProcessorFactory = Graphic::PostProcessorFactory{&context};
-	Factory::mergeBloomFactory = Graphic::PostProcessorFactory{&context};
-	Factory::nfaaFactory = Graphic::PostProcessorFactory{&context};
+	Factory::blurProcessorFactory = Graphic::GraphicPostProcessorFactory{&context};
+	Factory::mergeBloomFactory = Graphic::GraphicPostProcessorFactory{&context};
+	Factory::game_uiMerge = Graphic::GraphicPostProcessorFactory{&context};
+	Factory::nfaaFactory = Graphic::GraphicPostProcessorFactory{&context};
+	Factory::gaussianFactory = Graphic::ComputePostProcessorFactory{&context};
 
 	Factory::blurProcessorFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
-			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+		const Graphic::GraphicPostProcessorFactory& factory, Graphic::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::GraphicPostProcessor processor{*factory.context, std::move(portProv)};
 			static constexpr std::uint32_t Passes = 4;
 			// static constexpr float Scale = 0.5f;
 
@@ -88,7 +90,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				});
 			});
 
-			processor.renderProcedure.addPipeline([&](RenderProcedure::PipelineData& data){
+			processor.renderProcedure.addPipeline([&](PipelineData& data){
 				data.addTarget(std::views::iota(0u, Passes * 2));
 
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
@@ -102,12 +104,12 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				data.createPipelineLayout();
 
-				data.builder = [](RenderProcedure::PipelineData& pipeline){
+				data.builder = [](PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::blitBlur})
-						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
 
 					pipeline.createPipeline(pipelineTemplate);
 				};
@@ -135,7 +137,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				framebuffer.addCapturedAttachments(2, std::move(pingpong2));
 			});
 
-			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
+			processor.commandRecorder = [](Graphic::GraphicPostProcessor& postProcessor){
 				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
 				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
@@ -185,8 +187,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 		};
 
 	Factory::mergeBloomFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
-			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+		const Graphic::GraphicPostProcessorFactory& factory, Graphic::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::GraphicPostProcessor processor{*factory.context, std::move(portProv)};
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
 				{
@@ -258,7 +260,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			});
 
 	        //SSAO
-			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+			processor.renderProcedure.pushAndInitPipeline([&](PipelineData& data){
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
                     layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -271,18 +273,18 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			    data.addUniformBuffer(sizeof(UniformBlock_SSAO));
 				data.createPipelineLayout();
 
-				data.builder = [](RenderProcedure::PipelineData& pipeline){
+				data.builder = [](PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::SSAO})
-						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
 
 					pipeline.createPipeline(pipelineTemplate);
 				};
 			});
 
-			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+			processor.renderProcedure.pushAndInitPipeline([&](PipelineData& data){
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
@@ -296,12 +298,12 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				data.createPipelineLayout();
 
-				data.builder = [](RenderProcedure::PipelineData& pipeline){
+				data.builder = [](PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Shader::Vert::blitSingle, &Shader::Frag::blitMerge})
-						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
 
 					pipeline.createPipeline(pipelineTemplate);
 				};
@@ -323,8 +325,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 		};
 
 	Factory::nfaaFactory.creator = [](
-		const Graphic::PostProcessorFactory& factory, Graphic::PostProcessor::PortProv&& portProv, const Geom::USize2 size){
-			Graphic::PostProcessor processor{*factory.context, std::move(portProv)};
+		const Graphic::GraphicPostProcessorFactory& factory, Graphic::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::GraphicPostProcessor processor{*factory.context, std::move(portProv)};
 
 			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
 				renderPass.pushAttachment( //port.out[0]
@@ -339,7 +341,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				});
 			});
 
-			processor.renderProcedure.pushAndInitPipeline([&](RenderProcedure::PipelineData& data){
+			processor.renderProcedure.pushAndInitPipeline([&](PipelineData& data){
 				data.createDescriptorLayout([](DescriptorSetLayout& layout){
 					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
 				});
@@ -350,12 +352,12 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				data.createPipelineLayout();
 
-				data.builder = [](RenderProcedure::PipelineData& pipeline){
+				data.builder = [](PipelineData& pipeline){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Shader::Vert::blitWithUV, &Shader::Frag::NFAA})
-						.setStaticViewportAndScissor(pipeline.size().x, pipeline.size().y);
+						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
 
 					pipeline.createPipeline(pipelineTemplate);
 				};
@@ -363,11 +365,18 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.renderProcedure.resize(size);
 
-			processor.createFramebuffer([](FramebufferLocal&){
-				//using externals
+			processor.createFramebuffer([&](FramebufferLocal& framebuffer){
+				ColorAttachment nfaaResultAttachment{processor.context->physicalDevice, processor.context->device};
+				nfaaResultAttachment.create(
+					size, processor.obtainTransientCommand(),
+					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+				);
+
+				framebuffer.pushCapturedAttachments(std::move(nfaaResultAttachment));
 			});
 
-			processor.commandRecorder = [](Graphic::PostProcessor& postProcessor){
+			processor.commandRecorder = [](Graphic::GraphicPostProcessor& postProcessor){
 				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
 				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
@@ -386,6 +395,185 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			return processor;
 		};
+
+	Factory::game_uiMerge.creator = [](
+		const Graphic::GraphicPostProcessorFactory& factory, Graphic::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::GraphicPostProcessor processor{*factory.context, std::move(portProv)};
+
+			processor.renderProcedure.createRenderPass([](RenderPass& renderPass){
+				auto inputDesc = VkAttachmentDescription{
+						.format = VK_FORMAT_R8G8B8A8_UNORM,
+						.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+						.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+						.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+					}
+					| AttachmentDesc::Default
+					| AttachmentDesc::Stencil_DontCare;
+
+
+				//world 0
+				renderPass.pushAttachment(inputDesc);
+
+				//ui 0
+				renderPass.pushAttachment(inputDesc);
+
+				//ui 1
+				renderPass.pushAttachment(inputDesc);
+
+				renderPass.pushAttachment(
+						VkAttachmentDescription{}
+						| AttachmentDesc::Default
+						| AttachmentDesc::Stencil_DontCare
+						| AttachmentDesc::ExportAttachment
+						| AttachmentDesc::Load_DontCare);
+
+				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
+					subpass.addInput(0);
+					subpass.addInput(1);
+					subpass.addInput(2);
+					subpass.addOutput(3);
+				});
+			});
+
+			processor.renderProcedure.pushAndInitPipeline([&](PipelineData& data){
+				data.createDescriptorLayout([](DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
+				});
+
+				data.createDescriptorSet(1);
+
+				data.createPipelineLayout();
+
+				data.builder = [](PipelineData& pipeline){
+					PipelineTemplate pipelineTemplate{};
+					pipelineTemplate
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
+						.setShaderChain({&Shader::Vert::blitSingle, &Shader::Frag::game_ui_merge})
+						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
+
+					pipeline.createPipeline(pipelineTemplate);
+				};
+			});
+
+			processor.renderProcedure.resize(size);
+
+			processor.createFramebuffer([&](FramebufferLocal& framebuffer){
+				ColorAttachment gameUImergeResultAttachment{processor.context->physicalDevice, processor.context->device};
+				gameUImergeResultAttachment.create(
+					size, processor.obtainTransientCommand(),
+					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
+				);
+				framebuffer.addCapturedAttachments(3, std::move(gameUImergeResultAttachment));
+			});
+
+			processor.descriptorSetUpdator = [](Graphic::GraphicPostProcessor& postProcessor){
+				DescriptorSetUpdator updator{postProcessor.context->device, postProcessor.renderProcedure.front().descriptorSets.front()};
+
+				std::array<VkDescriptorImageInfo, 3> infos{};
+
+				for (const auto& [index, info] : infos | std::views::enumerate){
+					info = postProcessor.framebuffer.getInputInfo(index, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+					updator.pushAttachment(info);
+				}
+
+				updator.update();
+			};
+
+			processor.commandRecorder = [](Graphic::GraphicPostProcessor& postProcessor){
+				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+
+				const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
+				vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
+
+				auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
+
+				cmdContext.data().bindDescriptorTo(scopedCommand);
+
+				scopedCommand->blitDraw();
+
+				vkCmdEndRenderPass(scopedCommand);
+			};
+
+			processor.updateDescriptors();
+			processor.recordCommand();
+
+			return processor;
+		};
+
+	Factory::gaussianFactory.creator = [](
+		const Graphic::ComputePostProcessorFactory& factory, Graphic::PortProv&& portProv, const Geom::USize2 size){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv)};
+			static constexpr std::uint32_t Passes = 4;
+			// static constexpr float Scale = 0.5f;
+
+			processor.pipelineData.addTarget({0});
+			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
+			});
+
+			processor.pipelineData.createDescriptorSet(1);
+			processor.pipelineData.addUniformBuffer(sizeof(Gaussian_KernalInfo));
+
+			processor.pipelineData.createPipelineLayout();
+
+			processor.pipelineData.builder = [](PipelineData& pipeline){
+				pipeline.createComputePipeline(Shader::Comp::Gaussian.shaderModule);
+			};
+
+			processor.pipelineData.resize(size);
+
+			{
+				constexpr auto PingPongUsage =
+				   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+					auto command = processor.obtainTransientCommand(true);
+
+					ColorAttachment pingpong1{processor.context->physicalDevice, processor.context->device};
+					pingpong1.create(size, command, PingPongUsage);
+
+					ColorAttachment pingpong2{processor.context->physicalDevice, processor.context->device};
+					pingpong2.create(size, command, PingPongUsage);
+
+					command = {};
+
+					processor.images.push_back(std::move(pingpong1));
+					processor.images.push_back(std::move(pingpong2));
+			}
+
+			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
+				DescriptorSetUpdator updator{postProcessor.context->device, postProcessor.pipelineData.descriptorSets.front()};
+
+				auto uniformInfo = postProcessor.pipelineData.uniformBuffers.front().getDescriptorInfo();
+				auto imageinfo0 = postProcessor.images[0].getDescriptorInfo(Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+				auto imageinfo1 = postProcessor.images[0].getDescriptorInfo(nullptr, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+				updator.pushImage(imageinfo0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+				updator.pushImage(imageinfo1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+				updator.push(uniformInfo);
+
+				updator.update();
+			};
+
+			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
+				ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+
+				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
+
+				postProcessor.pipelineData.bindDescriptorTo(scopedCommand);
+				vkCmdDispatch(scopedCommand, (postProcessor.size().x + 15) / 16, (postProcessor.size().y + 15) / 16, 1);
+			};
+
+			processor.updateDescriptors();
+			processor.recordCommand();
+
+			return processor;
+		};
+
 }
 
 void Assets::PostProcess::dispose(){}

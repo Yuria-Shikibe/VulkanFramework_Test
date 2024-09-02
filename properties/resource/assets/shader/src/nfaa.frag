@@ -23,7 +23,7 @@ float lumRGB(vec3 v) {
     return dot(v, vec3(0.212, 0.716, 0.072));
 }
 
-const float fScale = 0.5f;
+const float fScale = 1.25f;
 
 vec4 nfaa(sampler2D tex, vec2 texCoords, vec2 uvStep) {
     // Offset coordinates

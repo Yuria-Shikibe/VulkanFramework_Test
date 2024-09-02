@@ -11,10 +11,17 @@ import Graphic.Color;
 import std;
 
 export namespace Core::Vulkan{
+	export struct TextureIndex{
+		std::uint8_t textureIndex{};
+		std::uint8_t textureLayer{};
+		std::uint8_t reserved1{};
+		std::uint8_t reserved2{};
+	};
+
 	struct Vertex_World {
 		Geom::Vec2 position{};
 		float depth{};
-		Util::TextureIndex textureParam{};
+		TextureIndex textureParam{};
 		Graphic::Color color{};
 		Geom::Vec2 texCoord{};
 	};
@@ -34,4 +41,18 @@ export namespace Core::Vulkan{
 		std::pair{&InstanceDesignator::offset, VK_FORMAT_R8_SINT}
 	>;
 
+	struct Vertex_UI {
+		Geom::Vec2 position{};
+		TextureIndex textureParam{};
+		Graphic::Color color{};
+		Geom::Vec2 texCoord{};
+	};
+
+
+	using UIVertBindInfo = Core::Vulkan::Util::VertexBindInfo<Vertex_UI, 0, 0, VK_VERTEX_INPUT_RATE_VERTEX,
+		  std::pair{&Vertex_UI::position, VK_FORMAT_R32G32_SFLOAT},
+		  std::pair{&Vertex_UI::textureParam, VK_FORMAT_R8G8B8A8_UINT},
+		  std::pair{&Vertex_UI::color, VK_FORMAT_R32G32B32A32_SFLOAT},
+		  std::pair{&Vertex_UI::texCoord, VK_FORMAT_R32G32_SFLOAT}
+	>;
 }

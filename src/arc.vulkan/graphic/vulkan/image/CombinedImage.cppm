@@ -9,6 +9,7 @@ import Core.Vulkan.Dependency;
 
 import std;
 import Geom.Vector2D;
+import ext.Concepts;
 
 export namespace Core::Vulkan{
 	struct CombinedImage{
@@ -42,6 +43,63 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] Geom::USize2 getSize() const noexcept{ return size; }
 
+		template <typename Fn>
+		void cmdClear(Fn fn, VkCommandBuffer commandBuffer,
+		              std::add_lvalue_reference_t<std::remove_pointer_t<std::tuple_element_t<
+			              3, typename Concepts::FunctionTraits<std::remove_pointer_t<Fn>>::ArgsTuple>>> clearValue,
+		              VkAccessFlags srcAccessFlags,
+		              VkImageAspectFlags aspect,
+		              VkImageLayout layout
+		) const{
+			VkImageSubresourceRange imageSubresourceRange{
+					aspect,
+					0, 1, 0, layers
+				};
 
+			VkImageMemoryBarrier imageMemoryBarrier{
+					VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+					nullptr,
+					srcAccessFlags,
+					VK_ACCESS_TRANSFER_WRITE_BIT,
+					VK_IMAGE_LAYOUT_UNDEFINED,
+					VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+					VK_QUEUE_FAMILY_IGNORED,
+					VK_QUEUE_FAMILY_IGNORED,
+					image,
+					imageSubresourceRange
+				};
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+			                     0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+
+			fn(commandBuffer, image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &imageSubresourceRange);
+
+			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			imageMemoryBarrier.dstAccessMask = 0;
+			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			imageMemoryBarrier.newLayout = layout;
+
+			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			                     0,
+			                     0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
+		}
+
+		void cmdClearColor(VkCommandBuffer commandBuffer,
+		                   VkClearColorValue clearValue,
+		                   VkAccessFlags srcAccessFlags,
+		                   VkImageAspectFlags aspect,
+		                   VkImageLayout layout
+		) const{
+			cmdClear(vkCmdClearColorImage, commandBuffer, clearValue, srcAccessFlags, aspect, layout);
+		}
+
+		void cmdClearDepthStencil(VkCommandBuffer commandBuffer,
+		                          VkClearDepthStencilValue clearValue,
+		                          VkAccessFlags srcAccessFlags,
+		                          VkImageAspectFlags aspect,
+		                          VkImageLayout layout
+		) const{
+			cmdClear(vkCmdClearDepthStencilImage, commandBuffer, clearValue, srcAccessFlags, aspect, layout);
+		}
 	};
 }

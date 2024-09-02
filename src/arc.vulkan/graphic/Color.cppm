@@ -105,69 +105,37 @@ export namespace Graphic{
 				&& lhs.a == rhs.a;
 		}
 
-		static constexpr Color valueOf(const std::string_view hex){
-			const int offset = hex[0] == '#' ? 1 : 0;
 
-			const int r = parseHex(hex, offset, offset + 2);
-			const int g = parseHex(hex, offset + 2, offset + 4);
-			const int b = parseHex(hex, offset + 4, offset + 6);
-			const int a = hex.length() - offset != 8 ? 255 : parseHex(hex, offset + 6, offset + 8);
-			return Color{static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f};
-		}
+	    static auto stringToRgba(const std::string_view hexStr){
+	    	std::array<std::uint8_t, 4> rgba{};
+	    	for (const auto& [index, v1] : hexStr | std::views::slide(2) | std::views::stride(2) | std::views::take(4) | std::views::enumerate){
+	    		std::from_chars(v1.data(), v1.data() + v1.size(), rgba[index], 16);
+	    	}
 
-		static constexpr Color valueOf(const std::wstring_view hex){
-			const int offset = hex[0] == '#' ? 1 : 0;
+	    	return rgba;
+	    }
 
-			const int r = parseHex(hex, offset, offset + 2);
-			const int g = parseHex(hex, offset + 2, offset + 4);
-			const int b = parseHex(hex, offset + 4, offset + 6);
-			const int a = hex.length() - offset != 8 ? 255 : parseHex(hex, offset + 6, offset + 8);
-			return Color{static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f};
-		}
+	    static ColorBits stringToRgbaBits(const std::string_view hexStr){
+	    	std::uint32_t value = std::bit_cast<std::uint32_t>(stringToRgba(hexStr));
+	    	if constexpr (std::endian::native == std::endian::little) {
+	    		value = std::byteswap(value);
+	    	}
 
-		static constexpr Color& valueOf(Color& color, const std::string_view hex){
-			const int offset = hex[0] == '#' ? 1 : 0;
+	    	return value;
+	    }
 
-			const int r = parseHex(hex, offset, offset + 2);
-			const int g = parseHex(hex, offset + 2, offset + 4);
-			const int b = parseHex(hex, offset + 4, offset + 6);
-			const int a = hex.length() - offset != 8 ? 255 : parseHex(hex, offset + 6, offset + 8);
-			return color.set(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f);
-		}
+	    static Color valueOf(const std::string_view hexStr){
+	    	const auto rgba = stringToRgba(hexStr);
 
-		static constexpr int parseHex(const std::string_view string, const int from, const int to){
-			int total = 0;
-			for (int i = from; i < to; i++) {
-				total += Math::charToDigitValue(string[i], 16) * (i == from ? 16 : 1);
-			}
-			return total;
-		}
+	    	Color color{};
 
-		static constexpr int parseHex(const std::wstring_view string, const int from, const int to){
-			int total = 0;
-			for (int i = from; i < to; i++) {
-				total += Math::charToDigitValue(static_cast<signed char>(string[i] & 0x00ff), 16) * (i == from ? 16 : 1);
-			}
-			return total;
-		}
+	    	color.r = static_cast<float>(rgba[0]) / static_cast<float>(std::numeric_limits<std::uint8_t>::max());
+	    	color.g = static_cast<float>(rgba[1]) / static_cast<float>(std::numeric_limits<std::uint8_t>::max());
+	    	color.b = static_cast<float>(rgba[2]) / static_cast<float>(std::numeric_limits<std::uint8_t>::max());
+	    	color.a = static_cast<float>(rgba[3]) / static_cast<float>(std::numeric_limits<std::uint8_t>::max());
 
-		static constexpr float toFloatBits(const int r, const int g, const int b, const int a) noexcept{
-			const int color = a << 24 | b << 16 | g << 8 | r;
-			return intToFloatColor(color);
-		}
-
-		static constexpr float toFloatBits(const float r, const float g, const float b, const float a){
-			const int color = static_cast<int>(255 * a) << 24 | static_cast<int>(255 * b) << 16 | static_cast<int>(255 * g) << 8 | static_cast<int>(255 * r);
-			return intToFloatColor(color);
-		}
-
-		static constexpr double toDoubleBits(const float r, const float g, const float b, const float a) noexcept{
-			return std::bit_cast<double>(rgba8888(r, g, b, a) & Math::INT_MASK_BACK);
-		}
-
-		static constexpr double toDoubleBits(const int r, const int g, const int b, const int a) noexcept{
-			return toDoubleBits(static_cast<float>(r) / 255.0f, static_cast<float>(g) / 255.0f, static_cast<float>(b) / 255.0f, static_cast<float>(a) / 255.0f); // NOLINT(*-narrowing-conversions)
-		}
+	    	return color;
+	    }
 
 		static constexpr ColorBits abgr(const int tr, const int tg, const int tb, const int ta) noexcept{
 			return ta << 24 | tb << 16 | tg << 8 | tr;
@@ -225,50 +193,38 @@ export namespace Graphic{
 			return static_cast<ColorBits>(a * 255) << 24 & r_Mask | static_cast<ColorBits>(r * 255) << 16 & g_Mask | static_cast<ColorBits>(g * 255) << 8 & b_Mask | static_cast<ColorBits>(b * 255) & a_Mask;
 		}
 
-		constexpr Color& rgb565(const ColorBits value) noexcept{
-			r = static_cast<float>((value & 0x0000F800) >> 11) / 31.0f;
-			g = static_cast<float>((value & 0x000007E0) >> 5) / 63.0f;
-			b = static_cast<float>((value & 0x0000001F)) / 31.0f;
-			return *this;
-		}
 
-		constexpr Color& rgba4444(const ColorBits value) noexcept{
-			r = static_cast<float>((value & 0x0000f000) >> 12) / 15.0f;
-			g = static_cast<float>((value & 0x00000f00) >> 8) / 15.0f;
-			b = static_cast<float>((value & 0x000000f0) >> 4) / 15.0f;
-			a = static_cast<float>((value & 0x0000000f)) / 15.0f;
-			return *this;
-		}
+		//TODO shift then mask
 
 		constexpr Color& rgb888(const ColorBits value) noexcept{
-			r = static_cast<float>((value & 0x00ff0000) >> 16) / 255.0f;
-			g = static_cast<float>((value & 0x0000ff00) >> 8) / 255.0f;
-			b = static_cast<float>((value & 0x000000ff)) / 255.0f;
+			r = static_cast<float>(value >> 16 & 0x000000ff) / 255.0f;
+			g = static_cast<float>(value >> 8  & 0x000000ff) / 255.0f;
+			b = static_cast<float>(value >> 0  & 0x000000ff) / 255.0f;
 			return *this;
 		}
 
 		constexpr Color& rgba8888(const ColorBits value) noexcept{
-			r = static_cast<float>((value & 0xff000000) >> 24) / 255.0f;
-			g = static_cast<float>((value & 0x00ff0000) >> 16) / 255.0f;
-			b = static_cast<float>((value & 0x0000ff00) >> 8) / 255.0f;
-			a = static_cast<float>((value & 0x000000ff)) / 255.0f;
+			r = static_cast<float>(value >> 24 & 0x000000ff) / 255.0f;
+			g = static_cast<float>(value >> 16 & 0x000000ff) / 255.0f;
+			b = static_cast<float>(value >> 8  & 0x000000ff) / 255.0f;
+			a = static_cast<float>(value >> 0  & 0x000000ff) / 255.0f;
 			return *this;
 		}
 
 		constexpr Color& argb8888(const ColorBits value) noexcept{
-			a = static_cast<float>((value & 0xff000000) >> 24) / 255.0f;
-			r = static_cast<float>((value & 0x00ff0000) >> 16) / 255.0f;
-			g = static_cast<float>((value & 0x0000ff00) >> 8) / 255.0f;
-			b = static_cast<float>((value & 0x000000ff)) / 255.0f;
+			a = static_cast<float>(value >> 24 & 0x000000ff) / 255.0f;
+			r = static_cast<float>(value >> 16 & 0x000000ff) / 255.0f;
+			g = static_cast<float>(value >> 8  & 0x000000ff) / 255.0f;
+			b = static_cast<float>(value >> 0  & 0x000000ff) / 255.0f;
 			return *this;
 		}
 
 		constexpr Color& abgr8888(const float value) noexcept{
 			const unsigned int c = floatToIntColor(value);
-			a = static_cast<float>((c & 0xff000000) >> 24) / 255.0f;
-			b = static_cast<float>((c & 0x00ff0000) >> 16) / 255.0f;
-			g = static_cast<float>((c & 0x0000ff00) >> 8) / 255.0f;
-			r = static_cast<float>((c & 0x000000ff)) / 255.0f;
+			a = static_cast<float>(c >> 24 & 0x000000ff) / 255.0f;
+			b = static_cast<float>(c >> 16 & 0x000000ff) / 255.0f;
+			g = static_cast<float>(c >> 8  & 0x000000ff) / 255.0f;
+			r = static_cast<float>(c >> 0  & 0x000000ff) / 255.0f;
 			return *this;
 		}
 
@@ -597,10 +553,6 @@ export namespace Graphic{
 		[[nodiscard]] constexpr float toFloatBits() const noexcept{
 			const ColorBits color = static_cast<ColorBits>(255 * a) << 24 | static_cast<ColorBits>(255 * b) << 16 | static_cast<ColorBits>(255 * g) << 8 | static_cast<ColorBits>(255 * r);
 			return intToFloatColor(color);
-		}
-
-		[[nodiscard]] constexpr double toDoubleBits() const noexcept{
-			return toDoubleBits(r, g, b, a); // NOLINT(*-narrowing-conversions)
 		}
 
 		[[nodiscard]] constexpr ColorBits abgr() const noexcept{

@@ -30,9 +30,9 @@ export namespace Core{
 
         initFileSystem();
 
-        input = new Ctrl::Input();
-        mainCamera = new Graphic::Camera2D();
-        window = new Window{};
+        input = new Ctrl::Input;
+        mainCamera = new Graphic::Camera2D;
+        window = new Window;
         vulkanManager = new Vulkan::VulkanManager;
         vulkanManager->initContext(window);
 

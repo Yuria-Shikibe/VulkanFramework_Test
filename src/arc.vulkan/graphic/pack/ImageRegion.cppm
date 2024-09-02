@@ -9,35 +9,34 @@ import Geom.Rect_Orthogonal;
 import std;
 
 export namespace Graphic {
-    struct ImageViewRegion {
-        VkImageView imageView{};
-
-        Geom::USize2 srcImageSize{};
-
+    struct UVData{
         Geom::Vec2 v00{};
         Geom::Vec2 v10{};
         Geom::Vec2 v11{};
         Geom::Vec2 v01{};
+    };
+
+    struct ImageViewRegion : UVData{
+        VkImageView imageView{};
+
+        Geom::USize2 srcImageSize{};
+
 
         [[nodiscard]] ImageViewRegion() = default;
 
         [[nodiscard]] ImageViewRegion(VkImageView imageView, const Geom::USize2 srcImageSize, const Geom::Rect_Orthogonal<std::uint32_t> internal = {})
             : imageView{imageView},
               srcImageSize{srcImageSize}{
+            setUV(internal);
+        }
+
+        void setUV(const Geom::Rect_Orthogonal<std::uint32_t> internal){
             const auto size_f = srcImageSize.as<float>();
+
             v00 = internal.vert_00().as<float>() / size_f;
             v10 = internal.vert_10().as<float>() / size_f;
             v11 = internal.vert_11().as<float>() / size_f;
             v01 = internal.vert_01().as<float>() / size_f;
         }
-    };
-
-    struct ImageRegion {
-        VkImage image{};
-
-        Geom::USize2 size{};
-
-        //TODO
-        VkFormat format{};
     };
 }

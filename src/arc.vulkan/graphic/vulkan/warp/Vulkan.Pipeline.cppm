@@ -13,18 +13,6 @@ import std;
 
 export namespace Core::Vulkan{
 	struct PipelineTemplate : VkGraphicsPipelineCreateInfo{
-	private:
-		struct MutexWrapper{
-			std::mutex mutex{};
-			operator std::mutex&() noexcept{return mutex;}
-			[[nodiscard]] MutexWrapper() = default;
-			MutexWrapper(const MutexWrapper&) {}
-			MutexWrapper(MutexWrapper&&) noexcept {}
-			MutexWrapper& operator=(const MutexWrapper&){return *this;}
-			MutexWrapper& operator=(MutexWrapper&&) noexcept{return *this;}
-		} mutex{}; //TODO necessary??
-
-	public:
 		ShaderChain shaderChain{};
 
 		std::vector<VkDynamicState> dynamicStates{};
@@ -172,7 +160,6 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] auto create(VkDevice device,
 			VkPipelineLayout layout, VkRenderPass renderPass, std::uint32_t subpassIndex = 0){
-			std::lock_guard lg{mutex.mutex};
 
 			this->layout = layout;
 			this->renderPass = renderPass;
@@ -194,14 +181,14 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	struct GraphicPipeline : Wrapper<VkPipeline>{
+	struct Pipeline : Wrapper<VkPipeline>{
 		DeviceDependency device{};
 
-		[[nodiscard]] GraphicPipeline() = default;
+		[[nodiscard]] Pipeline() = default;
 
-		[[nodiscard]] GraphicPipeline(VkDevice device, VkPipeline pipeline) : Wrapper{pipeline}, device{device}{}
+		[[nodiscard]] Pipeline(VkDevice device, VkPipeline pipeline) : Wrapper{pipeline}, device{device}{}
 
-		[[nodiscard]] GraphicPipeline(
+		[[nodiscard]] Pipeline(
 			VkDevice device,
 			PipelineTemplate& pipelineTemplate,
 			VkPipelineLayout layout, VkRenderPass renderPass, std::uint32_t subpassIndex = 0) : device{device}{
@@ -214,17 +201,39 @@ export namespace Core::Vulkan{
 			handle = p;
 		}
 
-		~GraphicPipeline(){
+		[[nodiscard]] Pipeline(
+			VkDevice device,
+			VkPipelineLayout layout, const VkPipelineShaderStageCreateInfo& stageInfo) : device{device}{
+
+
+			VkComputePipelineCreateInfo createInfo{
+				.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+				.pNext = nullptr,
+				.flags = 0,
+				.stage = stageInfo,
+				.layout = layout,
+				.basePipelineHandle = nullptr,
+				.basePipelineIndex = 0
+			};
+
+			const auto rst = vkCreateComputePipelines(device, nullptr, 1, &createInfo, nullptr, &handle);
+
+			if(rst){
+				throw std::runtime_error("Failed to create pipeline");
+			}
+		}
+
+		~Pipeline(){
 			if(device)vkDestroyPipeline(device, handle, nullptr);
 		}
 
-		GraphicPipeline(const GraphicPipeline& other) = delete;
+		Pipeline(const Pipeline& other) = delete;
 
-		GraphicPipeline(GraphicPipeline&& other) noexcept = default;
+		Pipeline(Pipeline&& other) noexcept = default;
 
-		GraphicPipeline& operator=(const GraphicPipeline& other) = delete;
+		Pipeline& operator=(const Pipeline& other) = delete;
 
-		GraphicPipeline& operator=(GraphicPipeline&& other) noexcept{
+		Pipeline& operator=(Pipeline&& other) noexcept{
 			if(this == &other) return *this;
 			if(device)vkDestroyPipeline(device, handle, nullptr);
 			Wrapper<VkPipeline>::operator =(std::move(other));

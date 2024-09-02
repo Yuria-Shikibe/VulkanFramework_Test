@@ -205,7 +205,15 @@ export namespace ext{
 		using SelfType::operator[];
 
 		V& operator[](const std::string_view key) {
-			return this->try_emplace(std::string(key)).first->second;
+			if(auto itr = this->find(key); itr != this->end()){
+				return itr->second;
+			}
+
+			return operator[](std::string(key));
+		}
+
+		V& operator[](const char* key) {
+			return operator[](std::string_view(key));
 		}
 	};
 

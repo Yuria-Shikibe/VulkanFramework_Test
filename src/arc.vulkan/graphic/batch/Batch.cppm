@@ -21,7 +21,9 @@ import Core.Vulkan.BatchData;
 
 import std;
 import ext.Container.ArrayQueue;
+import ext.circular_array;
 
+//TODO allow multiple allocation in one operation
 export namespace Graphic{
 	// template <typename Vertex>
 	struct Batch{
@@ -38,6 +40,18 @@ export namespace Graphic{
 
 		static constexpr ImageIndex InvalidImageIndex{static_cast<ImageIndex>(~0U)};
 
+		struct CommandUnit{
+			Core::Vulkan::CommandBuffer flushCommandBuffer{};
+			Core::Vulkan::Fence fence{};
+
+			[[nodiscard]] CommandUnit() = default;
+
+			[[nodiscard]] explicit CommandUnit(const Batch& batch)
+				:
+				flushCommandBuffer{batch.context->device, batch.transientCommandPool},
+				fence{batch.context->device, Core::Vulkan::Fence::CreateFlags::signal}{}
+		};
+
 		struct FrameData{
 			static constexpr std::uint32_t MaxCount = MaxGroupCount;
 
@@ -48,6 +62,19 @@ export namespace Graphic{
 			std::atomic_bool canAcquire{true};
 
 			std::shared_mutex capturedMutex{};
+
+			[[nodiscard]] FrameData() = default;
+
+			void set(const Batch& batch){
+				// flushCommandBuffer = {batch.context->device, batch.transientCommandPool};
+				// fence = Core::Vulkan::Fence{batch.context->device, Core::Vulkan::Fence::CreateFlags::signal};
+				stagingBuffer = {
+					batch.context->physicalDevice, batch.context->device, (batch.unitOffset * MaxGroupCount),
+					VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+				};
+				vertData = stagingBuffer.memory.map_noInvalidation();
+			}
 
 			[[nodiscard]] bool isAcquirable() const{
 				return canAcquire;
@@ -94,7 +121,6 @@ export namespace Graphic{
 
 
 	    Core::Vulkan::CommandPool transientCommandPool{};
-	    Core::Vulkan::CommandBuffer command_flush{};
 
 
 	    //Buffers to be bound
@@ -107,11 +133,8 @@ export namespace Graphic{
 	    ImageSet usedImages{};
 	    std::shared_mutex imageMutex{};
 
-
-	    //TODO replace fence with semaphores
-	    Core::Vulkan::Semaphore semaphore_drawDone{};
-	    Core::Vulkan::Semaphore semaphore_copyDone{};
-	    Core::Vulkan::Fence fence{};
+		bool descriptorSetUpdated{false};
+		Core::Vulkan::Fence drawCommandFence{};
 
 		std::array<FrameData, BufferSize> frames{};
 		std::atomic_size_t currentIndex{};
@@ -122,13 +145,14 @@ export namespace Graphic{
 		/** @brief Used to notify all threads waiting for an available frame*/
 		std::condition_variable_any frameSeekingConditions{};
 
-		//TODO make it static size, avoid heap allocation
+
+		ext::circular_array<CommandUnit, BufferSize> flushCommandBuffers{};
 		ext::array_queue<DrawCall, BufferSize> drawCalls{};
 		std::binary_semaphore semaphore_drawQueuePush{1};
 
 		//TODO better callback
-		std::function<void(Batch&, bool)> externalDrawCall{};
-		std::function<void(std::span<const VkImageView>)> descriptorChangedCallback{};
+		std::function<void(Batch&)> externalDrawCall{};
+		std::function<void(Batch&, std::span<const VkImageView>)> descriptorChangedCallback{};
 
         [[nodiscard]] Batch() = default;
 
@@ -179,29 +203,14 @@ export namespace Graphic{
 			};
 		}
 
-		void updateDescriptorSets(const ImageSet& imageSet = {}) const {
+		void updateDescriptorSets(const ImageSet& imageSet = {}) {
             auto end = std::ranges::find(imageSet, static_cast<VkImageView>(nullptr));
 
             std::span span{imageSet.begin(), end};
 
-			descriptorChangedCallback(span);
+        	descriptorSetUpdated = true;
+			descriptorChangedCallback(*this, span);
 		}
-
-		class [[jetbrains::guard]] Acquirer{
-			DrawArgs drawArgs{};
-
-			[[nodiscard("Captured Shared Mutex Should be reserved until draw is done")]]
-			Acquirer(Batch& batch, VkImageView imageView) :
-				drawArgs{batch.acquire(imageView)}{}
-
-			[[nodiscard]] std::pair<void*, ImageIndex> getArgs() const noexcept{
-				return {drawArgs.dataPtr, drawArgs.imageIndex};
-			}
-
-			[[nodiscard]] operator std::pair<void*, ImageIndex>() const noexcept{
-				return getArgs();
-			}
-		};
 
 		/**
 		 * @brief multi call is allowed, do nothing when there is no frame valid
@@ -213,15 +222,16 @@ export namespace Graphic{
 				return;
 			}
 
-			DrawCall topDrawCall = drawCalls.front();
+			const DrawCall topDrawCall = drawCalls.front();
 			drawCalls.pop();
-			bool isLast = drawCalls.empty();
 			endPost();
 
-			this->recordCommand(topDrawCall.frameData);
+			auto& commandUnit = flushCommandBuffers++;
+
+			this->recordCommand(topDrawCall.frameData, commandUnit);
 			topDrawCall.updateDescriptorImages(*this);
 
-			submitCommand(isLast);
+			submitCommand(commandUnit);
 
 			topDrawCall.frameData->reset();
 			frameSeekingConditions.notify_all();
@@ -233,33 +243,26 @@ export namespace Graphic{
 			    (void)toNextFrame(currentIndex, lk);
 			}
 
-			if(drawCalls.empty()){
-				//padding when no element to draw
-
-				recordCommand(nullptr);
-
-				submitCommand(true);
-
-			}else{
-				while(!drawCalls.empty()){
-					consumeFrame();
-				}
+			while(!drawCalls.empty()){
+				consumeFrame();
 			}
 		}
 
 	private:
-		void submitCommand(const bool isLast){
-			// fence.reset();
+		void submitCommand(const CommandUnit& commandUnit){
+			context->commandSubmit_Graphics(commandUnit.flushCommandBuffer, commandUnit.fence.get());
 
-			context->commandSubmit_Graphics(
-					command_flush,
-					nullptr,
-					nullptr,
-					fence.get(),
-					VK_PIPELINE_STAGE_VERTEX_SHADER_BIT
-				);
+			if(descriptorSetUpdated) [[unlikely]] {
+				descriptorSetUpdated = false;
+			}else{
+				//OPTM no wait
+				// auto time = std::chrono::steady_clock::now();
+				drawCommandFence.waitAndReset();
+				// auto time1 = std::chrono::steady_clock::now();
+				// std::println("{}", std::chrono::duration_cast<std::chrono::nanoseconds>(time1 - time));
+			}
 
-			externalDrawCall(*this, isLast);
+			externalDrawCall(*this);
 		}
 
         /**
@@ -299,6 +302,7 @@ export namespace Graphic{
 				endPost();
 
 				//Consume if overflow
+				//TODO post tasks to other thread and wait here
 				if(!nextFrame.isAcquirable())consumeFrame();
 			} else{
 				semaphore_indexIncrement.release();
@@ -361,20 +365,28 @@ export namespace Graphic{
 			}
 		}
 
-		void recordCommand(FrameData* frameData){
+		void recordCommand(FrameData* frameData, CommandUnit& commandUnit){
 			std::uint32_t count{};
-
-			fence.waitAndReset();
-			command_flush.begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
 			if(frameData){
 				std::unique_lock lk{frameData->capturedMutex};
-
 				count = std::min(FrameData::MaxCount, frameData->currentCount.load());
-				if(count){
-					static_cast<Core::Vulkan::StagingBuffer&>(frameData->stagingBuffer)
-						.copyBuffer(command_flush, vertexBuffer.get(), count * unitOffset);
-				}
+			}
+
+			commandUnit.fence.waitAndReset();
+
+			Core::Vulkan::ScopedCommand scopedCommand{commandUnit.flushCommandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
+
+			vkCmdPipelineBarrier(scopedCommand,
+				VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				0,
+				0, nullptr,
+				0, nullptr,
+				0, nullptr);
+
+			if(count){
+				frameData->stagingBuffer.copyBuffer(scopedCommand, vertexBuffer.get(), count * unitOffset);
 			}
 
 			new(indirectBuffer.getMappedData()) VkDrawIndexedIndirectCommand{
@@ -386,9 +398,18 @@ export namespace Graphic{
 			};
 
 			indirectBuffer.flush(sizeof(VkDrawIndexedIndirectCommand));
-			indirectBuffer.cmdFlushToDevice(command_flush, sizeof(VkDrawIndexedIndirectCommand));
+			indirectBuffer.cmdFlushToDevice(scopedCommand, sizeof(VkDrawIndexedIndirectCommand));
 
-			command_flush.end();
+			vkCmdPipelineBarrier(scopedCommand,
+				VK_PIPELINE_STAGE_TRANSFER_BIT,
+				VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT,
+				0,
+				0,
+				nullptr,
+				0,
+				nullptr,
+				0,
+				nullptr);
 		}
 
 	    void init(const Core::Vulkan::Context* context){
@@ -400,13 +421,17 @@ export namespace Graphic{
                 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
             };
 
-		    semaphore_copyDone = Semaphore{context->device};
-		    semaphore_drawDone = Semaphore{context->device};
-		    fence = Fence{context->device, Fence::CreateFlags::signal};
+			/*{
+				semaphore_copyDone = Semaphore{context->device};
+		    	semaphore_drawDone = Semaphore{context->device};
 
-		    auto command_empty = transientCommandPool.obtain();
-		    {ScopedCommand scopedCommand{command_empty, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};}
-		    context->triggerSemaphore(command_empty, semaphore_drawDone.asSeq());
+		    	auto command_empty = transientCommandPool.obtain();
+			    {ScopedCommand scopedCommand{command_empty, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};}
+		    	context->triggerSemaphore(command_empty, semaphore_drawDone.asSeq());
+			}*/
+
+			drawCommandFence = Fence{context->device, Fence::CreateFlags::signal};
+		    // vertTransferCommandFence = Fence{context->device, Fence::CreateFlags::signal};
 
 		    indexBuffer = Util::createIndexBuffer(
                 *context, transientCommandPool, Core::Vulkan::Util::BatchIndices<MaxGroupCount>);
@@ -416,7 +441,7 @@ export namespace Graphic{
                 sizeof(VkDrawIndexedIndirectCommand),
                 VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT};
 
-		    command_flush = transientCommandPool.obtain();
+		    // command_flush = transientCommandPool.obtain();
 
 		    vertexBuffer = ExclusiveBuffer{
 		        context->physicalDevice, context->device,
@@ -425,14 +450,13 @@ export namespace Graphic{
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT};
 
 		    for(auto& frame : frames){
-		        frame.stagingBuffer = StagingBuffer{
-		            context->physicalDevice, context->device, (unitOffset * MaxGroupCount),
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
-                };
-
-		        frame.vertData = frame.stagingBuffer.memory.map_noInvalidation();
+		    	frame.set(*this);
 		    }
+
+		    for(auto& commands : flushCommandBuffers){
+		    	commands = CommandUnit{*this};
+		    }
+
 		}
 	};
 }

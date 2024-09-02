@@ -21,6 +21,27 @@ namespace ext{
 			}...);
 	}
 
+	export
+	template <typename Src, typename Dst>
+		requires requires(Src&& src){
+			Dst{std::forward<Src>(src)};
+		}
+	struct Projection{
+		constexpr Dst operator()(Src&& src) const noexcept(noexcept(Dst{std::forward<Src>(src)})){
+			return Dst{std::forward<Src>(src)};
+		}
+	};
+
+	export
+	template <typename Dst>
+	struct to{
+		template <typename T>
+		constexpr Dst operator()(T&& src) const noexcept(noexcept(Dst{std::forward<T>(src)})){
+			static_assert(std::convertible_to<Dst, std::decay_t<T>>);
+			return Dst{std::forward<T>(src)};
+		}
+	};
+
 	template<typename T, T a, T b>
 	constexpr T max_const = a > b ? a : b;
 

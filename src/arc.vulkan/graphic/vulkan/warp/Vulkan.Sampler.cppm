@@ -118,7 +118,7 @@ export namespace Core::Vulkan{
 
 		constexpr VkSamplerCreateInfo TextureSampler = VkSamplerCreateInfo{}
 			| SamplerInfo::Default
-			| SamplerInfo::Filter_PIXEL_Linear
+			| SamplerInfo::Filter_Linear
 			| SamplerInfo::AddressMode_Clamp
 			| SamplerInfo::LOD_Max
 			| SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>

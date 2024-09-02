@@ -22,66 +22,130 @@ export namespace Graphic{
 		std::unordered_map<std::uint32_t, VkImageView> out{};
 	};
 
+	using PortProv = std::function<AttachmentPort()>;
+
 	struct PostProcessor{
 		const Core::Vulkan::Context* context{};
 
-		/**
-		 * @brief Should be the only dynamic part of each similar post processor
-		 */
 		AttachmentPort port{};
+		PortProv portProv{};
 
-	    //TODO uses a pool in some global place??
+		//TODO uses a pool in some global place??
 		Core::Vulkan::CommandPool transientCommandPool{};
 		Core::Vulkan::CommandPool commandPool{};
 
-		//Static
-		Core::Vulkan::FramebufferLocal framebuffer{};
-		Core::Vulkan::RenderProcedure renderProcedure{};
-
 		Core::Vulkan::CommandBuffer commandBuffer{};
 
+
+
+		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand(const bool compute) const{
+			return transientCommandPool.obtainTransient(
+				compute ? context->device.getComputeQueue() : context->device.getGraphicsQueue());
+		}
 
 		/**
 		 * @brief [Negative: before DrawCall, 0: DrawCall, positive: after DrawCall]
 		 */
 		std::map<int, Core::Vulkan::CommandBuffer> appendCommandBuffers{};
 
-		Core::Vulkan::Semaphore processCompleteSemaphore{};
-
-		std::function<void(PostProcessor&)> commandRecorder{};
-		std::function<void(PostProcessor&)> appendCommandRecorder{};
-		std::function<void(PostProcessor&)> descriptorSetUpdator{};
-		std::function<void(PostProcessor&)> resizeCallback{};
-
-		using PortProv = std::function<AttachmentPort()>;
-		PortProv portProv{};
-
-
 		[[nodiscard]] PostProcessor() = default;
 
-		[[nodiscard]] explicit PostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv) : context{&context}, portProv{std::move(portProv)}{
-			transientCommandPool = Core::Vulkan::CommandPool{
-					context.device, context.physicalDevice.queues.graphicsFamily,
-					VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-				};
-
-			commandPool = Core::Vulkan::CommandPool{
-					context.device, context.physicalDevice.queues.graphicsFamily,
-					VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-				};
-
-			commandBuffer = commandPool.obtain();
-
+		[[nodiscard]] explicit PostProcessor(
+			const Core::Vulkan::Context& context, const bool isCompute,
+			PortProv&& portProv = {})
+			: context{&context},
+			  portProv{std::move(portProv)},
+			  transientCommandPool{
+				  context.device,
+				  isCompute ? context.physicalDevice.queues.computeFamily : context.physicalDevice.queues.graphicsFamily,
+				  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+			  }, commandPool{
+				  context.device,
+				  isCompute ? context.physicalDevice.queues.computeFamily : context.physicalDevice.queues.graphicsFamily,
+				  VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+			  }, commandBuffer{context.device, commandPool}{
 			if(this->portProv){
 				port = this->portProv();
 			}
+		}
 
+		void resize(Geom::USize2 size) = delete;
+
+		[[nodiscard]] Geom::USize2 size() const = delete;
+	};
+
+	struct ComputePostProcessor : PostProcessor{
+		Core::Vulkan::PipelineData pipelineData{};
+		std::vector<Core::Vulkan::Attachment> images{};
+
+		std::function<void(ComputePostProcessor&)> commandRecorder{};
+		std::function<void(ComputePostProcessor&)> descriptorSetUpdator{};
+		std::function<void(ComputePostProcessor&)> appendCommandRecorder{};
+		std::function<void(ComputePostProcessor&)> resizeCallback{};
+
+		[[nodiscard]] ComputePostProcessor() = default;
+
+		[[nodiscard]] explicit ComputePostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv)
+		: PostProcessor{context, true, std::move(portProv)}, pipelineData{&context}{
+
+		}
+
+		[[nodiscard]] Geom::USize2 size() const{
+			return pipelineData.size;
+		}
+
+		void updateDescriptors(){
+			descriptorSetUpdator(*this);
+		}
+
+		void recordCommand(){
+			commandRecorder(*this);
+		}
+
+		void resize(Geom::USize2 size){
+			if(size == this->size())return;
+			if(resizeCallback)resizeCallback(*this);
+			pipelineData.resize(size);
+
+			auto command = obtainTransientCommand(true);
+			for (auto && localAttachment : images){
+				localAttachment.resize(size, command);
+			}
+			command = {};
+
+			if(portProv){
+				port = portProv();
+			}
+
+			updateDescriptors();
+			recordCommand();
+		}
+	};
+
+	struct GraphicPostProcessor : PostProcessor{
+		//Static
+		Core::Vulkan::FramebufferLocal framebuffer{};
+		Core::Vulkan::RenderProcedure renderProcedure{};
+
+
+		/**
+		 * @brief [Negative: before DrawCall, 0: DrawCall, positive: after DrawCall]
+		 */
+		std::function<void(GraphicPostProcessor&)> commandRecorder{};
+		std::function<void(GraphicPostProcessor&)> descriptorSetUpdator{};
+		std::function<void(GraphicPostProcessor&)> appendCommandRecorder{};
+		std::function<void(GraphicPostProcessor&)> resizeCallback{};
+
+
+		[[nodiscard]] GraphicPostProcessor() = default;
+
+		[[nodiscard]] explicit GraphicPostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv)
+		: PostProcessor{context, false, std::move(portProv)}{
 			renderProcedure.init(context);
-			processCompleteSemaphore = Core::Vulkan::Semaphore{context.device};
 		}
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
+			return PostProcessor::obtainTransientCommand(false);
 		}
 
 		/**
@@ -160,21 +224,26 @@ export namespace Graphic{
 				.pWaitDstStageMask = stageFlags,
 				.commandBufferCount = static_cast<std::uint32_t>(commandBuffers.size()),
 				.pCommandBuffers = commandBuffers.data(),
-				.signalSemaphoreCount = 1,
-				.pSignalSemaphores = processCompleteSemaphore.asData()
+				.signalSemaphoreCount = 0,//1,
+				.pSignalSemaphores = nullptr//processCompleteSemaphore.asData()
 			}, nullptr);
-		}
-
-		[[nodiscard]] VkSemaphore getToWait() const{
-			return processCompleteSemaphore.get();
 		}
 	};
 
-	struct PostProcessorFactory{
+	struct GraphicPostProcessorFactory{
 		const Core::Vulkan::Context* context{};
-		std::function<PostProcessor(const PostProcessorFactory&, PostProcessor::PortProv&&, Geom::USize2)> creator{};
+		std::function<GraphicPostProcessor(const GraphicPostProcessorFactory&, PortProv&&, Geom::USize2)> creator{};
 
-		PostProcessor generate(const Geom::USize2 size, PostProcessor::PortProv&& portProv) const{
+		GraphicPostProcessor generate(const Geom::USize2 size, PortProv&& portProv) const{
+			return creator(*this, std::move(portProv), size);
+		}
+	};
+
+	struct ComputePostProcessorFactory{
+		const Core::Vulkan::Context* context{};
+		std::function<ComputePostProcessor(const ComputePostProcessorFactory&, PortProv&&, Geom::USize2)> creator{};
+
+		ComputePostProcessor generate(const Geom::USize2 size, PortProv&& portProv) const{
 			return creator(*this, std::move(portProv), size);
 		}
 	};

@@ -12,31 +12,10 @@ export namespace ext {
         using Rect = Geom::Rect_Orthogonal<T>;
         using SubRectArr = std::array<Rect, 3>;
 
-        struct Key{
-            T length{};
-            T depth{};
-            T area{};
-        };
-        struct Comp_Ascend{
-            constexpr bool operator()(const Key &a, const Key &b) const noexcept{
-                if(a.length == b.length && a.depth < b.depth)return true;
-                if(a.length < b.length)return true;
-                return false;
-            }
-        };
-
-        struct Comp_Descend{
-            constexpr bool operator()(const Key &a, const Key &b) const noexcept{
-                if(a.length == b.length && a.depth < b.depth)return true;
-                if(a.length > b.length)return true;
-                return false;
-            }
-        };
-
         SizeType size{};
         T remainArea{};
 
-        class Node;
+        struct Node;
 
         using TreeType = std::map<T, std::multimap<T, Node*>>;
 
@@ -93,8 +72,7 @@ export namespace ext {
             }
         };
 
-        class Node{
-            friend Allocator2D;
+        struct Node{
             Allocator2D* packer{};
             Node* parent{};
             std::array<std::unique_ptr<Node>, 3> subNodes{};
@@ -266,9 +244,56 @@ export namespace ext {
 
         //TODO double key -- with allocation region depth
         [[nodiscard]] std::optional<Rect> allocate(const SizeType size) {
+            auto* node = getValidNode(size);
+
+            if(!node)return std::nullopt;
+
+            remainArea -= size.area();
+
+            return node->allocate(size);
+        }
+
+        void deallocate(const PointType src) noexcept {
+            if(const auto itr = allocatedNodes.find(src); itr != allocatedNodes.end()) {
+                remainArea += itr->second->deallocate().area();
+            }
+        }
+
+        [[nodiscard]] SizeType getSize() const noexcept{ return size; }
+
+        [[nodiscard]] T getRemainArea() const noexcept{ return remainArea; }
+
+        Allocator2D(const Allocator2D& other) = delete;
+
+        Allocator2D& operator=(const Allocator2D& other) = delete;
+
+        Allocator2D(Allocator2D&& other) noexcept
+            : size{std::move(other.size)},
+              remainArea{other.remainArea},
+              nodes_XY{std::move(other.nodes_XY)},
+              nodes_YX{std::move(other.nodes_YX)},
+              rootNode{std::move(other.rootNode)},
+              allocatedNodes{std::move(other.allocatedNodes)}{
+            changePackerToThis();
+        }
+
+        Allocator2D& operator=(Allocator2D&& other) noexcept{
+            if(this == &other) return *this;
+            size = std::move(other.size);
+            remainArea = other.remainArea;
+            nodes_XY = std::move(other.nodes_XY);
+            nodes_YX = std::move(other.nodes_YX);
+            rootNode = std::move(other.rootNode);
+            allocatedNodes = std::move(other.allocatedNodes);
+            changePackerToThis();
+            return *this;
+        }
+
+    private:
+        Node* getValidNode(const SizeType size){
             if(size.area() == 0)throw std::invalid_argument("Cannot allocate region with 0 area");
 
-            if(remainArea < size.area()) {return std::nullopt;}
+            if(remainArea < size.area()) {return nullptr;}
 
             ItrPair itrPairXY{nodes_XY.lower_bound(size.x)};
             ItrPair itrPairYX{nodes_YX.lower_bound(size.y)};
@@ -301,49 +326,10 @@ export namespace ext {
                         possibleY = possibleY && itrPairYX.locateNextOuter(nodes_YX);
                     }
                 }
-
             }
 
-            if(!node)return std::nullopt;
-
-            remainArea -= size.area();
-
-            return node->allocate(size);
+            return node;
         }
-
-        void deallocate(const PointType src) noexcept {
-            if(const auto itr = allocatedNodes.find(src); itr != allocatedNodes.end()) {
-                remainArea += itr->second->deallocate().area();
-            }
-        }
-
-        Allocator2D(const Allocator2D& other) = delete;
-
-        Allocator2D& operator=(const Allocator2D& other) = delete;
-
-        Allocator2D(Allocator2D&& other) noexcept
-            : size{std::move(other.size)},
-              remainArea{other.remainArea},
-              nodes_XY{std::move(other.nodes_XY)},
-              nodes_YX{std::move(other.nodes_YX)},
-              rootNode{std::move(other.rootNode)},
-              allocatedNodes{std::move(other.allocatedNodes)}{
-            changePackerToThis();
-        }
-
-        Allocator2D& operator=(Allocator2D&& other) noexcept{
-            if(this == &other) return *this;
-            size = std::move(other.size);
-            remainArea = other.remainArea;
-            nodes_XY = std::move(other.nodes_XY);
-            nodes_YX = std::move(other.nodes_YX);
-            rootNode = std::move(other.rootNode);
-            allocatedNodes = std::move(other.allocatedNodes);
-            changePackerToThis();
-            return *this;
-        }
-
-    private:
         template <std::regular_invocable<Node&> Fn>
         void dfsEach_impl(const Fn& fn, Node* current){
             fn(*current);

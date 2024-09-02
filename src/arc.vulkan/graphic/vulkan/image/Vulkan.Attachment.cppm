@@ -78,10 +78,10 @@ export namespace Core::Vulkan{
 		//TODO merge two below to one template function
 		void cmdClearColor(VkCommandBuffer commandBuffer,
 			VkClearColorValue clearValue,
-			VkAccessFlags srcAccessFlags,
-			VkImageAspectFlags aspect
+			VkAccessFlags srcAccessFlags = VK_ACCESS_SHADER_READ_BIT,
+			VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT
 		) const{
-			cmdClear(vkCmdClearColorImage, commandBuffer, clearValue, srcAccessFlags, aspect);
+			CombinedImage::cmdClearColor(commandBuffer, clearValue, srcAccessFlags, aspect, bestLayout);
 		}
 
 		void cmdClearDepthStencil(VkCommandBuffer commandBuffer,
@@ -89,9 +89,10 @@ export namespace Core::Vulkan{
 			VkAccessFlags srcAccessFlags,
 			VkImageAspectFlags aspect
 		) const{
-			cmdClear(vkCmdClearDepthStencilImage, commandBuffer, clearValue, srcAccessFlags, aspect);
+			CombinedImage::cmdClearDepthStencil(commandBuffer, clearValue, srcAccessFlags, aspect, bestLayout);
 		}
 
+	public:
 		using CombinedImage::CombinedImage;
 
 		void create(
@@ -120,45 +121,6 @@ export namespace Core::Vulkan{
 				.imageView = defaultView,
 				.imageLayout = layout
 			};
-		}
-
-	protected:
-		template <typename Fn>
-		void cmdClear(Fn fn, VkCommandBuffer commandBuffer,
-			std::add_lvalue_reference_t<std::remove_pointer_t<std::tuple_element_t<3, typename Concepts::FunctionTraits<std::remove_pointer_t<Fn>>::ArgsTuple>>> clearValue,
-			VkAccessFlags srcAccessFlags,
-			VkImageAspectFlags aspect
-		) const{
-			VkImageSubresourceRange imageSubresourceRange{
-				aspect,
-				0, 1, 0, layers
-			};
-
-			VkImageMemoryBarrier imageMemoryBarrier{
-				VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-				nullptr,
-				srcAccessFlags,
-				VK_ACCESS_TRANSFER_WRITE_BIT,
-				VK_IMAGE_LAYOUT_UNDEFINED,
-				VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-				VK_QUEUE_FAMILY_IGNORED,
-				VK_QUEUE_FAMILY_IGNORED,
-				image,
-				imageSubresourceRange
-			};
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
-
-			fn(commandBuffer, image.get(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clearValue, 1, &imageSubresourceRange);
-
-			imageMemoryBarrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			imageMemoryBarrier.dstAccessMask = 0;
-			imageMemoryBarrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			imageMemoryBarrier.newLayout = bestLayout;
-
-			vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &imageMemoryBarrier);
 		}
 	};
 

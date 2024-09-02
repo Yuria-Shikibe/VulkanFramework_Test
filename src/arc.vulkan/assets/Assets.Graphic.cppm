@@ -35,9 +35,16 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule uiMerge{};
 			Core::Vulkan::ShaderModule uiBatch{};
 
+
+			Core::Vulkan::ShaderModule game_ui_merge{};
+
 			Core::Vulkan::ShaderModule FXAA{};
 			Core::Vulkan::ShaderModule NFAA{};
 			Core::Vulkan::ShaderModule SSAO{};
+		}
+
+		namespace Comp{
+			Core::Vulkan::ShaderModule Gaussian{};
 		}
 
 		void load(VkDevice device);
@@ -56,9 +63,14 @@ export namespace Assets{
 			Frag::uiMerge = {};
 			Frag::uiBatch = {};
 
+			Frag::game_ui_merge = {};
+
 			Frag::FXAA = {};
 			Frag::NFAA = {};
 			Frag::SSAO = {};
+
+
+			Comp::Gaussian = {};
 		}
 	}
 

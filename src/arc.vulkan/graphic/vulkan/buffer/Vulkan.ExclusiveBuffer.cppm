@@ -147,7 +147,7 @@ export namespace Core::Vulkan{
 	public:
 		using ExclusiveBuffer::ExclusiveBuffer;
 
-		[[nodiscard]] StagingBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size)
-			: ExclusiveBuffer{physicalDevice, device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT}{}
+		[[nodiscard]] StagingBuffer(VkPhysicalDevice physicalDevice, VkDevice device, VkDeviceSize size, VkBufferUsageFlags usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT)
+			: ExclusiveBuffer{physicalDevice, device, size, usage, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT}{}
 	};
 }

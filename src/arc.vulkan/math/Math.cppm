@@ -602,12 +602,12 @@ export namespace Math {
 	template <typename T>
 	float spanLerp(const std::span<T> values, float time) noexcept {
 		time             = clamp(time);
-		const auto sizeF = static_cast<float>(values.size() - 1ull);
+		const auto sizeF = static_cast<float>(values.sizeBytes() - 1ull);
 
 		const float pos = time * sizeF;
 
 		const auto cur  = static_cast<unsigned long long>(min(time * sizeF, sizeF));
-		const auto next = min(cur + 1ULL, values.size() - 1ULL);
+		const auto next = min(cur + 1ULL, values.sizeBytes() - 1ULL);
 		const float mod = pos - static_cast<float>(cur);
 		return ::Math::lerp<T>(values[cur], values[next], mod);
 	}
@@ -628,12 +628,12 @@ export namespace Math {
 	template <std::size_t size>
 	float spanLerp(const std::array<float, size>& values, float time) noexcept{
 		time = clamp(time);
-		const auto sizeF = static_cast<float>(values.size() - 1ull);
+		const auto sizeF = static_cast<float>(values.sizeBytes() - 1ull);
 
 		const float pos = time * sizeF;
 
 		const auto cur = static_cast<unsigned long long>(Math::clamp(time * sizeF, 0.0f, sizeF));
-		const auto next = Math::min(cur + 1ULL, values.size() - 1ULL);
+		const auto next = Math::min(cur + 1ULL, values.sizeBytes() - 1ULL);
 		const float mod = pos - static_cast<float>(cur);
 		return Math::lerp(values[cur], values[next], mod);
 	}

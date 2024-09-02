@@ -1,0 +1,26 @@
+#version 460
+#pragma shader_stage(compute)
+
+#define KernalSize 3
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout (binding = 0) uniform sampler2D inputImage;
+layout (binding = 1, rgba32f) uniform image2D outputImage;
+
+layout (binding = 2) uniform Kernal{
+    vec4 off[KernalSize];
+    float srcWeight;
+};
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    vec3 color = texture(inputImage, vec2(pos) / imageSize(outputImage)).rgb * srcWeight;
+
+    for (uint i = 0; i < KernalSize; ++i) {
+        color += texture(inputImage, (vec2(pos) + off[i].xy) / imageSize(outputImage)).rgb * off[i].z;
+        color += texture(inputImage, (vec2(pos) - off[i].xy) / imageSize(outputImage)).rgb * off[i].z;
+    }
+
+    imageStore(outputImage, pos, vec4(color, 1.0));
+}

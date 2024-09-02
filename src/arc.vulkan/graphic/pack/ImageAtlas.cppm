@@ -32,7 +32,6 @@ namespace Graphic{
 	export struct SubpageData{
 		ext::Allocator2D allocator2D;
 		Core::Vulkan::Texture texture{};
-		std::mutex allocateMutex{};
 
 		struct AllocatedViewRegion : ImageViewRegion{
 			Core::Vulkan::Dependency<SubpageData*> srcAllocator{};
@@ -51,6 +50,11 @@ namespace Graphic{
 			                         SubpageData* srcAllocator)
 				: ImageViewRegion{imageView, srcImageSize, internal},
 				  srcAllocator{srcAllocator}, region{internal}{}
+
+			void shrink(const std::uint32_t size){
+				region.shrink(size);
+				setUV(region);
+			}
 
 			~AllocatedViewRegion(){
 				if(srcAllocator) srcAllocator->deallocate(region.getSrc());
@@ -76,12 +80,10 @@ namespace Graphic{
 		};
 
 		auto allocate(const SizeType size){
-			std::scoped_lock lock{allocateMutex};
 			return allocator2D.allocate(size);
 		}
 
 		auto deallocate(const PointType point){
-			std::scoped_lock lock{allocateMutex};
 			return allocator2D.deallocate(point);
 		}
 
@@ -113,21 +115,6 @@ namespace Graphic{
 
 			return std::nullopt;
 		}
-
-		SubpageData(const SubpageData& other) = delete;
-
-		SubpageData(SubpageData&& other) noexcept
-			: allocator2D{std::move(other.allocator2D)},
-			  texture{std::move(other.texture)}{}
-
-		SubpageData& operator=(const SubpageData& other) = delete;
-
-		SubpageData& operator=(SubpageData&& other) noexcept{
-			if(this == &other) return *this;
-			allocator2D = std::move(other.allocator2D);
-			texture = std::move(other.texture);
-			return *this;
-		}
 	};
 
 	export struct ImagePage{
@@ -145,6 +132,11 @@ namespace Graphic{
 			: size{size},
 			  name{name}{}
 
+		SubpageData& createPage(const Core::Vulkan::Context* context){
+			std::unique_lock lk{writeMutex};
+			return subpages.emplace_back(SubpageData{context, size});
+		}
+
 		template <typename T>
 			requires (std::same_as<T, VkImage> || std::same_as<T, VkBuffer>)
 		[[nodiscard]] SubpageData::AllocatedViewRegion allocate(
@@ -158,8 +150,7 @@ namespace Graphic{
 				}
 			}
 
-			std::unique_lock lk{writeMutex};
-			SubpageData& newSubpage = subpages.emplace_back(SubpageData{context, size});
+			SubpageData& newSubpage = createPage(context);
 			std::optional<SubpageData::AllocatedViewRegion> rst = newSubpage.tryAllocate(commandBuffer, data, region, margin);
 
 			if(!rst){
@@ -177,8 +168,29 @@ namespace Graphic{
 			return nullptr;
 		}
 
-		bool registerNamedRegion(const std::string_view name, SubpageData::AllocatedViewRegion&& region){
-			return namedImageRegions.try_emplace(std::string{name}, std::move(region)).second;
+
+		std::pair<SubpageData::AllocatedViewRegion&, bool> registerNamedRegion(std::string&& name, SubpageData::AllocatedViewRegion&& region){
+			auto [itr, rst] = namedImageRegions.try_emplace(std::move(name), std::move(region));
+			return {itr->second, rst};
+		}
+
+		decltype(auto) registerNamedRegion(const std::string_view name, SubpageData::AllocatedViewRegion&& region){
+			return registerNamedRegion(std::string{name}, std::move(region));
+		}
+
+		decltype(auto) registerNamedRegion(const char* name, SubpageData::AllocatedViewRegion&& region){
+			return registerNamedRegion(std::string{name}, std::move(region));
+		}
+
+		std::vector<Pixmap> exportImages(const Core::Vulkan::CommandPool& commandPool, VkQueue queue) const{
+			std::vector<Pixmap> pixmaps{};
+			pixmaps.reserve(subpages.size());
+
+			for (const auto & subpage : subpages){
+				pixmaps.push_back(subpage.texture.exportToPixmap(commandPool.obtainTransient(queue)));
+			}
+
+			return pixmaps;
 		}
 	};
 
@@ -220,8 +232,8 @@ namespace Graphic{
 		}
 
 		[[nodiscard]] AllocatedImageViewRegion allocate(ImagePage& page, const Pixmap& pixmap) const{
-			const Core::Vulkan::StagingBuffer buffer(context->physicalDevice, context->device, pixmap.size());
-			buffer.memory.loadData(pixmap.data(), pixmap.size());
+			const Core::Vulkan::StagingBuffer buffer(context->physicalDevice, context->device, pixmap.sizeBytes());
+			buffer.memory.loadData(pixmap.data(), pixmap.sizeBytes());
 
 			return page.allocate(context, obtainTransientCommand(), buffer.get(), {pixmap.getWidth(), pixmap.getHeight()});
 		}
@@ -244,6 +256,9 @@ namespace Graphic{
 			throw std::invalid_argument("Undefined page name");
 		}
 
+		decltype(auto) exportImages(const ImagePage& page) const{
+			return page.exportImages(transientCommandPool, context->device.getGraphicsQueue());
+		}
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
 			return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
@@ -262,14 +277,14 @@ namespace Graphic{
 			return nullptr;
 		}
 
-		bool registerNamedImageViewRegion(const std::string_view name, AllocatedImageViewRegion&& region){
+		AllocatedImageViewRegion* registerNamedImageViewRegion(const std::string_view name, AllocatedImageViewRegion&& region){
 			auto [category, localName] = splitKey(name);
 
 			if(const auto page = findPage(category)){
-				return page->registerNamedRegion(name, std::move(region));
+				return &page->registerNamedRegion(name, std::move(region)).first;
 			}
 
-			return false;
+			return nullptr;
 		}
 
 		static std::pair<std::string_view, std::string_view> splitKey(std::string_view name){

@@ -141,7 +141,7 @@ export namespace Geom{
 		}
 
 		template <Concepts::Number N>
-		constexpr void setWidth(const N w) noexcept{
+		constexpr auto& setWidth(const N w) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
 				this->width = w;
 			}else {
@@ -153,10 +153,12 @@ export namespace Geom{
 					this->width = abs;
 				}
 			}
+
+			return *this;
 		}
 
 		template <Concepts::Number N>
-		constexpr void setHeight(const N h) noexcept{
+		constexpr auto& setHeight(const N h) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
 				this->height = h;
 			}else {
@@ -168,6 +170,8 @@ export namespace Geom{
 					this->height = abs;
 				}
 			}
+
+			return *this;
 		}
 
 		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires Concepts::Signed<T> {
@@ -593,6 +597,12 @@ export namespace Geom{
 
 		constexpr Rect_Orthogonal& shrink(const T margin) noexcept{
 			return this->shrink(margin, margin);
+		}
+
+		constexpr Rect_Orthogonal intersectionWith(const Rect_Orthogonal& other) const{
+			Vector2D<T> v1 = vert_00().max(other.vert_00());
+			Vector2D<T> v2 = vert_11().min(other.vert_11());
+			return Rect_Orthogonal{v1, v2};
 		}
 
 		[[nodiscard]] constexpr Rect_Orthogonal copy() const noexcept{

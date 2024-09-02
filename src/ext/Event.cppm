@@ -45,7 +45,10 @@ export namespace ext {
 		}
 
 		template <std::derived_from<EventType> T, typename... Args>
-			requires std::is_final_v<T>
+			requires requires(Args&&... args){
+				requires std::is_final_v<T>;
+				T{std::forward<Args>(args)...};
+			}
 		void emplace_fire(Args&&... args) const{
 			this->fire<T>(T{std::forward<Args>(args)...});
 		}

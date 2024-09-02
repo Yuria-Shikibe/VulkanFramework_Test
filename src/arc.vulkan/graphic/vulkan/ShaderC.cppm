@@ -11,6 +11,7 @@ export namespace Core::Vulkan {
         static constexpr std::array ValidStages{
             std::string_view{"vertex"},
             std::string_view{"fragment"},
+            std::string_view{"compute"},
         };
 
         struct Includer : public shaderc::CompileOptions::IncluderInterface {

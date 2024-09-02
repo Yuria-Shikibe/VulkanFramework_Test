@@ -113,7 +113,11 @@ export namespace Core::Vulkan{
 		}
 
 		VkResult commandSubmit_Graphics(VkCommandBuffer commandBuffer, VkFence fence = nullptr) const{
-			VkSubmitInfo submitInfo{.commandBufferCount = 1,.pCommandBuffers = &commandBuffer};
+			VkSubmitInfo submitInfo{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.commandBufferCount = 1,
+				.pCommandBuffers = &commandBuffer
+			};
 			return commandSubmit_Graphics(submitInfo, fence);
 		}
 

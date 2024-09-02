@@ -21,7 +21,7 @@ layout(location = 2) out vec4 outLight;
 void main() {
     vec4 texColor = texture(texSampler[textureID[0]], vec3(fragTexCoord.xy, textureID[1]));
 
-    outBase = vec4(1.f);
+    outBase = texColor * baseColor;
     outColor = vec4(1.f);
     outLight = vec4(1.f);
 }

@@ -267,6 +267,16 @@ export namespace Core::Vulkan{
 			current.pImageInfo = &imageInfo;
 		}
 
+		void pushImage(VkDescriptorImageInfo& imageInfo, VkDescriptorType type){
+			const auto index = descriptorWrites.size();
+
+			auto& current = descriptorWrites.emplace_back(DefaultSet);
+			current.dstSet = descriptorSets;
+			current.dstBinding = index;
+			current.descriptorType = type;
+			current.pImageInfo = &imageInfo;
+		}
+
 		void pushAttachment(VkDescriptorImageInfo& imageInfo){
 			const auto index = descriptorWrites.size();
 

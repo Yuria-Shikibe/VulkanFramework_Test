@@ -19,8 +19,8 @@ export namespace Graphic{
         using DataType = unsigned char;
         using size_type = std::uint32_t;
     protected:
-        size_type width{ 1 };
-        size_type height{ 1 };
+        size_type width{};
+        size_type height{};
         //TODO is this necessay?
         //unsigned int bpp{ 4 };
 
@@ -126,7 +126,7 @@ export namespace Graphic{
             this->width = width;
             this->height = height;
 
-            auto size = this->size();
+            auto size = this->sizeBytes();
             if(!size)return;
 
             bitmapData = std::make_unique<DataType[]>(size);
@@ -176,18 +176,19 @@ export namespace Graphic{
                 if(!file.exist() || !result)throw ext::RuntimeException{"Inexist File!"};
             }
 
+            //OPTM ...
             // ReSharper disable once CppTooWideScopeInitStatement
             std::string&& ext = file.extension();
 
-            if(ext == ".png") {
-                ext::writePng(file, width, height, Channels, bitmapData.get());
-            }else if(ext == ".bmp") {
+            if(ext == ".bmp") {
                 ext::writeBmp(file, width, height, Channels, bitmapData.get());
             }
+
+            ext::writePng(file, width, height, Channels, bitmapData.get());
         }
 
         void clear() const{
-            std::fill_n(this->bitmapData.get(), size(), 0);
+            std::fill_n(this->bitmapData.get(), sizeBytes(), 0);
         }
 
         [[nodiscard]] constexpr auto dataIndex(const size_type x, const size_type y) const {
@@ -197,7 +198,7 @@ export namespace Graphic{
 
         [[nodiscard]] std::unique_ptr<DataType[]> copyData() const {
 
-            const auto size = this->size();
+            const auto size = this->sizeBytes();
             auto ptr = std::make_unique<DataType[]>(size);
             std::memcpy(ptr.get(), bitmapData.get(), size);
 
@@ -212,7 +213,7 @@ export namespace Graphic{
                     std::memcpy(bitmapData.get() + rowDataCount * y, data + (getHeight() - y - 1) * rowDataCount, rowDataCount);
                 }
             }else{
-                std::memcpy(bitmapData.get(), data, size());
+                std::memcpy(bitmapData.get(), data, sizeBytes());
             }
         }
 
@@ -220,7 +221,7 @@ export namespace Graphic{
             return width * height;
         }
 
-        [[nodiscard]] constexpr std::size_t size() const {
+        [[nodiscard]] constexpr std::size_t sizeBytes() const {
             return width * height * Channels;
         }
 

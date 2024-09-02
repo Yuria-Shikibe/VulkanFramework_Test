@@ -55,10 +55,23 @@ export namespace Assets{
 	        std::uint32_t kernalSize{DefKernalSize};
 	    };
 
+		struct Gaussian_KernalInfo {
+			struct Off{
+				Geom::Vec2 off{};
+				float weight{};
+				float cap{};
+			};
+			std::array<Off, 3> offs{};
+			float srcWeight{};
+		};
+
 		namespace Factory{
-			Graphic::PostProcessorFactory blurProcessorFactory{};
-			Graphic::PostProcessorFactory mergeBloomFactory{};
-			Graphic::PostProcessorFactory nfaaFactory{};
+			Graphic::GraphicPostProcessorFactory blurProcessorFactory{};
+			Graphic::GraphicPostProcessorFactory mergeBloomFactory{};
+			Graphic::GraphicPostProcessorFactory game_uiMerge{};
+			Graphic::GraphicPostProcessorFactory nfaaFactory{};
+
+			Graphic::ComputePostProcessorFactory gaussianFactory{};
 		}
 
 		void load(const Core::Vulkan::Context& context);

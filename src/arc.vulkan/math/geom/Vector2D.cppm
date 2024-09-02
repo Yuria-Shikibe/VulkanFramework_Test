@@ -120,17 +120,27 @@ export namespace Geom{
 			return set(std::numeric_limits<float>::signaling_NaN(), std::numeric_limits<float>::signaling_NaN());
 		}
 
-		constexpr friend std::size_t hash_value(const Vector2D& obj) requires requires{sizeof(T) <= 4;} {
-			return obj.hash_value();
+
+		[[nodiscard]] constexpr std::size_t hash_value() const requires (sizeof(T) <= 8){
+			static constexpr std::hash<std::size_t> hasher{};
+
+			if constexpr (sizeof(T) == 8){
+				const std::uint64_t a = std::bit_cast<std::uint64_t>(x);
+				const std::uint64_t b = std::bit_cast<std::uint64_t>(y);
+				return hasher(a ^ b);
+			}else if constexpr (sizeof(T) == 4){
+				return hasher(std::bit_cast<std::size_t>(*this));
+			}else if constexpr (sizeof(T) == 2){
+				const std::size_t a = std::bit_cast<std::uint16_t>(x);
+				const std::size_t b = std::bit_cast<std::uint16_t>(y);
+				return hasher(a | b << 32);
+			}else{
+				const std::size_t a = std::bit_cast<std::uint8_t>(x);
+				const std::size_t b = std::bit_cast<std::uint8_t>(y);
+				return hasher(a | b << 32);
+			}
 		}
 
-		[[nodiscard]] constexpr std::size_t hash_value() const requires requires{sizeof(T) == 4;}{
-			static constexpr std::hash<std::size_t> hasher{};
-			const std::size_t l = std::bit_cast<unsigned>(x);
-			const std::size_t r = std::bit_cast<unsigned>(y);
-			const std::size_t raw = l << 32 | r;
-			return hasher(raw);
-		}
 
 		constexpr Vector2D& set(const T ox, const T oy) noexcept {
 			this->x = ox;
@@ -163,6 +173,18 @@ export namespace Geom{
 
 		constexpr Vector2D& add(const T val) noexcept {
 			x += val;
+			y += val;
+
+			return *this;
+		}
+
+		constexpr Vector2D& addX(const T val) noexcept {
+			x += val;
+
+			return *this;
+		}
+
+		constexpr Vector2D& addY(const T val) noexcept {
 			y += val;
 
 			return *this;
@@ -459,6 +481,19 @@ export namespace Geom{
 
 		constexpr Vector2D& maxY(const T max) noexcept {
 			y = Math::max(y, max);
+			return *this;
+		}
+
+
+		constexpr Vector2D& min(const PassType min) noexcept {
+			x = Math::min(x, min.x);
+			y = Math::min(y, min.y);
+			return *this;
+		}
+
+		constexpr Vector2D& max(const PassType max) noexcept {
+			x = Math::max(x, max.x);
+			y = Math::max(y, max.y);
 			return *this;
 		}
 
@@ -769,6 +804,14 @@ export
 	template<>
 	struct std::hash<Geom::Point2U>{
 		constexpr size_t operator()(const Geom::Point2U& v) const noexcept {
+			return v.hash_value();
+		}
+	};
+
+export
+	template<>
+	struct std::hash<Geom::Point2US>{
+		constexpr size_t operator()(const Geom::Point2US& v) const noexcept {
 			return v.hash_value();
 		}
 	};

@@ -100,6 +100,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     glfw3.lib
     vulkan-1.lib
     shaderc_util.lib
+    freetype.lib
 )
 
 

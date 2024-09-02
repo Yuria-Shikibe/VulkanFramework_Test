@@ -4,7 +4,6 @@ module;
 
 export module Core.Vulkan.SwapChain;
 
-import std;
 import Core.Window;
 import Core.Vulkan.Util.Invoker;
 import Core.Vulkan.SwapChainInfo;
@@ -14,6 +13,8 @@ import Core.Vulkan.Image;
 
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
+
+import std;
 
 export namespace Core::Vulkan{
 	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
@@ -66,7 +67,7 @@ export namespace Core::Vulkan{
 
 			targetWindow = window;
 
-			targetWindow->eventManager.on<Window::ResizeEvent>(SwapChainName, [this](const auto& event){
+			targetWindow->eventManager.on<Window::ResizeEvent>(SwapChainName, [this](const Window::ResizeEvent& event){
 				this->resize(event.size.x, event.size.y);
 			});
 		}

@@ -47,6 +47,10 @@ void Assets::Shader::load(const VkDevice device){
 		device, dir / R"(ui.merge.frag.spv)"
 	};
 
+	Frag::game_ui_merge = Core::Vulkan::ShaderModule{
+		device, dir / R"(game_ui.merge.frag.spv)"
+	};
+
 	Frag::FXAA = Core::Vulkan::ShaderModule{
 		device, dir / R"(fxaa.frag.spv)"
 	};
@@ -62,6 +66,11 @@ void Assets::Shader::load(const VkDevice device){
     Frag::uiBatch = Core::Vulkan::ShaderModule{
         device, dir / R"(ui.batch.frag.spv)"
     };
+
+
+    Comp::Gaussian = Core::Vulkan::ShaderModule{
+        device, dir / R"(gaussian.comp.spv)"
+    };
 }
 
 void Assets::Sampler::load(const VkDevice device){
@@ -69,7 +78,7 @@ void Assets::Sampler::load(const VkDevice device){
 
     textureNearestSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
         | Core::Vulkan::SamplerInfo::Default
-        | Core::Vulkan::SamplerInfo::Filter_Nearest
+        | Core::Vulkan::SamplerInfo::Filter_PIXEL_Linear
         | Core::Vulkan::SamplerInfo::AddressMode_Clamp
         | Core::Vulkan::SamplerInfo::LOD_Max_Nearest
         | Core::Vulkan::SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>

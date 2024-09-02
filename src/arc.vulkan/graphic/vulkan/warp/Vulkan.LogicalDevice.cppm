@@ -30,6 +30,7 @@ export namespace Core::Vulkan{
 
 			features.descriptorBindingSampledImageUpdateAfterBind = true;
 			features.descriptorBindingUpdateUnusedWhilePending = true;
+			features.descriptorBindingUniformBufferUpdateAfterBind = true;
 
 			return features;
 		}()};

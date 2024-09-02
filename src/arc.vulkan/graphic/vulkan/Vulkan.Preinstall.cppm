@@ -42,7 +42,7 @@ namespace Core::Vulkan{
 				.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 				.colorBlendOp = VK_BLEND_OP_ADD,
 				.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+				.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
 		        .alphaBlendOp = VK_BLEND_OP_ADD,
 
 				.colorWriteMask = DefaultMask
@@ -217,12 +217,6 @@ namespace Core::Vulkan{
 
 	namespace Util{
 
-	    export struct TextureIndex{
-	        std::uint8_t textureIndex{};
-	        std::uint8_t textureLayer{};
-	        std::uint8_t reserved1{};
-	        std::uint8_t reserved2{};
-	    };
 
 		/**
 		 * @brief Only works for 4 Byte members!

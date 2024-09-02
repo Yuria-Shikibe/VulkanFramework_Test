@@ -4,9 +4,9 @@
 
 layout(location = 0) in vec2 inPosition;
 layout(location = 1) in uvec4 inTextureID;
-layout(location = 2) in vec2 inTexCoord;
+layout(location = 2) in vec4 inColor;
+layout(location = 3) in vec2 inTexCoord;
 
-layout(location = 3) in vec4 inColor;
 
 
 layout(location = 0) out vec2 fragTexCoord;
@@ -29,10 +29,9 @@ layout(set = 0, binding = 0) uniform UBO {
 
 void main() {
     gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, 0.f, 1.f);
-    baseColor =mod(inColor, 10.f);
+    baseColor = inColor;//mod(inColor, 10.f);
     lightColor = inColor / LightColorRange;
 
     fragTexCoord = inTexCoord;
-
     textureID = inTextureID;
 }

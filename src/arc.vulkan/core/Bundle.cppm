@@ -1,42 +1,45 @@
 export module Assets.Bundle;
 
-import ext.json;
+export import ext.json;
+export import Core.File;
+
 import std;
 import ext.Heterogeneous;
-import Core.File;
 
-export namespace Core{
-	class Bundle;
+namespace Core{
+
+	[[nodiscard]] decltype(auto) spilt(const std::string_view key){
+		return key
+			| std::views::split('.')
+			| std::views::transform([](auto c){ return std::string_view{c}; });
+	}
+
+	export class Bundle;
 	struct BundleLoadable{
 		virtual ~BundleLoadable() = default;
 
 		virtual void loadBundle(const Bundle* bundle) = 0;
 	};
 
-	class Bundle{
+	export class Bundle{
 	public:
 		static constexpr std::string_view Locale = "locale";
 		static constexpr std::string_view NotFound = "???Not_Found???";
+
 	private:
 		std::vector<BundleLoadable*> bundleRequesters{};
 
 		ext::json::JsonValue currentBundle{};
 		ext::json::JsonValue fallbackBundle{};
-		std::locale currentLocal{};
+		std::locale currentLocale{};
 
-		[[nodiscard]] static std::vector<std::string_view> spilt(const std::string_view key){
-            return key
-                | std::views::split('.')
-                | std::views::transform([](const auto& c) { return std::string_view{c}; })
-                | std::ranges::to<std::vector<std::string_view>>();
-		}
 
-	    //TODO return optional?
-		[[nodiscard]] const auto& getCategory(const std::string_view category) const {
+		//TODO return optional?
+		[[nodiscard]] const auto& getCategory(const std::string_view category) const{
 			const auto& map = getBundles(&Bundle::currentBundle);
 
 			if(const auto itr = map.find(category); itr != map.end()){
-				if(itr->second.is<ext::json::Object>())return itr->second.asObject();
+				if(itr->second.is<ext::json::Object>()) return itr->second.asObject();
 			}
 
 			return map;
@@ -46,22 +49,18 @@ export namespace Core{
 			return ext::json::parse(file.readString());
 		}
 
-		static std::optional<std::string_view> find(const std::vector<std::string_view>& dir, const ext::json::Object* last){
-			if(dir.size() > 1){
-				for(auto cates : std::ranges::subrange{dir.begin(), std::prev(dir.end())}){
-					if(const auto itr = last->find(cates); itr != last->end()){
-						if(itr->second.is<ext::json::Object>()){
-							last = &itr->second.asObject();
-						}else{
-							break;
-						}
+		template <std::ranges::range Rng>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
+		static std::optional<std::string_view> find(Rng&& dir, const ext::json::Object* last){
+			for(const std::string_view& cates : dir){
+				if(const auto itr = last->find(cates); itr != last->end()){
+					if(itr->second.is<ext::json::object>()){
+						last = &itr->second.asObject();
+					} else if(itr->second.is<ext::json::string>()){
+						return itr->second.as<std::string>();
+					} else{
+						break;
 					}
-				}
-			}
-
-			if(const auto itr = last->find(dir.back()); itr != last->end()){
-				if(const auto data = itr->second.tryGetValue<std::string>()){
-					return *data;
 				}
 			}
 
@@ -77,11 +76,17 @@ export namespace Core{
 			load(file);
 		}
 
-		ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle) {
+		[[nodiscard]] Bundle(const File& file, const File& fallback){
+			load(file, fallback);
+		}
+
+		[[nodiscard]] const std::locale& getLocale() const{ return currentLocale; }
+
+		ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle){
 			return (this->*ptr).asObject();
 		}
 
-		[[nodiscard]] const ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle) const {
+		[[nodiscard]] const ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle) const{
 			return (this->*ptr).asObject();
 		}
 
@@ -93,7 +98,7 @@ export namespace Core{
 		void load(ext::json::JsonValue&& jsonValue){
 			currentBundle = std::move(jsonValue);
 			currentBundle.asObject();
-			for (const auto bundleRequester : bundleRequesters){
+			for(const auto bundleRequester : bundleRequesters){
 				bundleRequester->loadBundle(this);
 			}
 		}
@@ -111,30 +116,20 @@ export namespace Core{
 			loadFallback(fallback);
 		}
 
-		[[nodiscard]] std::string_view find(const std::initializer_list<std::string_view> keyWithConstrains, const std::string_view def) const{
-			std::vector<std::string_view> flat{};
-			flat.reserve(keyWithConstrains.size());
-
-			for (const auto key : keyWithConstrains){
-				auto dir = spilt(key);
-				if(dir.empty())continue;
-				flat.append_range(dir);
-			}
-
+		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
+		[[nodiscard]] std::string_view find(Rng&& keyWithConstrains, const std::string_view def = NotFound) const{
+			auto rng = keyWithConstrains | std::views::transform(spilt) | std::views::join;
 			auto* last = &currentBundle.asObject();
 
-			auto rst = find(flat, last);
+			std::optional<std::string_view> rst = this->find(rng, last);
 
 			if(!rst){
 				last = &fallbackBundle.asObject();
-				rst = find(flat, last);
+				rst = this->find(rng, last);
 			}
 
 			return rst.value_or(def);
-		}
-
-		[[nodiscard]] std::string_view find(const std::initializer_list<std::string_view> keyWithConstrains) const{
-			return find(keyWithConstrains, NotFound);
 		}
 
 		[[nodiscard]] std::string_view find(const std::string_view key, const std::string_view def) const{
@@ -155,13 +150,19 @@ export namespace Core{
 			return find(key, key);
 		}
 
-		template <typename ...T>
-		[[nodiscard]] std::string format(const std::string_view key, T&& ...args) const{
-			return std::vformat(find(key), std::make_format_args(std::forward<T>(args) ...));
+		template <typename... T>
+		[[nodiscard]] std::string format(const std::string_view key, T&&... args) const{
+			return std::vformat(find(key), std::make_format_args(std::forward<T>(args)...));
 		}
 
 		[[nodiscard]] std::string_view operator[](const std::string_view key) const{
 			return find(key, key);
+		}
+
+		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
+		[[nodiscard]] std::string_view operator[](Rng&& keys) const{
+			return this->find(std::forward<Rng>(keys), NotFound);
 		}
 	};
 }
