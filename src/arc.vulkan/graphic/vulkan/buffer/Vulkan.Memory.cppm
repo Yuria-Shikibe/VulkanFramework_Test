@@ -44,7 +44,7 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] constexpr VkDevice getDevice() const noexcept{ return device; }
 
-		[[nodiscard]] constexpr std::size_t size() const noexcept{ return capacity; }
+		[[nodiscard]] constexpr VkDeviceSize size() const noexcept{ return capacity; }
 
 		~DeviceMemory(){
 			deallocate();
@@ -56,16 +56,7 @@ export namespace Core::Vulkan{
 
 		DeviceMemory& operator=(const DeviceMemory& other) = delete;
 
-		DeviceMemory& operator=(DeviceMemory&& other) noexcept{
-			if(this == &other) return *this;
-			deallocate();
-			Wrapper::operator =(std::move(other));
-			device = std::move(other.device);
-			capacity = other.capacity;
-			properties = other.properties;
-			nonCoherentAtomSize = other.nonCoherentAtomSize;
-			return *this;
-		}
+		DeviceMemory& operator=(DeviceMemory&& other) noexcept = default;
 
 		template <std::ranges::contiguous_range T>
 			requires (std::ranges::sized_range<T>)

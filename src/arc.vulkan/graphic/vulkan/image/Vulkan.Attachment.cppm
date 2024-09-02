@@ -61,6 +61,8 @@ export namespace Core::Vulkan{
 				aspects |= VK_IMAGE_ASPECT_STENCIL_BIT;
 			}
 
+			if(aspects == 0)aspects = VK_IMAGE_ASPECT_COLOR_BIT;
+
 			image.transitionImageLayout(
 				commandBuffer,
 				format,

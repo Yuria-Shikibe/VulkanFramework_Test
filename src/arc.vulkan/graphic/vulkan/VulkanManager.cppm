@@ -86,14 +86,16 @@ export namespace Core::Vulkan{
 		FramebufferLocal batchFrameBuffer{};
 	    ImageView batchDepthImageView{};
 
-		ColorAttachment blurResultAttachment{};
+		// ColorAttachment blurResultAttachment{};
 		ColorAttachment gameMergeResultAttachment{};
 		CommandBuffer batchDrawCommand{};
 
-		Graphic::GraphicPostProcessor processBlur{};
+		// Graphic::GraphicPostProcessor processBlur{};
 		Graphic::GraphicPostProcessor processMerge{};
 		Graphic::GraphicPostProcessor gameUIMerge{};
 		Graphic::GraphicPostProcessor nfaaPostEffect{};
+
+		Graphic::ComputePostProcessor gussian{};
 
 	    UniformBuffer cameraScaleUniformBuffer{};
 
@@ -128,12 +130,13 @@ export namespace Core::Vulkan{
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
-            processBlur.submitCommand({});
-            processMerge.submitCommand({});
+			gussian.submitCommand();
+            // processBlur.submitCommand();
+            processMerge.submitCommand();
 
 			//TODO wait ui draw semaphore
-			nfaaPostEffect.submitCommand({});
-			gameUIMerge.submitCommand({});
+			nfaaPostEffect.submitCommand();
+			gameUIMerge.submitCommand();
 
 			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
@@ -271,13 +274,6 @@ export namespace Core::Vulkan{
 
 			batchFrameBuffer.pushCapturedAttachments(std::move(depthAttachment));
 
-			blurResultAttachment = ColorAttachment{context.physicalDevice, context.device};
-			blurResultAttachment.create(
-					swapChain.size2D(), cmd,
-					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-				);
-
 			gameMergeResultAttachment = ColorAttachment{context.physicalDevice, context.device};
 			gameMergeResultAttachment.create(
 					swapChain.size2D(), cmd,
@@ -298,15 +294,14 @@ export namespace Core::Vulkan{
             batchDrawPass.resize(swapChain.size2D());
 
             auto cmd = obtainTransientCommand();
-            blurResultAttachment.resize(swapChain.size2D(), cmd);
             gameMergeResultAttachment.resize(swapChain.size2D(), cmd);
             batchFrameBuffer.resize(swapChain.size2D(), cmd);
             cmd = {};
 
             createDepthView();
 
-            processMerge.resize(swapChain.size2D());
-            processBlur.resize(swapChain.size2D());
+			gussian.resize(swapChain.size2D());
+			processMerge.resize(swapChain.size2D());
 			nfaaPostEffect.resize(swapChain.size2D());
 			gameUIMerge.resize(swapChain.size2D());
 
@@ -473,47 +468,128 @@ export namespace Core::Vulkan{
 		}
 
 		void createPostEffectPipeline(){
-            {
-                processBlur = Assets::PostProcess::Factory::blurProcessorFactory.generate(swapChain.size2D(), [this] {
-                    Graphic::AttachmentPort port{};
-                    port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(1).getView());
-                    port.out.insert_or_assign(3u, blurResultAttachment.getView());
-                    return port;
-                });
+			{
+				gussian = Assets::PostProcess::Factory::gaussianFactory.generate(swapChain.size2D(), [this]{
+					Graphic::AttachmentPort port{};
 
-                processBlur.descriptorSetUpdator = [this](Graphic::GraphicPostProcessor &postProcessor) {
-                    auto &set = postProcessor.renderProcedure.front().descriptorSets;
+					port.in.insert_or_assign(0, batchFrameBuffer.atLocal(1).getView());
+					port.toTransferOwnership.insert_or_assign(0, batchFrameBuffer.atLocal(1).getImage());
+					return port;
+				});
 
-                    constexpr std::array layouts{
-                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-                            VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-                        };
+				gussian.descriptorSetUpdator = [this](Graphic::ComputePostProcessor& postProcessor){
+					auto horiUniformInfo = postProcessor.pipelineData.uniformBuffers[0].getDescriptorInfo();
+					auto vertUniformInfo = postProcessor.pipelineData.uniformBuffers[1].getDescriptorInfo();
+					auto scaleInfo = cameraScaleUniformBuffer.getDescriptorInfo();
 
-                    for(std::size_t i = 0; i < layouts.size(); ++i) {
-                        DescriptorSetUpdator updator{postProcessor.context->device, set[i]};
-                        auto imageInfo = Assets::Sampler::blitSampler.getDescriptorInfo_ShaderRead(
-                            postProcessor.framebuffer.at(i),
-                            layouts[i]
-                            );
-                        auto uniformInfo = cameraScaleUniformBuffer.getDescriptorInfo();
+					VkDescriptorImageInfo imageinfo_input{
+							.sampler = Assets::Sampler::blitSampler,
+							.imageView = postProcessor.port.in.at(0),
+							.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+						};
 
-                        updator.pushSampledImage(imageInfo);
-                        updator.push(uniformInfo);
-                        updator.update();
-                    }
-                };
+					VkDescriptorImageInfo imageinfo_output{
+							.sampler = nullptr,
+							.imageView = postProcessor.images.back().getView(),
+							.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+						};
 
-                processBlur.updateDescriptors();
-                processBlur.recordCommand();
-            }
+					auto pingpong0 = postProcessor.images[0].getDescriptorInfo(
+						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
+					auto pingpong1 = postProcessor.images[1].getDescriptorInfo(
+						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
+
+					{
+						DescriptorSetUpdator updator{
+								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[0]
+							};
+
+						updator.pushSampledImage(imageinfo_input);
+						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+						updator.push(horiUniformInfo);
+						updator.push(scaleInfo);
+
+						updator.update();
+					}
+
+					{
+						DescriptorSetUpdator updator{
+								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[1]
+							};
+
+						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+						updator.push(vertUniformInfo);
+						updator.push(scaleInfo);
+
+						updator.update();
+					}
+
+					{
+						DescriptorSetUpdator updator{
+								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[2]
+							};
+
+						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+						updator.push(horiUniformInfo);
+						updator.push(scaleInfo);
+
+						updator.update();
+					}
+
+					{
+						DescriptorSetUpdator updator{
+								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[3]
+							};
+
+						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+						updator.pushImage(imageinfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+						updator.push(vertUniformInfo);
+						updator.push(scaleInfo);
+
+						updator.update();
+					}
+				};
+
+				gussian.updateDescriptors();
+				gussian.recordCommand();
+
+				{
+					using Off = Assets::PostProcess::Gaussian_KernalInfo::Off;
+
+					constexpr float Scl = 0.9f;
+
+					constexpr Assets::PostProcess::Gaussian_KernalInfo kernalVert{
+							.offs = {
+								Off{Geom::Vec2{0.f, 1.5846153846f}, 0.29362162162f * Scl},
+								Off{Geom::Vec2{0.f, 3.3307692308f}, 0.11227027030f * Scl},
+								Off{Geom::Vec2{0.f, 5.2307692308f}, 0.06227027030f * Scl}
+							},
+							.srcWeight = 0.24170270270f * Scl
+						};
+
+					constexpr Assets::PostProcess::Gaussian_KernalInfo kernalHori{
+							[]{
+								auto k = kernalVert;
+								for(auto&& off : k.offs){
+									off.off.swapXY();
+								}
+								return k;
+							}()
+						};
+
+					gussian.pipelineData.uniformBuffers[0].memory.loadData(kernalHori);
+					gussian.pipelineData.uniformBuffers[1].memory.loadData(kernalVert);
+				}
+			}
 
 		    {
 		        processMerge = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
                     Graphic::AttachmentPort port{};
                     port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
                     port.in.insert_or_assign(1u, batchFrameBuffer.atLocal(1).getView());
-                    port.in.insert_or_assign(2u, blurResultAttachment.getView());
+                    port.in.insert_or_assign(2u, gussian.images.back().getView());
                     // port.in.insert_or_assign(3u, batchFrameBuffer.atLocal(2).getView());
 
                     port.out.insert_or_assign(4u, gameMergeResultAttachment.getView());
@@ -582,6 +658,7 @@ export namespace Core::Vulkan{
 
 			            updator.update();
 			        }
+
 			    };
 
 			    processMerge.commandRecorder = [this](Graphic::GraphicPostProcessor& postProcessor){

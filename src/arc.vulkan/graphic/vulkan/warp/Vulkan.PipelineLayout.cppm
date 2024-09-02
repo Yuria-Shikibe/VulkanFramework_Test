@@ -28,13 +28,7 @@ export namespace Core::Vulkan{
 
 		PipelineLayout& operator=(const PipelineLayout& other) = delete;
 
-		PipelineLayout& operator=(PipelineLayout&& other) noexcept{
-			if(this == &other) return *this;
-			if(device)vkDestroyPipelineLayout(device, handle, nullptr);
-			Wrapper::operator=(std::move(other));
-			device = std::move(other.device);
-			return *this;
-		}
+		PipelineLayout& operator=(PipelineLayout&& other) noexcept = default;
 
 		~PipelineLayout(){
 			if(device)vkDestroyPipelineLayout(device, handle, nullptr);

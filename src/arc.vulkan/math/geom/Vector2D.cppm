@@ -165,9 +165,7 @@ export namespace Geom{
 		}
 
 		constexpr Vector2D& swapXY() noexcept{
-			const T t = x;
-			x = y;
-			y = t;
+			std::swap(x, y);
 			return *this;
 		}
 

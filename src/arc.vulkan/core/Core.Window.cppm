@@ -11,7 +11,7 @@ import ext.Event;
 
 export namespace Core{
 	constexpr std::uint32_t WIDTH = 800;
-	constexpr std::uint32_t HEIGHT = 600;
+	constexpr std::uint32_t HEIGHT = 800;
 
 	namespace GLFW{
 		void init(){

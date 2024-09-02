@@ -35,7 +35,8 @@ export namespace Core::Vulkan{
 		}
 
 		~CommandBuffer(){
-			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handle);
+			if(device && pool && handle)vkFreeCommandBuffers(device, pool, 1, &handle);
+			handle = nullptr;
 		}
 
 		CommandBuffer(const CommandBuffer& other) = delete;
@@ -46,7 +47,10 @@ export namespace Core::Vulkan{
 
 		CommandBuffer& operator=(CommandBuffer&& other) noexcept{
 			if(this == &other) return *this;
-			if(device && pool)vkFreeCommandBuffers(device, pool, 1, &handle);
+			if(device && pool && handle)vkFreeCommandBuffers(device, pool, 1, &handle);
+			handle = nullptr;
+			pool = nullptr;
+			device = nullptr;
 			Wrapper::operator=(std::move(other));
 			device = std::move(other.device);
 			pool = std::move(other.pool);
@@ -152,11 +156,7 @@ export namespace Core::Vulkan{
 
 		TransientCommand& operator=(const TransientCommand& other) = delete;
 
-		TransientCommand(TransientCommand&& other) noexcept
-			: CommandBuffer{std::move(other)},
-			  targetQueue{other.targetQueue},
-			  toWait{std::move(other.toWait)},
-			  toSignal{std::move(other.toSignal)}{}
+		TransientCommand(TransientCommand&& other) noexcept = default;
 
 		TransientCommand& operator=(TransientCommand&& other) noexcept{
 			if(this == &other) return *this;

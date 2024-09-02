@@ -142,6 +142,34 @@ export namespace Core::Vulkan{
             VkPipelineStageFlags dstStageMask;
 	    };
 
+	    void transitionImageQueueOwnership(
+		    VkCommandBuffer commandBuffer,
+		    VkImage image, const TransitionInfo &info,
+		    const std::uint32_t srcQueue, const std::uint32_t dstQueue,
+		    const VkImageSubresourceRange &subresourceRange
+	    ) {
+		    VkImageMemoryBarrier barrier{VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER};
+		    barrier.oldLayout = info.oldLayout;
+		    barrier.newLayout = info.newLayout;
+		    barrier.srcQueueFamilyIndex = srcQueue;
+		    barrier.dstQueueFamilyIndex = dstQueue;
+		    barrier.image = image;
+		    barrier.subresourceRange = subresourceRange;
+
+		    barrier.srcAccessMask = info.srcAccessMask;
+		    barrier.dstAccessMask = info.dstAccessMask;
+
+		    vkCmdPipelineBarrier(
+			    commandBuffer,
+			    info.srcStageMask, info.dstStageMask,
+			    0,
+			    0, nullptr,
+			    0, nullptr,
+			    1, &barrier
+		    );
+	    }
+
+
 	    void transitionImageLayout(
             VkCommandBuffer commandBuffer,
             VkImage image, const TransitionInfo &info,
@@ -370,14 +398,7 @@ export namespace Core::Vulkan{
 
 		Image& operator=(const Image& other) = delete;
 
-		Image& operator=(Image&& other) noexcept{
-			if(this == &other) return *this;
-			if(device) vkDestroyImage(device, handle, nullptr);
-			Wrapper<VkImage>::operator =(std::move(other));
-			memory = std::move(other.memory);
-			device = std::move(other.device);
-			return *this;
-		}
+		Image& operator=(Image&& other) noexcept = default;
 
 		Image(VkPhysicalDevice physicalDevice, VkDevice device,
 		      VkMemoryPropertyFlags properties,
@@ -535,14 +556,7 @@ export namespace Core::Vulkan{
 
 		ImageView& operator=(const ImageView& other) = delete;
 
-		ImageView& operator=(ImageView&& other) noexcept{
-			if(this == &other) return *this;
-			if(device) vkDestroyImageView(device, handle, nullptr);
-
-			Wrapper<VkImageView>::operator =(std::move(other));
-			device = std::move(other.device);
-			return *this;
-		}
+		ImageView& operator=(ImageView&& other) noexcept = default;
 	};
 
 

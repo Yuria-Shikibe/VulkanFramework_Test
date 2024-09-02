@@ -233,12 +233,6 @@ export namespace Core::Vulkan{
 
 		Pipeline& operator=(const Pipeline& other) = delete;
 
-		Pipeline& operator=(Pipeline&& other) noexcept{
-			if(this == &other) return *this;
-			if(device)vkDestroyPipeline(device, handle, nullptr);
-			Wrapper<VkPipeline>::operator =(std::move(other));
-			device = std::move(other.device);
-			return *this;
-		}
+		Pipeline& operator=(Pipeline&& other) noexcept = default;
 	};
 }

@@ -77,16 +77,7 @@ export namespace Core::Vulkan{
 
 		DescriptorSetLayout& operator=(const DescriptorSetLayout& other) = delete;
 
-		DescriptorSetLayout& operator=(DescriptorSetLayout&& other) noexcept{
-			if(this == &other) return *this;
-			if(device)vkDestroyDescriptorSetLayout(device, handle, nullptr);
-
-			Wrapper::operator=(std::move(other));
-			builder = std::move(other.builder);
-			device = std::move(other.device);
-			flags = other.flags;
-			return *this;
-		}
+		DescriptorSetLayout& operator=(DescriptorSetLayout&& other) noexcept = default;
 
 		DescriptorSetLayout(VkDevice device, std::regular_invocable<DescriptorSetLayout&> auto&& func) : device{device}{
 			func(*this);
@@ -137,14 +128,7 @@ export namespace Core::Vulkan{
 
 		DescriptorSetPool& operator=(const DescriptorSetPool& other) = delete;
 
-		DescriptorSetPool& operator=(DescriptorSetPool&& other) noexcept{
-			if(this == &other) return *this;
-			this->~DescriptorSetPool();
-			Wrapper::operator=(std::move(other));
-			device = std::move(other.device);
-			layout = std::move(other.layout);
-			return *this;
-		}
+		DescriptorSetPool& operator=(DescriptorSetPool&& other) noexcept = default;
 
 		DescriptorSetPool(VkDevice device, const DescriptorSetLayout& layout, std::uint32_t size) : device{device}, layout{layout}{
 			auto bindings = layout.builder.exportBindings();

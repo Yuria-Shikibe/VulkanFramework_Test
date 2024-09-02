@@ -197,14 +197,7 @@ export namespace Core::Vulkan{
 
 		Sampler& operator=(const Sampler& other) = delete;
 
-		Sampler& operator=(Sampler&& other) noexcept{
-			if(this == &other) return *this;
-			if(device)vkDestroySampler(device, handle, nullptr);
-
-			Wrapper<VkSampler>::operator =(std::move(other));
-			device = std::move(other.device);
-			return *this;
-		}
+		Sampler& operator=(Sampler&& other) noexcept = default;
 
 		[[nodiscard]] constexpr VkDescriptorImageInfo
 			getDescriptorInfo_ShaderRead(VkImageView imageView, VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) const noexcept{

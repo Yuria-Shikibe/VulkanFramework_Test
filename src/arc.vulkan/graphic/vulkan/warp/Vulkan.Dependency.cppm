@@ -37,8 +37,7 @@ export namespace Core::Vulkan{
 
 		Wrapper& operator=(Wrapper&& other) noexcept{
 			if(this == &other) return *this;
-			handle = std::move(other.handle);
-			other.handle = nullptr;
+			std::swap(handle, other.handle);
 			return *this;
 		}
 
@@ -91,8 +90,7 @@ export namespace Core::Vulkan{
 
 		constexpr Dependency& operator=(Dependency&& other) noexcept{
 			if(this == &other) return *this;
-			handle = other.handle;
-			other.handle = nullptr;
+			std::swap(handle, other.handle);
 			return *this;
 		}
 	};

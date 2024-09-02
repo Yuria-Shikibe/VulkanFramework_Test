@@ -20,6 +20,8 @@ export namespace Graphic{
 	    //OPTM merge these?
 		std::unordered_map<std::uint32_t, VkImageView> in{};
 		std::unordered_map<std::uint32_t, VkImageView> out{};
+		std::unordered_map<std::uint32_t, VkImage> toTransferOwnership{};
+
 	};
 
 	using PortProv = std::function<AttachmentPort()>;
@@ -30,13 +32,10 @@ export namespace Graphic{
 		AttachmentPort port{};
 		PortProv portProv{};
 
-		//TODO uses a pool in some global place??
 		Core::Vulkan::CommandPool transientCommandPool{};
 		Core::Vulkan::CommandPool commandPool{};
 
 		Core::Vulkan::CommandBuffer commandBuffer{};
-
-
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand(const bool compute) const{
 			return transientCommandPool.obtainTransient(
@@ -72,6 +71,45 @@ export namespace Graphic{
 		void resize(Geom::USize2 size) = delete;
 
 		[[nodiscard]] Geom::USize2 size() const = delete;
+
+	protected:
+		void submitToQueue(const std::vector<VkCommandBuffer>& commandBuffers, const bool isCompute) const{
+			VkSubmitInfo info{
+				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+				.waitSemaphoreCount = 0,
+				.pWaitSemaphores = nullptr,
+				.pWaitDstStageMask = nullptr,
+				.commandBufferCount = static_cast<std::uint32_t>(commandBuffers.size()),
+				.pCommandBuffers = commandBuffers.data(),
+				.signalSemaphoreCount = 0,//1,
+				.pSignalSemaphores = nullptr//processCompleteSemaphore.asData()
+			};
+
+			vkQueueSubmit(isCompute ? context->device.getComputeQueue() : context->device.getGraphicsQueue(), 1, &info, nullptr);
+		}
+
+		void submitCommand(bool isCompute) const{
+			std::vector<VkCommandBuffer> commandBuffers{};
+			commandBuffers.reserve(appendCommandBuffers.size() + 1);
+
+			if(appendCommandBuffers.empty()){
+				commandBuffers.push_back(commandBuffer.get());
+			}else{
+				auto lowerBound = appendCommandBuffers.lower_bound(0);
+
+				std::ranges::transform(
+					std::ranges::subrange{appendCommandBuffers.begin(), lowerBound} | std::views::values,
+					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
+
+				commandBuffers.push_back(commandBuffer);
+
+				std::ranges::transform(
+					std::ranges::subrange{lowerBound, appendCommandBuffers.end()} | std::views::values,
+					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
+			}
+
+			submitToQueue(commandBuffers, isCompute);
+		}
 	};
 
 	struct ComputePostProcessor : PostProcessor{
@@ -119,6 +157,10 @@ export namespace Graphic{
 
 			updateDescriptors();
 			recordCommand();
+		}
+
+		void submitCommand() const{
+			PostProcessor::submitCommand(true);
 		}
 	};
 
@@ -192,41 +234,8 @@ export namespace Graphic{
 			commandRecorder(*this);
 		}
 
-	    template <std::ranges::range Rng = std::initializer_list<VkSemaphore>>
-	        requires (std::convertible_to<VkSemaphore, std::ranges::range_value_t<Rng>>)
-		void submitCommand(Rng&& toWait, const VkPipelineStageFlags* stageFlags = Core::Vulkan::Seq::StageFlagBits<VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT>) const{
-			std::vector<VkCommandBuffer> commandBuffers{};
-			commandBuffers.reserve(appendCommandBuffers.size() + 1);
-
-		    std::vector<VkSemaphore> semaphores{};
-		    std::ranges::transform(toWait, std::back_inserter(semaphores), [](const auto& s){return static_cast<VkSemaphore>(s);});
-
-			if(appendCommandBuffers.empty()){
-				commandBuffers.push_back(commandBuffer.get());
-			}else{
-				auto lowerBound = appendCommandBuffers.lower_bound(0);
-
-				std::ranges::transform(
-					std::ranges::subrange{appendCommandBuffers.begin(), lowerBound} | std::views::values,
-					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
-
-				commandBuffers.push_back(commandBuffer);
-
-				std::ranges::transform(
-					std::ranges::subrange{lowerBound, appendCommandBuffers.end()} | std::views::values,
-					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
-			}
-
-			context->commandSubmit_Graphics(VkSubmitInfo{
-				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-				.waitSemaphoreCount = static_cast<std::uint32_t>(semaphores.size()),
-				.pWaitSemaphores = semaphores.data(),
-				.pWaitDstStageMask = stageFlags,
-				.commandBufferCount = static_cast<std::uint32_t>(commandBuffers.size()),
-				.pCommandBuffers = commandBuffers.data(),
-				.signalSemaphoreCount = 0,//1,
-				.pSignalSemaphores = nullptr//processCompleteSemaphore.asData()
-			}, nullptr);
+		void submitCommand() const{
+			PostProcessor::submitCommand(false);
 		}
 	};
 

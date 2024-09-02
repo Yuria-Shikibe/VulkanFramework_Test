@@ -22,5 +22,6 @@ void main() {
     vec4 ui1Color = subpassLoad(ui1);
     vec4 ui2Color = subpassLoad(ui2);
 
-    outColor = premultipliedAlphaBlend(ui1Color, baseColor);
+    outColor = vec4(ui1Color.rgb + (1 - ui1Color.a) * baseColor.rgb, ui1Color.a + (1 - ui1Color.a) * baseColor.a);//  * ui1Color.a ;
+//    outColor = premultipliedAlphaBlend(ui1Color, baseColor);
 }

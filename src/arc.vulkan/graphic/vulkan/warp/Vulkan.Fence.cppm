@@ -46,20 +46,12 @@ export namespace Core::Vulkan{
 
 		Fence(const Fence& other) = delete;
 
-		Fence(Fence&& other) noexcept
-			: Wrapper{other.handle},
-			  device{std::move(other.device)}{}
+		Fence(Fence&& other) noexcept = default;
 
 		Fence& operator=(const Fence& other) = delete;
 
 
-		Fence& operator=(Fence&& other) noexcept{
-			if(this == &other) return *this;
-			if(device)vkDestroyFence(device, handle, nullptr);
-			Wrapper::operator =(std::move(other));
-			device = std::move(other.device);
-			return *this;
-		}
+		Fence& operator=(Fence&& other) noexcept = default;
 
 		~Fence(){
 			if(device)vkDestroyFence(device, handle, nullptr);

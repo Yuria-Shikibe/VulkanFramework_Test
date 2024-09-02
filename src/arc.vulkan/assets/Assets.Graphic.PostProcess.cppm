@@ -31,10 +31,10 @@ export namespace Assets{
 
 
             static constexpr std::array SSAO_Params{
-                    SSAO_KernalInfo{20, 0.15702702700f},
-                    SSAO_KernalInfo{16, 0.32702702700f},
-                    SSAO_KernalInfo{16, 0.55062162162f},
-                    SSAO_KernalInfo{12, 0.83062162162f},
+                    SSAO_KernalInfo{16, 0.15702702700f},
+                    SSAO_KernalInfo{8, 0.32702702700f},
+                    SSAO_KernalInfo{8, 0.55062162162f},
+                    SSAO_KernalInfo{4, 0.83062162162f},
                 };
 
 	        static constexpr std::size_t DefKernalSize{[]{

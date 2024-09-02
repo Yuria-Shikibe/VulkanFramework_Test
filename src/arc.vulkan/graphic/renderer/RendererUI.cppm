@@ -252,7 +252,7 @@ export namespace Graphic {
                         pipelineTemplate
                             .useDefaultFixedStages()
                             .setColorBlend(&Default::ColorBlending<std::array{
-                                    Blending::AlphaBlend,
+                                    Blending::ScaledAlphaBlend,
                                     Blending::AlphaBlend,
                                 }>)
                             .setVertexInputInfo<Util::EmptyVertexBind>()
@@ -273,10 +273,11 @@ export namespace Graphic {
             batchFramebuffer = FramebufferLocal{context().device, size, batchDrawPass.renderPass};
             mergeFrameBuffer = FramebufferLocal{context().device, size, mergeDrawPass.renderPass};
 
+            //TODO no sample
             for(std::size_t i = 0; i < AttachmentCount; ++i) {
                 ColorAttachment colorAttachment{context().physicalDevice, context().device};
                 colorAttachment.create(size, batch.obtainTransientCommand(),
-                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT
+                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
                 );
                 batchFramebuffer.pushCapturedAttachments(std::move(colorAttachment));
             }
