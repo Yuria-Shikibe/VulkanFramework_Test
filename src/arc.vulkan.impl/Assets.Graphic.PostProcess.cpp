@@ -603,7 +603,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.layerCount = 1
 					});
 
-				for(std::size_t i = 0; i < 3; ++i){
+				for(std::size_t i = 0; i < Passes; ++i){
 					postProcessor.pipelineData.bindDescriptorTo(scopedCommand, 1, VK_PIPELINE_BIND_POINT_COMPUTE);
 					vkCmdDispatch(scopedCommand, ux, uy, 1);
 

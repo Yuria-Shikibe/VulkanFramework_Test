@@ -54,8 +54,6 @@ import ext.MetaProgramming;
 import Assets.Graphic.PostProcess;
 import Assets.Bundle;
 
-Font::TypeSettings::Parser parser{};
-
 template <typename Rng>
 concept Printable = requires(const std::ranges::range_const_reference_t<Rng>& rng, std::ostream& ostream){
     requires std::ranges::input_range<Rng>;
@@ -63,123 +61,6 @@ concept Printable = requires(const std::ranges::range_const_reference_t<Rng>& rn
 };
 
 static_assert(Printable<std::vector<std::string>>);
-
-void loadParser(){
-    using namespace Font::TypeSettings;
-
-    parser.modifiers["size"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.sizeHistory.pop();
-            return;
-        }
-
-        if(args.front().starts_with('[')){
-            const auto size = Func::string_cast_seq<std::uint16_t>(args.front().substr(1), 0, 2);
-
-            switch(size.size()){
-                case 1: context.sizeHistory.push({0, size[0]}); break;
-                case 2: context.sizeHistory.push({size[0], size[1]}); break;
-                default: context.sizeHistory.pop();
-            }
-        }
-    };
-
-    parser.modifiers["scl"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.sizeHistory.pop();
-            return;
-        }
-
-        const auto scale = Func::string_cast<float>(args.front());
-        context.sizeHistory.push(context.getLastSize().scl(scale));
-    };
-
-    parser.modifiers["s"] = parser.modifiers["size"];
-
-    parser.modifiers["color"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.colorHistory.pop();
-            return;
-        }
-
-        if(args.size() > 1){
-            context.colorHistory.pop();
-        }
-
-        if(std::string_view arg = args.front(); arg.starts_with('[')){
-            arg.remove_prefix(1);
-
-            if(arg.empty()){
-                context.colorHistory.pop();
-            }else{
-                const auto color = Graphic::Color::valueOf(arg);
-                context.colorHistory.push(color);
-            }
-        }
-    };
-
-    parser.modifiers["c"] = parser.modifiers["color"];
-
-    parser.modifiers["off"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.popOffset();
-            return;
-        }
-
-        const auto offset = Func::string_cast_seq<float>(args.front(), 0, 2);
-
-        switch(offset.size()){
-            case 1: context.pushOffset({0, offset[0]}); break;
-            case 2: context.pushOffset({offset[0], offset[1]}); break;
-            default: context.popOffset();
-        }
-    };
-
-    parser.modifiers["offs"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.popOffset();
-            return;
-        }
-
-        const auto offset = Func::string_cast_seq<float>(args.front(), 0, 2);
-
-        switch(offset.size()){
-            case 1: context.pushScaledOffset({0, offset[0]}); break;
-            case 2: context.pushScaledOffset({offset[0], offset[1]}); break;
-            default: context.popOffset();
-        }
-    };
-
-    parser.modifiers["font"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        if(args.empty()){
-            context.fontHistory.pop();
-            return;
-        }
-
-        Font::FontFaceID faceId{};
-        if(const std::string_view arg = args.front(); arg.starts_with('[')){
-            faceId = Func::string_cast<Font::FontFaceID>(arg.substr(1));
-        }else{
-            faceId = Font::namedFonts.at(arg, 0);
-        }
-
-        if(auto* font = Font::GlobalFontManager->getFontFace(faceId)){
-            context.fontHistory.push(font);
-        }
-    };
-
-    parser.modifiers["_"] = parser.modifiers["sub"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        Func::beginSubscript(context, target);
-    };
-
-    parser.modifiers["^"] = parser.modifiers["sup"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        Func::beginSuperscript(context, target);
-    };
-
-    parser.modifiers["\\"] = parser.modifiers["\\sup"] = parser.modifiers["\\sub"] = [](const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
-        Func::endScript(context, target);
-    };
-}
 
 Graphic::ImageAtlas loadTex(){
     using namespace Core;
@@ -242,18 +123,11 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
     //     fontManager.getGlyph(id, {convertCharToChar32, {0, 120}});
     // }
 
-    loadParser();
-
     return fontManager;
 }
 
 
 // int main(){
-//     std::map<std::string, int> map{};
-//     map["123"];
-//     std::vector<int> arr{};
-//     auto rst = arr | std::views::filter([](auto i){return i & 1;});
-//
 //     Core::initFileSystem();
 //     Core::Bundle bundle{Assets::Dir::bundle.subFile("bundle.zh_cn.json"), Assets::Dir::bundle.subFile("bundle.def.json")};
 //
@@ -322,7 +196,7 @@ int main(){
     std::shared_ptr<Font::TypeSettings::Layout> fps{new Font::TypeSettings::Layout};
     layout->setAlign(Align::Pos::right);
 
-    parser.requestParseInstantly(layout, file.readString());
+    Font::TypeSettings::globalInstantParser.requestParseInstantly(layout, file.readString());
     // parser.taskQueue.handleAll();
     // rst->get();
 
@@ -353,8 +227,11 @@ int main(){
         input->update(timer.globalDeltaTick());
         mainCamera->update(timer.globalDeltaTick());
 
-        vulkanManager->updateBatchUniformBuffer(Vulkan::UniformBlock{mainCamera->getWorldToScreen(), 0.f});
-        vulkanManager->updateCameraScale(mainCamera->getScale());
+        if(mainCamera->checkChanged()){
+            vulkanManager->updateBatchUniformBuffer(Vulkan::UniformBlock{mainCamera->getWorldToScreen(), 0.f});
+            vulkanManager->updateCameraScale(mainCamera->getScale());
+        }
+
 
         constexpr auto baseColor = Graphic::Colors::WHITE;
         constexpr auto lightColor = Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
@@ -365,7 +242,7 @@ int main(){
         sec += timer.getGlobalDelta();
         if(sec > 1.f){
             sec = 0;
-            parser.requestParseInstantly(fps, std::to_string(fps_count));
+            Font::TypeSettings::globalInstantParser.requestParseInstantly(fps, std::format("#<font|tele>{}", fps_count));
             fps_count = 0;
         }
         fps_count++;

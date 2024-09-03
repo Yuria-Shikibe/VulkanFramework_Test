@@ -21,9 +21,7 @@ export namespace Core::Vulkan{
 			: handle{handler}{}
 
 		T release(){
-			T result = handle;
-			handle = nullptr;
-			return result;
+			return std::exchange(handle, nullptr);
 		}
 
 		Wrapper(const Wrapper& other) requires (enableCopy) = default;

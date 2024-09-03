@@ -66,8 +66,6 @@ export namespace Graphic{
 			[[nodiscard]] FrameData() = default;
 
 			void set(const Batch& batch){
-				// flushCommandBuffer = {batch.context->device, batch.transientCommandPool};
-				// fence = Core::Vulkan::Fence{batch.context->device, Core::Vulkan::Fence::CreateFlags::signal};
 				stagingBuffer = {
 					batch.context->physicalDevice, batch.context->device, (batch.unitOffset * MaxGroupCount),
 					VK_BUFFER_USAGE_TRANSFER_SRC_BIT,

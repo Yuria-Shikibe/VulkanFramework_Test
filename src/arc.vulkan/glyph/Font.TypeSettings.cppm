@@ -67,7 +67,7 @@ namespace Font{
 			}
 
 			void pop(){
-				if(!stack.empty())stack.pop();
+				if(!stack.empty()) stack.pop();
 			}
 
 			[[nodiscard]] T top(const T defaultVal) const noexcept{
@@ -134,8 +134,8 @@ namespace Font{
 
 				[[nodiscard]] decltype(auto) getAllArgs() const{
 					return data
-					| std::views::split(TokenSplitChar)
-					| std::views::transform([](auto a){return std::string_view{a};});
+						| std::views::split(TokenSplitChar)
+						| std::views::transform([](auto a){ return std::string_view{a}; });
 				}
 
 				[[nodiscard]] decltype(auto) getRestArgs() const{
@@ -163,7 +163,7 @@ namespace Font{
 				return getToken(pos, tokens.begin());
 			}
 
-			[[nodiscard]] decltype(auto) getTokenGroup(const PosType pos, const TokenItr& last) const {
+			[[nodiscard]] decltype(auto) getTokenGroup(const PosType pos, const TokenItr& last) const{
 				return std::ranges::equal_range(last, tokens.end(), pos, std::less<>{}, &TokenArgument::beginPos);
 			}
 
@@ -223,8 +223,8 @@ namespace Font{
 
 			void pushScaledOffset(const Geom::Vec2 offScale){
 				auto off = getLastSize();
-				if(off.x == 0)off.x = off.y;
-				if(off.y == 0)off.y = off.x;
+				if(off.x == 0) off.x = off.y;
+				if(off.y == 0) off.y = off.x;
 
 				const auto offset = off.as<float>() * offScale;
 				offsetHistory.push(offset);
@@ -239,7 +239,7 @@ namespace Font{
 
 			[[nodiscard]] IndexedFontFace& getFace() const{
 				const auto t = fontHistory.top(GlobalFontManager->fontFaces_fastAccess.front());
-				if(t == nullptr)throw std::runtime_error("No Valid Font Face");
+				if(t == nullptr) throw std::runtime_error("No Valid Font Face");
 				return *t;
 			}
 
@@ -269,7 +269,7 @@ namespace Font{
 
 			void setAlign(Align::Pos align){
 				std::unique_lock lk{capture};
-				if(this->align == align)return;
+				if(this->align == align) return;
 				this->align = align;
 
 				updateAlign();
@@ -277,15 +277,15 @@ namespace Font{
 
 			void updateAlign(){
 				if(align & Align::Pos::center_x){
-					for (auto& element : elements){
+					for(auto& element : elements){
 						element.src.x = (size.x - element.bound.width) / 2.f;
 					}
-				}else if(align & Align::Pos::left){
-					for (auto& element : elements){
+				} else if(align & Align::Pos::left){
+					for(auto& element : elements){
 						element.src.x = 0;
 					}
-				}else if(align & Align::Pos::right){
-					for (auto& element : elements){
+				} else if(align & Align::Pos::right){
+					for(auto& element : elements){
 						element.src.x = (size.x - element.bound.width);
 					}
 				}
@@ -322,11 +322,12 @@ namespace Font{
 			}
 
 			[[nodiscard]] TokenModifier() = default;
+
 			//
 			[[nodiscard]] explicit(false) TokenModifier(std::function<FuncType>&& modifier)
 				: modifier{std::move(modifier)}{}
 
-			template<Concepts::Invokable<FuncType> Func>
+			template <Concepts::Invokable<FuncType> Func>
 			[[nodiscard]] explicit(false) TokenModifier(Func&& modifier)
 				: modifier{std::forward<Func>(modifier)}{}
 		};
@@ -374,144 +375,290 @@ namespace Font{
 					ParseInstance{this, target}.operator()();
 				}
 			}
-
 		};
 	}
 
-	namespace TypeSettings::Func{
-		export template<typename T>
-			requires std::is_arithmetic_v<T>
-		T string_cast(std::string_view str, T def = 0){
-			T t{def};
-			std::from_chars(str.data(), str.data() + str.size(), t);
-			return t;
-		}
 
-		export template<typename T = int>
-			requires std::is_arithmetic_v<T>
-		std::vector<T> string_cast_seq(std::string_view str, T def = 0, std::size_t expected = 2){
-			const char* begin = str.data();
-			const char* end = begin + str.size();
-
-			std::vector<T> result{};
-			if(expected)result.reserve(expected);
-
-			while(!expected || result.size() != expected){
-				if(begin == end)break;
+	namespace TypeSettings{
+		namespace Func{
+			export template <typename T>
+				requires std::is_arithmetic_v<T>
+			T string_cast(std::string_view str, T def = 0){
 				T t{def};
-				auto [ptr, ec] = std::from_chars(begin, end, t);
-				begin = ptr;
+				std::from_chars(str.data(), str.data() + str.size(), t);
+				return t;
+			}
 
-				if(ec == std::errc::invalid_argument){
-					begin++;
-				}else{
-					result.push_back(t);
+			export template <typename T = int>
+				requires std::is_arithmetic_v<T>
+			std::vector<T> string_cast_seq(std::string_view str, T def = 0, std::size_t expected = 2){
+				const char* begin = str.data();
+				const char* end = begin + str.size();
+
+				std::vector<T> result{};
+				if(expected) result.reserve(expected);
+
+				while(!expected || result.size() != expected){
+					if(begin == end) break;
+					T t{def};
+					auto [ptr, ec] = std::from_chars(begin, end, t);
+					begin = ptr;
+
+					if(ec == std::errc::invalid_argument){
+						begin++;
+					} else{
+						result.push_back(t);
+					}
+				}
+
+				return result;
+			}
+
+			export void beginSubscript(Context& context, const std::shared_ptr<Layout>& target){
+				context.pushScaledOffset({-0.025f, -0.105f});
+				context.pushScaledSize(0.45f);
+			}
+
+			export void beginSuperscript(Context& context, const std::shared_ptr<Layout>& target){
+				context.pushScaledOffset({-0.025f, 0.525f});
+				context.pushScaledSize(0.45f);
+			}
+
+			export void endScript(Context& context, const std::shared_ptr<Layout>& target){
+				context.popOffset();
+				context.sizeHistory.pop();
+			}
+
+			bool endLine(Context& context, const std::shared_ptr<Layout>& target){
+				float lastLineDescender;
+
+				if(target->elements.size() > 1){
+					auto& lastLine = std::next(target->elements.crbegin()).operator*();
+					lastLineDescender = lastLine.bound.descender;
+				} else{
+					lastLineDescender = -context.lineSpacing;
+				}
+
+				auto& line = target->elements.back();
+				const float height = Math::max(context.minimumLineHeight,
+				                               context.lineRect.ascender + lastLineDescender + context.lineSpacing);
+
+				line.src.y -= height;
+				context.maxSize.y += height;
+				if(context.maxSize.y > target->maximumSize.y){
+					//discard line
+					target->elements.pop_back();
+					context.maxSize.y = target->maximumSize.y;
+					return false;
+				}
+
+				line.bound = context.lineRect;
+
+				context.penPos.x = 0;
+				context.penPos.y -= height;
+				context.heightRemain -= height;
+				context.lineRect = {};
+
+				context.maxSize.maxX(line.bound.width);
+
+				return true;
+			}
+
+			void beginParse(Context& context, const std::shared_ptr<Layout>& target){
+				target->elements.emplace_back();
+				context.heightRemain = target->maximumSize.y;
+			}
+
+			void endParse(Context& context, const std::shared_ptr<Layout>& target){
+				if(target->elements.empty()) return;
+				// context.maxSize.y += target->elements.front().bound.ascender;
+				context.maxSize.y += target->elements.back().bound.descender;
+
+				target->size = context.maxSize;
+				target->size.max(target->minimumSize);
+
+				if(!(target->align & Align::Pos::left)) target->updateAlign();
+				for(auto&& element : target->elements){
+					element.src.y += target->size.y;
 				}
 			}
 
-			return result;
-		}
+			void execTokens(
+				const Parser& parser,
+				FormattableText::TokenItr& lastTokenItr,
+				const FormattableText& formattableText,
+				const std::string_view::size_type index,
+				Context& context,
+				const std::shared_ptr<Layout>& target){
+				auto&& tokens = formattableText.getTokenGroup(index, lastTokenItr);
+				lastTokenItr = tokens.end();
 
-		export void beginSubscript(Context& context, const std::shared_ptr<Layout>& target){
-			context.pushScaledOffset({-0.025f, -0.105f});
-			context.pushScaledSize(0.45f);
-		}
-
-		export void beginSuperscript(Context& context, const std::shared_ptr<Layout>& target){
-			context.pushScaledOffset({-0.025f, 0.525f});
-			context.pushScaledSize(0.45f);
-		}
-
-		export void endScript(Context& context, const std::shared_ptr<Layout>& target){
-			context.popOffset();
-			context.sizeHistory.pop();
-		}
-
-		bool endLine(Context& context, const std::shared_ptr<Layout>& target){
-			float lastLineDescender;
-
-			if(target->elements.size() > 1){
-				auto& lastLine = std::next(target->elements.crbegin()).operator*();
-				lastLineDescender = lastLine.bound.descender;
-			}else{
-				lastLineDescender = -context.lineSpacing;
-			}
-
-			auto& line = target->elements.back();
-			const float height = Math::max(context.minimumLineHeight, context.lineRect.ascender + lastLineDescender + context.lineSpacing);
-
-			line.src.y -= height;
-			context.maxSize.y += height;
-			if(context.maxSize.y > target->maximumSize.y){
-				//discard line
-				target->elements.pop_back();
-				context.maxSize.y = target->maximumSize.y;
-				return false;
-			}
-
-			line.bound = context.lineRect;
-
-			context.penPos.x = 0;
-			context.penPos.y -= height;
-			context.heightRemain -= height;
-			context.lineRect = {};
-
-			context.maxSize.maxX(line.bound.width);
-
-			return true;
-		}
-
-		void beginParse(Context& context, const std::shared_ptr<Layout>& target){
-			target->elements.emplace_back();
-			context.heightRemain = target->maximumSize.y;
-		}
-
-		void endParse(Context& context, const std::shared_ptr<Layout>& target){
-			if(target->elements.empty())return;
-			// context.maxSize.y += target->elements.front().bound.ascender;
-			context.maxSize.y += target->elements.back().bound.descender;
-
-			target->size = context.maxSize;
-			target->size.max(target->minimumSize);
-
-			if(!(target->align & Align::Pos::left))target->updateAlign();
-			for (auto && element : target->elements){
-				element.src.y += target->size.y;
-			}
-		}
-
-		void execTokens(
-			const Parser& parser,
-			FormattableText::TokenItr& lastTokenItr,
-			const FormattableText& formattableText,
-			const std::string_view::size_type index,
-			Context& context,
-			const std::shared_ptr<Layout>& target){
-			auto&& tokens = formattableText.getTokenGroup(index, lastTokenItr);
-			lastTokenItr = tokens.end();
-
-			for (const auto & token : tokens){
-				if(const auto tokenParser = parser.modifiers.tryFind(token.getName())){
-					tokenParser->operator()(token.getRestArgs() | std::ranges::to<std::vector>(), context, target);
-				}else{
-					std::println(std::cerr, "[Parser] Failed To Find Token: {}", token.data);
+				for(const auto& token : tokens){
+					if(const auto tokenParser = parser.modifiers.tryFind(token.getName())){
+						tokenParser->operator()(token.getRestArgs() | std::ranges::to<std::vector>(), context, target);
+					} else{
+						std::println(std::cerr, "[Parser] Failed To Find Token: {}", token.data);
+					}
 				}
 			}
-		}
 
-		Layout::Row& getCurrentRow(const std::size_t row, const Context& context, const std::shared_ptr<Layout>& target){
-			if(row >= target->elements.size()){
-				auto& newLine = target->elements.emplace_back();
-				newLine.src = context.penPos;
-				return newLine;
+			Layout::Row& getCurrentRow(const std::size_t row, const Context& context, const std::shared_ptr<Layout>& target){
+				if(row >= target->elements.size()){
+					auto& newLine = target->elements.emplace_back();
+					newLine.src = context.penPos;
+					return newLine;
+				}
+
+				return target->elements[row];
 			}
 
-			return target->elements[row];
+			Parser createDefParser();
 		}
+
+
+		export inline Parser globalParser = Func::createDefParser();
+		export const inline Parser globalInstantParser = Func::createDefParser();
 	}
 }
 
 module : private;
+
+Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
+	{
+		Parser parser;
+		parser.modifiers["size"] = [](const std::vector<std::string_view>& args, Context& context,
+		                              const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.sizeHistory.pop();
+				return;
+			}
+
+			if(args.front().starts_with('[')){
+				const auto size = Func::string_cast_seq<std::uint16_t>(args.front().substr(1), 0, 2);
+
+				switch(size.size()){
+					case 1 : context.sizeHistory.push({0, size[0]});
+						break;
+					case 2 : context.sizeHistory.push({size[0], size[1]});
+						break;
+					default : context.sizeHistory.pop();
+				}
+			}
+		};
+
+		parser.modifiers["scl"] = [](const std::vector<std::string_view>& args, Context& context,
+		                             const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.sizeHistory.pop();
+				return;
+			}
+
+			const auto scale = Func::string_cast<float>(args.front());
+			context.sizeHistory.push(context.getLastSize().scl(scale));
+		};
+
+		parser.modifiers["s"] = parser.modifiers["size"];
+
+		parser.modifiers["color"] = [](const std::vector<std::string_view>& args, Context& context,
+		                               const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.colorHistory.pop();
+				return;
+			}
+
+			if(args.size() > 1){
+				context.colorHistory.pop();
+			}
+
+			if(std::string_view arg = args.front(); arg.starts_with('[')){
+				arg.remove_prefix(1);
+
+				if(arg.empty()){
+					context.colorHistory.pop();
+				} else{
+					const auto color = Graphic::Color::valueOf(arg);
+					context.colorHistory.push(color);
+				}
+			}
+		};
+
+		parser.modifiers["c"] = parser.modifiers["color"];
+
+		parser.modifiers["off"] = [](const std::vector<std::string_view>& args, Context& context,
+		                             const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.popOffset();
+				return;
+			}
+
+			const auto offset = Func::string_cast_seq<float>(args.front(), 0, 2);
+
+			switch(offset.size()){
+				case 1 : context.pushOffset({0, offset[0]});
+					break;
+				case 2 : context.pushOffset({offset[0], offset[1]});
+					break;
+				default : context.popOffset();
+			}
+		};
+
+		parser.modifiers["offs"] = [](const std::vector<std::string_view>& args, Context& context,
+		                              const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.popOffset();
+				return;
+			}
+
+			const auto offset = Func::string_cast_seq<float>(args.front(), 0, 2);
+
+			switch(offset.size()){
+				case 1 : context.pushScaledOffset({0, offset[0]});
+					break;
+				case 2 : context.pushScaledOffset({offset[0], offset[1]});
+					break;
+				default : context.popOffset();
+			}
+		};
+
+		parser.modifiers["font"] = [](const std::vector<std::string_view>& args, Context& context,
+		                              const std::shared_ptr<Layout>& target){
+			if(args.empty()){
+				context.fontHistory.pop();
+				return;
+			}
+
+			Font::FontFaceID faceId{};
+			if(const std::string_view arg = args.front(); arg.starts_with('[')){
+				faceId = Func::string_cast<Font::FontFaceID>(arg.substr(1));
+			} else{
+				faceId = Font::namedFonts.at(arg, 0);
+			}
+
+			if(auto* font = Font::GlobalFontManager->getFontFace(faceId)){
+				context.fontHistory.push(font);
+			}
+		};
+
+		parser.modifiers["_"] = parser.modifiers["sub"] = [](const std::vector<std::string_view>& args,
+		                                                     Context& context,
+		                                                     const std::shared_ptr<Layout>& target){
+			Func::beginSubscript(context, target);
+		};
+
+		parser.modifiers["^"] = parser.modifiers["sup"] = [](const std::vector<std::string_view>& args,
+		                                                     Context& context,
+		                                                     const std::shared_ptr<Layout>& target){
+			Func::beginSuperscript(context, target);
+		};
+
+		parser.modifiers["\\"] = parser.modifiers["\\sup"] = parser.modifiers["\\sub"] = [](
+			const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
+				Func::endScript(context, target);
+			};
+
+		return parser;
+	}
+}
 
 Font::TypeSettings::FormattableText::FormattableText(const std::string_view string, const TokenSentinel sentinel){
 	static constexpr auto InvalidPos = std::string_view::npos;
@@ -541,7 +688,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 			if(!escapingNext){
 				escapingNext = true;
 				continue;
-			}else{
+			} else{
 				escapingNext = false;
 			}
 		}
@@ -550,7 +697,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 			if(codeByte == sentinel.tokenSignal && tokenRegionBegin == InvalidPos){
 				if(recordingToken != TokenState::signaled){
 					recordingToken = TokenState::signaled;
-				}else{
+				} else{
 					recordingToken = TokenState::waiting;
 				}
 
@@ -565,7 +712,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 				if(codeByte == sentinel.tokenBegin){
 					recordingToken = TokenState::signaled;
 					currentToken = &tokens.emplace_back(TokenArgument{static_cast<std::uint32_t>(codes.size())});
-				}else{
+				} else{
 					recordingToken = TokenState::waiting;
 				}
 			}
@@ -608,7 +755,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 
 	if(codes.ends_with(U'\n')){
 		codes.back() = '\0';
-	}else{
+	} else{
 		codes.push_back(U'\0');
 		rows++;
 	}
@@ -636,7 +783,7 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<L
 		if(Func::endLine(context, target)){
 			currentRow++;
 			return true;
-		}else{
+		} else{
 			target->isCompressed = true;
 			return false;
 		}
@@ -659,8 +806,8 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<L
 		}
 
 		if(context.lineRect.width + glyph.metrics.advance.x > target->maximumSize.x){
-			if(code != U'\n')--itr;
-			if(!endline())break;
+			if(code != U'\n') --itr;
+			if(!endline()) break;
 			continue;
 		}
 
@@ -685,9 +832,8 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<L
 		context.penPos.addX(glyph.metrics.advance.x);
 
 		if(code == U'\n' || code == 0){
-			if(!endline())break;
+			if(!endline()) break;
 		}
-
 	}
 
 	Func::endParse(context, target);

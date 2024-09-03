@@ -20,7 +20,6 @@ export namespace ext{
 		mutable std::mutex mtx{};
 
 	public:
-
 		template <Concepts::Invokable<FuncTy> Func>
 		[[nodiscard]] Future push(Func&& task){
 			return this->push(std::packaged_task<FuncTy>(std::forward<Func>(task)));
@@ -75,6 +74,24 @@ export namespace ext{
 
 		explicit operator bool() const noexcept{
 			return !empty();
+		}
+
+		[[nodiscard]] TaskQueue() = default;
+
+		TaskQueue(const TaskQueue& other) = delete;
+
+		TaskQueue(TaskQueue&& other) noexcept{
+			std::scoped_lock lk{other.mtx, mtx};
+			tasks = std::move(other.tasks);
+		}
+
+		TaskQueue& operator=(const TaskQueue& other) = delete;
+
+		TaskQueue& operator=(TaskQueue&& other) noexcept{
+			if(this == &other) return *this;
+			std::scoped_lock lk{other.mtx, mtx};
+			tasks = std::move(other.tasks);
+			return *this;
 		}
 	};
 }

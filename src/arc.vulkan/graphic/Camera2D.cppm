@@ -23,6 +23,8 @@ export namespace Graphic{
 		static constexpr float ShakeMinCorrectionSpeed = 0.1f;
 
 	protected:
+		bool changed{};
+
 		Geom::Matrix3D worldToScreen{};
 		Geom::Matrix3D screenToWorld{};
 
@@ -31,6 +33,8 @@ export namespace Graphic{
 
 		Geom::Vec2 stablePos{};
 		Geom::OrthoRectFloat viewport{};
+
+		Geom::OrthoRectFloat lastViewport{};
 
 		float minScale{std::log(DefMinimumScale)};
 		float maxScale{std::log(DefMaximumScale)};
@@ -135,9 +139,18 @@ export namespace Graphic{
 				scale = targetScale;
 			}
 
-			worldToScreen.setOrthogonal(viewport.getSrcX(), viewport.getSrcY(), viewport.getWidth(), viewport.getHeight());
+			if(viewport != lastViewport){
+				changed = true;
 
-			screenToWorld.set(worldToScreen).inv();
+				worldToScreen.setOrthogonal(viewport.getSrcX(), viewport.getSrcY(), viewport.getWidth(), viewport.getHeight());
+				screenToWorld.set(worldToScreen).inv();
+			}
+
+			lastViewport = viewport;
+		}
+
+		bool checkChanged() noexcept{
+			return std::exchange(changed, false);
 		}
 
 		[[nodiscard]] Geom::Matrix3D& getWorldToScreen() noexcept {

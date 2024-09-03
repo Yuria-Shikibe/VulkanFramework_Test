@@ -33,25 +33,13 @@ namespace Core{
 		ext::json::JsonValue fallbackBundle{};
 		std::locale currentLocale{};
 
-
-		//TODO return optional?
-		[[nodiscard]] const auto& getCategory(const std::string_view category) const{
-			const auto& map = getBundles(&Bundle::currentBundle);
-
-			if(const auto itr = map.find(category); itr != map.end()){
-				if(itr->second.is<ext::json::Object>()) return itr->second.asObject();
-			}
-
-			return map;
-		}
-
 		static ext::json::JsonValue loadFile(const File& file){
 			return ext::json::parse(file.readString());
 		}
 
 		template <std::ranges::range Rng>
 			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-		static std::optional<std::string_view> find(Rng&& dir, const ext::json::Object* last){
+		static std::optional<std::string_view> find(Rng&& dir, const ext::json::Object* last) noexcept{
 			for(const std::string_view& cates : dir){
 				if(const auto itr = last->find(cates); itr != last->end()){
 					if(itr->second.is<ext::json::object>()){
@@ -118,7 +106,7 @@ namespace Core{
 
 		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
 			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-		[[nodiscard]] std::string_view find(Rng&& keyWithConstrains, const std::string_view def = NotFound) const{
+		[[nodiscard]] std::string_view find(Rng&& keyWithConstrains, const std::string_view def = NotFound) const noexcept{
 			auto rng = keyWithConstrains | std::views::transform(spilt) | std::views::join;
 			auto* last = &currentBundle.asObject();
 
@@ -132,7 +120,7 @@ namespace Core{
 			return rst.value_or(def);
 		}
 
-		[[nodiscard]] std::string_view find(const std::string_view key, const std::string_view def) const{
+		[[nodiscard]] std::string_view find(const std::string_view key, const std::string_view def) const noexcept{
 			auto dir = spilt(key);
 			auto* last = &currentBundle.asObject();
 
@@ -146,7 +134,7 @@ namespace Core{
 			return rst.value_or(def);
 		}
 
-		[[nodiscard]] std::string_view find(const std::string_view key) const{
+		[[nodiscard]] std::string_view find(const std::string_view key) const noexcept{
 			return find(key, key);
 		}
 
@@ -155,13 +143,13 @@ namespace Core{
 			return std::vformat(find(key), std::make_format_args(std::forward<T>(args)...));
 		}
 
-		[[nodiscard]] std::string_view operator[](const std::string_view key) const{
+		[[nodiscard]] std::string_view operator[](const std::string_view key) const noexcept{
 			return find(key, key);
 		}
 
 		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
 			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-		[[nodiscard]] std::string_view operator[](Rng&& keys) const{
+		[[nodiscard]] std::string_view operator[](Rng&& keys) const noexcept{
 			return this->find(std::forward<Rng>(keys), NotFound);
 		}
 	};

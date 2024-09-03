@@ -3,8 +3,9 @@ export module ext.circular_array;
 import std;
 
 export namespace ext{
-	//TODO as container adaptor or view
+	//TODO as container adaptor?
 	template <typename T, std::size_t size>
+		requires (std::is_default_constructible_v<T>)
 	struct circular_array : std::array<T, size>{
 		using std::array<T, size>::array;
 
