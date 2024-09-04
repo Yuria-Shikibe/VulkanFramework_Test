@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Buffer.ExclusiveBuffer;
 
 import Core.Vulkan.Memory;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Buffer.CommandBuffer;
 import std;
 
@@ -36,7 +36,7 @@ export namespace Core::Vulkan{
 	/**
 	 * @brief owns the whole memory
 	 */
-	class ExclusiveBuffer : public Wrapper<VkBuffer>{
+	class ExclusiveBuffer : public ext::wrapper<VkBuffer>{
 	public:
 		DeviceMemory memory{};
 
@@ -68,6 +68,14 @@ export namespace Core::Vulkan{
 			vkBindBufferMemory(device, handle, memory, 0);
 		}
 
+		[[nodiscard]] VkDevice getDevice() const{
+			return memory.getDevice();
+		}
+
+		[[nodiscard]] auto size() const noexcept{
+			return memory.size();
+		}
+
 		~ExclusiveBuffer(){
 			if(memory.getDevice())vkDestroyBuffer(memory.getDevice(), handle, nullptr);
 		}
@@ -78,26 +86,29 @@ export namespace Core::Vulkan{
 
 		ExclusiveBuffer& operator=(const ExclusiveBuffer& other) = delete;
 
-		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept{
-			if(this == &other) return *this;
-			if(memory.getDevice())vkDestroyBuffer(memory.getDevice(), handle, nullptr);
-
-			Wrapper::operator =(std::move(other));
-			memory = std::move(other.memory);
-			return *this;
-		}
+		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept = default;
 
 		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize size) const{
 			const VkBufferCopy copyRegion{.size = size};
 			vkCmdCopyBuffer(commandBuffer, handle, dstBuffer, 1, &copyRegion);
 		}
+
 		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer) const{
 			copyBuffer(commandBuffer, dstBuffer, memory.size());
 		}
+
+		[[nodiscard]] VkDeviceAddress getBufferAddress() const{
+			const VkBufferDeviceAddressInfo bufferDeviceAddressInfo{
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.pNext = nullptr,
+				.buffer = handle
+			};
+			return vkGetBufferDeviceAddress(getDevice(), &bufferDeviceAddressInfo);
+		}
 	};
 
-	class BufferView : public Wrapper<VkBufferView>{
-		Dependency<VkDevice> device{};
+	class BufferView : public ext::wrapper<VkBufferView>{
+		ext::dependency<VkDevice> device{};
 		
 	public:
 		BufferView() = default;
@@ -116,7 +127,7 @@ export namespace Core::Vulkan{
 			if(this == &other) return *this;
 			if(device)vkDestroyBufferView(device, handle, nullptr);
 			
-			Wrapper<VkBufferView>::operator =(std::move(other));
+			wrapper<VkBufferView>::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
 		}

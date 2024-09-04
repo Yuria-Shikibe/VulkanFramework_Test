@@ -27,15 +27,13 @@ export namespace Core::Vulkan {
                 auto &filepath = result.filepath;
                 auto &code = result.code;
 
-                const Core::File file{filepath};
-
                 filepath = requesting_source;
-                size_t pos = filepath.rfind('/');
+                Core::File file{filepath};
 
-                if(pos == -1)
-                    pos = filepath.rfind('\\');
+                file = file.getParent().find(requested_source);
 
-                filepath.replace(pos + 1 + filepath.begin(), filepath.end(), requested_source);
+
+                filepath = file.getPath().string();
 
                 // OS::File file{filepath};
                 code = file.readString();
@@ -86,7 +84,7 @@ export namespace Core::Vulkan {
             return bin;
         }
 
-        decltype(auto) compile(const Core::File &file, const char *entry = "main") const {
+        decltype(auto) compile(const Core::File& file, const char* entry = "main") const{
             const auto pStr = file.absolutePath().string();
             const auto code = file.readString();
 
@@ -94,16 +92,16 @@ export namespace Core::Vulkan {
             const std::regex pragma_regex(R"(#pragma\s+shader_stage\((\w+)\))");
             std::smatch matches{};
 
-            if(std::regex_search(code.cbegin(), code.cend(), matches, pragma_regex)) {
-                if(std::ranges::none_of(ValidStages, [str = matches[1].str()](const auto &stage) {
+            if(std::regex_search(code.cbegin(), code.cend(), matches, pragma_regex)){
+                if(std::ranges::none_of(ValidStages, [str = matches[1].str()](const auto& stage){
                     return stage == str;
-                })) {
+                })){
                     throw std::runtime_error("Invalid Shader Stage");
                 }
-            }
-            else {
+            } else{
                 throw std::runtime_error("Ambiguous Shader Stage");
             }
+
 #endif
 
             return compile(code, pStr.c_str(), entry);

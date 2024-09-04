@@ -4,7 +4,7 @@ module;
 
 export module Core.Vulkan.PipelineLayout;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Concepts;
 import std;
 
@@ -17,8 +17,8 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	struct PipelineLayout : public Wrapper<VkPipelineLayout>{
-		Dependency<VkDevice> device{};
+	struct PipelineLayout : public ext::wrapper<VkPipelineLayout>{
+		ext::dependency<VkDevice> device{};
 
 		[[nodiscard]] PipelineLayout() = default;
 

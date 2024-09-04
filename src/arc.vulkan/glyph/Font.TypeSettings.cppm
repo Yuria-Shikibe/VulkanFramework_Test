@@ -770,7 +770,7 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<L
 	FormattableText formattableText{target->text, {}};
 
 	std::unique_lock lk{target->capture};
-	target->elements.reserve(formattableText.rows);
+	target->elements.reserve(formattableText.rows + 16);
 
 	FormattableText::TokenItr lastTokenItr = formattableText.tokens.begin();
 	std::uint32_t currentRow{};

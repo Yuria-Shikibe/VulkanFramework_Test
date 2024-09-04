@@ -16,6 +16,8 @@ import Core.Vulkan.Comp;
 import Core.Vulkan.Image;
 import std;
 
+import Core.Vulkan.EXT;
+
 void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	using namespace Core::Vulkan;
 
@@ -516,9 +518,12 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 			});
 
-			processor.pipelineData.createDescriptorSet(4);
+			processor.pipelineData.createDescriptorBuffers(4);
+
+			// processor.pipelineData.createDescriptorSet(4);
 
 			//0 - horizon
 			processor.pipelineData.addUniformBuffer(sizeof(Gaussian_KernalInfo));
@@ -528,7 +533,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			processor.pipelineData.createPipelineLayout();
 
 			processor.pipelineData.builder = [](PipelineData& pipeline){
-				pipeline.createComputePipeline(Shader::Comp::Gaussian.shaderModule);
+				pipeline.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::Gaussian);
 			};
 
 			processor.pipelineData.resize(size);
@@ -564,13 +569,75 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				//TODO is this necessay??
+				{
+					Util::transitionImageQueueOwnership(
+					   scopedCommand, postProcessor.port.toTransferOwnership.at(0), {
+						   .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+						   .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						   .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+						   .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+						   .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+						   .dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+					   },
+					   postProcessor.context->physicalDevice.queues.graphicsFamily,
+					   postProcessor.context->physicalDevice.queues.computeFamily, {
+						   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						   .baseMipLevel = 0,
+						   .levelCount = 1,
+						   .baseArrayLayer = 0,
+						   .layerCount = 1
+					   });
+				}
+
+				// VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT_KHR|VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR|VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT
+
+				auto bindDesc = [&](std::uint32_t i){
+					postProcessor.pipelineData.descriptorBuffers[i].bindTo(scopedCommand,
+					VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR|VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+					);
+					EXT::cmdSetDescriptorBufferOffsetsEXT(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE, postProcessor.pipelineData.layout,
+						0, 1, Seq::Indices<0>, Seq::Offset<0>);
+
+				};
+
+				bindDesc(0);
+				vkCmdDispatch(scopedCommand, ux, uy, 1);
+
+				{
+					Util::transitionImageQueueOwnership(
+					   scopedCommand, postProcessor.port.toTransferOwnership.at(0), {
+						   .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						   .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+						   .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
+						   .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+						   .srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+						   .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+					   },
+					   postProcessor.context->physicalDevice.queues.computeFamily,
+					   postProcessor.context->physicalDevice.queues.graphicsFamily, {
+						   .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						   .baseMipLevel = 0,
+						   .levelCount = 1,
+						   .baseArrayLayer = 0,
+						   .layerCount = 1
+					   });
+				}
+
+				for(std::size_t i = 0; i < Passes; ++i){
+					bindDesc(1);
+					vkCmdDispatch(scopedCommand, ux, uy, 1);
+
+					bindDesc(2);
+					vkCmdDispatch(scopedCommand, ux, uy, 1);
+				}
+
 				Util::transitionImageQueueOwnership(
-					scopedCommand, postProcessor.port.toTransferOwnership.at(0), {
+					scopedCommand, postProcessor.images.back().getImage(), {
 						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-						.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-						.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-						.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+						.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+						.srcAccessMask = VK_ACCESS_NONE,
+						.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+						.srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 						.dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
 					},
 					postProcessor.context->physicalDevice.queues.graphicsFamily,
@@ -582,17 +649,17 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.layerCount = 1
 					});
 
-				postProcessor.pipelineData.bindDescriptorTo(scopedCommand, 0, VK_PIPELINE_BIND_POINT_COMPUTE);
+				bindDesc(3);
 				vkCmdDispatch(scopedCommand, ux, uy, 1);
 
 				Util::transitionImageQueueOwnership(
-					scopedCommand, postProcessor.port.toTransferOwnership.at(0), {
-						.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-						.srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
-						.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+					scopedCommand, postProcessor.images.back().getImage(), {
+						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+						.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
+						.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
 						.srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-						.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+						.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
 					},
 					postProcessor.context->physicalDevice.queues.computeFamily,
 					postProcessor.context->physicalDevice.queues.graphicsFamily, {
@@ -602,35 +669,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.baseArrayLayer = 0,
 						.layerCount = 1
 					});
-
-				for(std::size_t i = 0; i < Passes; ++i){
-					postProcessor.pipelineData.bindDescriptorTo(scopedCommand, 1, VK_PIPELINE_BIND_POINT_COMPUTE);
-					vkCmdDispatch(scopedCommand, ux, uy, 1);
-
-					postProcessor.pipelineData.bindDescriptorTo(scopedCommand, 2, VK_PIPELINE_BIND_POINT_COMPUTE);
-					vkCmdDispatch(scopedCommand, ux, uy, 1);
-				}
-
-				Util::transitionImageLayout(scopedCommand, postProcessor.images.back().getImage(), {
-					                            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					                            .newLayout = VK_IMAGE_LAYOUT_GENERAL,
-					                            .srcAccessMask = VK_ACCESS_NONE,
-					                            .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-					                            .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-					                            .dstStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-				                            }, VK_IMAGE_ASPECT_COLOR_BIT);
-
-				postProcessor.pipelineData.bindDescriptorTo(scopedCommand, 3, VK_PIPELINE_BIND_POINT_COMPUTE);
-				vkCmdDispatch(scopedCommand, ux, uy, 1);
-
-				Util::transitionImageLayout(scopedCommand, postProcessor.images.back().getImage(), {
-					                            .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					                            .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					                            .srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-					                            .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-					                            .srcStageMask = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-					                            .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-				                            }, VK_IMAGE_ASPECT_COLOR_BIT);
 			};
 
 			return processor;

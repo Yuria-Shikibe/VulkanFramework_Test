@@ -66,20 +66,17 @@ export namespace Core::Vulkan{
 	};
 
 	class PersistentTransferBuffer : public ExclusiveBuffer{
+	protected:
 		void* mappedData{};
 
 	public:
-		[[nodiscard]] void* getMappedData() const{ return mappedData; }
-
-		[[nodiscard]] auto size() const noexcept{
-			return memory.size();
-		}
+		[[nodiscard]] std::byte* getMappedData() const{ return static_cast<std::byte*>(mappedData); }
 
 		[[nodiscard]] PersistentTransferBuffer() = default;
 
 		[[nodiscard]] PersistentTransferBuffer(
 			VkPhysicalDevice physicalDevice, VkDevice device,
-			VkDeviceSize size, VkBufferUsageFlags usage) :
+			const VkDeviceSize size, const VkBufferUsageFlags usage) :
 			ExclusiveBuffer{
 				physicalDevice, device, size,
 				usage,
@@ -96,7 +93,7 @@ export namespace Core::Vulkan{
 		}
 
 		void unmap(){
-			if(!mappedData)return;
+			if(!mappedData)return; //TODO throw?
 			memory.unmap();
 			mappedData = nullptr;
 		}

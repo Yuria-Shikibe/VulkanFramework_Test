@@ -4,12 +4,12 @@ module;
 
 export module Core.Vulkan.Semaphore;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import std;
 
 export namespace Core::Vulkan{
-	class Semaphore : public Wrapper<VkSemaphore>{
-		Dependency<VkDevice> device{};
+	class Semaphore : public ext::wrapper<VkSemaphore>{
+		ext::dependency<VkDevice> device{};
 
 	public:
 		[[nodiscard]] Semaphore() = default;
@@ -37,7 +37,7 @@ export namespace Core::Vulkan{
 		Semaphore& operator=(Semaphore&& other) noexcept{
 			if(this == &other) return *this;
 			if(device)vkDestroySemaphore(device, handle, nullptr);
-			Wrapper::operator =(std::move(other));
+			wrapper::operator =(std::move(other));
 			device = std::move(other.device);
 			return *this;
 		}

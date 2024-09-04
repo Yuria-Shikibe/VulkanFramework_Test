@@ -4,14 +4,13 @@ module;
 
 export module Core.Vulkan.Shader;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.File;
 import std;
 
 export namespace Core::Vulkan{
-	struct ShaderModule{
-		DeviceDependency device{};
-		VkShaderModule shaderModule{};
+	struct ShaderModule : ext::wrapper<VkShaderModule>{
+		ext::dependency<VkDevice> device{};
 		VkShaderStageFlagBits declStage{};
 
 		static constexpr std::array ShaderType{
@@ -59,7 +58,7 @@ export namespace Core::Vulkan{
 				.pNext = nullptr,
 				.flags = 0,
 				.stage = stage,
-				.module = shaderModule,
+				.module = handle,
 				.pName = entry.data(),
 				.pSpecializationInfo = specializationInfo
 			};
@@ -68,7 +67,7 @@ export namespace Core::Vulkan{
 		}
 
 		void load(VkDevice device, const Core::File& path){
-			if(shaderModule && this->device)vkDestroyShaderModule(device, shaderModule, nullptr);
+			if(handle && this->device)vkDestroyShaderModule(device, handle, nullptr);
 
 			this->device = device;
 			createShaderModule(path);
@@ -76,7 +75,7 @@ export namespace Core::Vulkan{
 		}
 
 		~ShaderModule(){
-			if(shaderModule && device)vkDestroyShaderModule(device, shaderModule, nullptr);
+			if(device)vkDestroyShaderModule(device, handle, nullptr);
 		}
 
 		ShaderModule(const ShaderModule& other) = delete;
@@ -85,14 +84,7 @@ export namespace Core::Vulkan{
 
 		ShaderModule& operator=(const ShaderModule& other) = delete;
 
-		ShaderModule& operator=(ShaderModule&& other) noexcept{
-			if(this == &other) return *this;
-			if(shaderModule && device)vkDestroyShaderModule(device, shaderModule, nullptr);
-			device = std::move(other.device);
-			shaderModule = other.shaderModule;
-			declStage = other.declStage;
-			return *this;
-		}
+		ShaderModule& operator=(ShaderModule&& other) noexcept = default;
 
 	private:
 		void declShaderStage(const Core::File& path){
@@ -112,7 +104,7 @@ export namespace Core::Vulkan{
 			createInfo.codeSize = std::ranges::size(code) * sizeof(std::ranges::range_value_t<Rng>);
 			createInfo.pCode = reinterpret_cast<const std::uint32_t*>(std::ranges::data(code));
 
-			if(vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS){
+			if(vkCreateShaderModule(device, &createInfo, nullptr, &handle) != VK_SUCCESS){
 				throw std::runtime_error("Failed to create shader module!");
 			}
 		}

@@ -4,14 +4,14 @@ module;
 
 export module Core.Vulkan.DescriptorSet;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Concepts;
 
 import std;
 import ext.RuntimeException;
 
 export namespace Core::Vulkan{
-	class DescriptorSet : public Wrapper<VkDescriptorSet>{
+	class DescriptorSet : public ext::wrapper<VkDescriptorSet>{
 
 	};
 
@@ -28,6 +28,10 @@ export namespace Core::Vulkan{
 		std::set<VkDescriptorSetLayoutBinding, VkDescriptorSetLayoutBinding_Mapper> bindings{};
 
 	public:
+		[[nodiscard]] std::uint32_t size() const noexcept{
+			return bindings.size();
+		}
+
 		void push(const VkDescriptorSetLayoutBinding& binding){
 			const auto [rst, success] = bindings.insert(binding);
 
@@ -55,8 +59,8 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	class DescriptorSetLayout : public Wrapper<VkDescriptorSetLayout>{
-		Dependency<VkDevice> device{};
+	class DescriptorSetLayout : public ext::wrapper<VkDescriptorSetLayout>{
+		ext::dependency<VkDevice> device{};
 
 	public:
 		DescriptorSetLayoutBuilder builder{};
@@ -89,6 +93,10 @@ export namespace Core::Vulkan{
 			bindingFlags.push_back(flags);
 		}
 
+		[[nodiscard]] std::uint32_t size() const noexcept{
+			return builder.size();
+		}
+
 	private:
 		void create(){
 			const auto bindings = builder.exportBindings();
@@ -111,10 +119,10 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	class DescriptorSetPool : public Wrapper<VkDescriptorPool>{
+	class DescriptorSetPool : public ext::wrapper<VkDescriptorPool>{
 	public:
-		Dependency<VkDevice> device{};
-		Dependency<VkDescriptorSetLayout> layout{};
+		ext::dependency<VkDevice> device{};
+		ext::dependency<VkDescriptorSetLayout> layout{};
 
 		[[nodiscard]] DescriptorSetPool() = default;
 
@@ -170,7 +178,7 @@ export namespace Core::Vulkan{
 					.pSetLayouts = layout.asData()
 				};
 
-			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.operator->()) != VK_SUCCESS) {
+			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.as_data()) != VK_SUCCESS) {
 				throw std::runtime_error("Failed to allocate descriptor sets!");
 			}
 
@@ -211,7 +219,7 @@ export namespace Core::Vulkan{
 			.pTexelBufferView = nullptr
 		};
 
-		Dependency<VkDevice> device{};
+		ext::dependency<VkDevice> device{};
 		DescriptorSet& descriptorSets;
 		std::vector<VkWriteDescriptorSet> descriptorWrites{};
 

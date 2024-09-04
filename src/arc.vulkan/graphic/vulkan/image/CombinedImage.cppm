@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.CombinedImage;
 
 import Core.Vulkan.Image;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 
 import std;
 import Geom.Vector2D;
@@ -17,8 +17,8 @@ export namespace Core::Vulkan{
 		Image image{};
 		ImageView defaultView{};
 
-		Dependency<VkPhysicalDevice> physicalDevice{};
-		Dependency<VkDevice> device{};
+		ext::dependency<VkPhysicalDevice> physicalDevice{};
+		ext::dependency<VkDevice> device{};
 
 		std::uint32_t layers{1};
 

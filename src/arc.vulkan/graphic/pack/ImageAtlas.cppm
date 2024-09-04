@@ -6,7 +6,7 @@ export module Graphic.ImageAtlas;
 
 export import Core.Vulkan.Texture;
 import Core.Vulkan.Context;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 import Core.Vulkan.CommandPool;
@@ -34,7 +34,7 @@ namespace Graphic{
 		Core::Vulkan::Texture texture{};
 
 		struct AllocatedViewRegion : ImageViewRegion{
-			Core::Vulkan::Dependency<SubpageData*> srcAllocator{};
+			ext::dependency<SubpageData*> srcAllocator{};
 			Geom::OrthoRectUInt region{};
 
 			[[nodiscard]] AllocatedViewRegion() = default;
@@ -277,6 +277,19 @@ namespace Graphic{
 			return nullptr;
 		}
 
+		/**
+		 * @param name in format of "<category>.<name>"
+		 */
+		AllocatedImageViewRegion& at(const std::string_view name){
+			auto [category, localName] = splitKey(name);
+			if(const auto page = findPage(category)){
+				return *page->find(localName);
+			}
+
+			std::println(std::cerr, "TextureRegion Not Found: {}", name);
+			throw std::invalid_argument("Undefined Region Name");
+		}
+
 		AllocatedImageViewRegion* registerNamedImageViewRegion(const std::string_view name, AllocatedImageViewRegion&& region){
 			auto [category, localName] = splitKey(name);
 
@@ -287,15 +300,12 @@ namespace Graphic{
 			return nullptr;
 		}
 
-		static std::pair<std::string_view, std::string_view> splitKey(std::string_view name){
-			if(const auto pos = name.find('.'); pos == std::string_view::npos){
-				const std::string_view category = name.substr(0, pos);
-				const std::string_view localName = name.substr(pos + 1);
+		static std::pair<std::string_view, std::string_view> splitKey(const std::string_view name){
+			const auto pos = name.find('.');
+			const std::string_view category = name.substr(0, pos);
+			const std::string_view localName = name.substr(pos + 1);
 
-				return {category, localName};
-			}
-
-			return {"", name};
+			return {category, localName};
 		}
 	};
 }

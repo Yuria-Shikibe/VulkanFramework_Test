@@ -2,7 +2,7 @@
 // Created by Matrix on 2024/8/28.
 //
 
-export module Graphic.Draw.Context;
+export module Graphic.Draw.Func;
 
 export import Graphic.Color;
 export import Geom.Vector2D;
@@ -10,7 +10,7 @@ export import Geom.Rect_Orthogonal;
 export import Geom.Transform;
 export import Graphic.ImageRegion;
 
-export import Core.Vulkan.Vertex;
+export import Graphic.Draw.Interface;
 
 import ext.MetaProgramming;
 import std;
@@ -18,133 +18,25 @@ import ext.Concepts;
 import Math;
 
 export namespace Graphic::Draw{
+	constexpr float CircleVertPrecision{8};
 
-	template <typename M, typename Vertex>
-	concept VertModifier = (std::same_as<std::decay_t<M>, std::identity> || std::regular_invocable<Vertex>);
+	constexpr std::uint32_t getCircleVertices(const float radius){
+		return Math::max(Math::ceil(radius * Math::PI / CircleVertPrecision), 12);
+	}
 
-	template <typename T, typename ...Args>
-		requires (std::is_default_constructible_v<T> && std::conjunction_v<std::is_trivially_copy_assignable<Args>...>)
-	struct VertexGenerator{
-		std::tuple<Args T::*...> projections{};
-
-		template <typename ...MptrArgs>
-		explicit constexpr VertexGenerator(MptrArgs ...args) noexcept : projections{args...}{}
-
-		template <std::size_t I, typename Arg>
-		void set(T& t, const Arg& arg) const{
-			t.*std::get<I>(projections) = arg;
-		}
-
-		T& gen(void* place, const Args& ...args) const {
-			new (place) T{};
-
-			T& t = *static_cast<T*>(place);
-
-			[&]<std::size_t ...I>(std::index_sequence<I...>){
-				(this->template set<I>(t, args), ...);
-			}(std::index_sequence_for<Args...>());
-
-			return t;
-		}
-
-		template <VertModifier<T&> ModifyCallable = std::identity>
-		void genWith(void* place, ModifyCallable func, const Args& ...args) const{
-			std::invoke(func, this->gen(place, args...));
-		}
-	};
-
-	template <typename ...Args>
-	VertexGenerator(Args...) ->
-		VertexGenerator<typename ext::GetMemberPtrInfo<std::tuple_element_t<0, std::tuple<Args...>>>::ClassType, typename ext::GetMemberPtrInfo<Args>::ValueType...>;
-
-	template <typename Vertex>
-	struct ModifierBase : std::type_identity<Vertex>{};
-
-	struct DepthCreator : ModifierBase<Core::Vulkan::Vertex_World>{
-		float depth{};
-
-		void operator()(type& v) const{
-			v.depth = depth;
-		}
-	};
-
-	static_assert(VertModifier<std::identity, void>);
-
-	template <typename T>
-	struct SeqGenerator{
-		T* t{};
-
-		[[nodiscard]] SeqGenerator() = default;
-
-		[[nodiscard]] explicit SeqGenerator(void* p) : t{static_cast<T*>(p)} {}
-
-		template <typename ...Args, VertModifier<T&> ModifyCallable = std::identity>
-		void push(const VertexGenerator<T, std::decay_t<Args>...>& Generator, ModifyCallable&& modifier, const Args&... args){
-			Generator.template genWith<ModifyCallable>(t, modifier, args...);
-			++t;
-		}
-	};
-
-	template <typename T>
-	struct DefGenerator{
-		static constexpr int value{[]{
-			// ReSharper disable once CppStaticAssertFailure
-			static_assert(false, "Invalid Vertex Type");
-		}()};
-	};
-
-	template <>
-	struct DefGenerator<Core::Vulkan::Vertex_UI>{
-		static constexpr VertexGenerator value{
-			&Core::Vulkan::Vertex_UI::position,
-			&Core::Vulkan::Vertex_UI::textureParam,
-			&Core::Vulkan::Vertex_UI::color,
-			&Core::Vulkan::Vertex_UI::texCoord,
-		};;
-	};
-
-	template <>
-	struct DefGenerator<Core::Vulkan::Vertex_World>{
-		static constexpr VertexGenerator value{
-			&Core::Vulkan::Vertex_World::position,
-			&Core::Vulkan::Vertex_World::textureParam,
-			&Core::Vulkan::Vertex_World::color,
-			&Core::Vulkan::Vertex_World::texCoord,
-		};
-	};
-
-
-	//using Vertex = Core::Vulkan::Vertex_World;
-	//using Modifier = std::identity;
-
-
-	template <typename M = std::identity>
-	struct DrawParam{
-		void* dataPtr{};
-		M modifier{};
-		Core::Vulkan::TextureIndex index{};
-		const UVData* uv{};
-	};
-
-	template <typename M>
-	concept AutoParam = requires(M& m){
-		requires Concepts::SpecDeriveOf<M, DrawParam>;
-		{ ++m } -> std::same_as<M&>;
-	};
-
-
+	// using Vertex = Core::Vulkan::Vertex_World;
 	template <typename Vertex>
 	struct Drawer{
 		template <VertModifier<Vertex&> M>
-		static void draw(
+		static void fill(
 			const DrawParam<M>& param,
 			const Geom::Vec2& v00, const Geom::Vec2& v10, const Geom::Vec2& v11, const Geom::Vec2& v01,
 			const Color& c00, const Color& c10, const Color& c11, const Color& c01){
 			SeqGenerator<Vertex> generator{param.dataPtr};
-			generator.push(DefGenerator<Vertex>::value, param.modifier, v00, param.index, c00, param.uv->v01);
-			generator.push(DefGenerator<Vertex>::value, param.modifier, v10, param.index, c10, param.uv->v11);
-			generator.push(DefGenerator<Vertex>::value, param.modifier, v11, param.index, c11, param.uv->v10);
-			generator.push(DefGenerator<Vertex>::value, param.modifier, v01, param.index, c01, param.uv->v00);
+			generator(DefGenerator<Vertex>::value, param.modifier, v00, param.index, c00, param.uv->v01);
+			generator(DefGenerator<Vertex>::value, param.modifier, v10, param.index, c10, param.uv->v11);
+			generator(DefGenerator<Vertex>::value, param.modifier, v11, param.index, c11, param.uv->v10);
+			generator(DefGenerator<Vertex>::value, param.modifier, v01, param.index, c01, param.uv->v00);
 		}
 
 		template <VertModifier<Vertex&> M>
@@ -163,12 +55,12 @@ export namespace Graphic::Draw{
 
 			const float w2 = -sin * size.y * 0.5f;
 			const float h2 = cos * size.y * 0.5f;
-			Drawer::draw(param,
-				center.vec + Geom::Vec2{- w1 - w2, - h1 - h2},
-				center.vec + Geom::Vec2{+ w1 - w2, + h1 - h2},
-				center.vec + Geom::Vec2{+ w1 + w2, + h1 + h2},
-				center.vec + Geom::Vec2{- w1 + w2, - h1 + h2},
-				color, color, color, color
+			Drawer::fill(param,
+			             center.vec + Geom::Vec2{-w1 - w2, -h1 - h2},
+			             center.vec + Geom::Vec2{+w1 - w2, +h1 - h2},
+			             center.vec + Geom::Vec2{+w1 + w2, +h1 + h2},
+			             center.vec + Geom::Vec2{-w1 + w2, -h1 + h2},
+			             color, color, color, color
 			);
 		}
 
@@ -177,56 +69,241 @@ export namespace Graphic::Draw{
 			const DrawParam<M>& param,
 			const Geom::OrthoRectFloat& bound,
 			const Color& color
-			){
-			Drawer::draw(param,
-				bound.vert_00(),
-				bound.vert_10(),
-				bound.vert_11(),
-				bound.vert_01(),
-				color, color, color, color
+		){
+			Drawer::fill(param,
+			             bound.vert_00(),
+			             bound.vert_10(),
+			             bound.vert_11(),
+			             bound.vert_01(),
+			             color, color, color, color
 			);
 		}
 
 		struct Line{
+			//TODO ortho lines
 			template <VertModifier<Vertex&> M>
 			static void line(
-			const DrawParam<M>& param,
-			const float stroke,
-			const Geom::Vec2 src, const Geom::Vec2 dst,
-			const Color& c1, const Color& c2, const bool cap = true){
+				const DrawParam<M>& param,
+				const float stroke,
+				const Geom::Vec2 src, const Geom::Vec2 dst,
+				const Color& c1, const Color& c2, const bool cap = true){
 				const float h_stroke = stroke / 2.0f;
 				Geom::Vec2 diff = dst - src;
-					
+
 				const float len = diff.length();
 				diff *= h_stroke / len;
 
 				if(cap){
-					Drawer::draw(param,
-						src + Geom::Vec2{- diff.x - diff.y, - diff.y + diff.x},
-						src + Geom::Vec2{- diff.x + diff.y, - diff.y - diff.x},
-						dst + Geom::Vec2{+ diff.x + diff.y, + diff.y - diff.x},
-						dst + Geom::Vec2{+ diff.x - diff.y, + diff.y + diff.x},
-						c1, c1, c2, c2
+					Drawer::fill(param,
+					             src + Geom::Vec2{-diff.x - diff.y, -diff.y + diff.x},
+					             src + Geom::Vec2{-diff.x + diff.y, -diff.y - diff.x},
+					             dst + Geom::Vec2{+diff.x + diff.y, +diff.y - diff.x},
+					             dst + Geom::Vec2{+diff.x - diff.y, +diff.y + diff.x},
+					             c1, c1, c2, c2
 					);
 				} else{
-					Drawer::draw(param,
-						src + Geom::Vec2{- diff.y, + diff.x},
-						src + Geom::Vec2{+ diff.y, - diff.x},
-						dst + Geom::Vec2{+ diff.y, - diff.x},
-						dst + Geom::Vec2{- diff.y, + diff.x},
-						c1, c1, c2, c2
+					Drawer::fill(param,
+					             src + Geom::Vec2{-diff.y, +diff.x},
+					             src + Geom::Vec2{+diff.y, -diff.x},
+					             dst + Geom::Vec2{+diff.y, -diff.x},
+					             dst + Geom::Vec2{-diff.y, +diff.x},
+					             c1, c1, c2, c2
 					);
 				}
 			}
+
+			template <VertModifier<Vertex&> M>
+			static void line(
+				const DrawParam<M>& param,
+				const float stroke,
+				const Geom::Vec2 src, const Geom::Vec2 dst,
+				const Color& c, const bool cap = true){
+				Line::line(param, stroke, src, dst, c, cap);
+			}
+
+			template <VertModifier<Vertex&> M>
+
+			static void lineAngleCenter(const DrawParam<M>& param,
+			                            const float stroke, const Geom::Transform trans, const float length, const Color& c,
+			                            const bool cap = true){
+				Geom::Vec2 vec{};
+
+				vec.setPolar(trans.rot, length * 0.5f);
+
+				Line::line(param, stroke, trans.vec + vec, trans.vec - vec, c, c, cap);
+			}
+
+			template <VertModifier<Vertex&> M>
+
+			static void lineAngle(const DrawParam<M>& param,
+			                      const float stroke, const Geom::Transform trans, const float length, const Color& c,
+			                      const bool cap = true){
+				Geom::Vec2 vec{};
+				vec.setPolar(trans.rot, length);
+
+				Line::line(param, stroke, trans.vec, trans.vec + vec, c, c, cap);
+			}
+
+
 			template <AutoParam M>
 			static void rectOrtho(
-			M& param,
-			const float stroke,
-			const Geom::OrthoRectFloat& rect, const Color& color, const bool cap = true){
+				M& param,
+				const float stroke,
+				const Geom::OrthoRectFloat& rect, const Color& color, const bool cap = true){
 				Line::line(++param, stroke, rect.vert_00(), rect.vert_01(), color, color, cap);
 				Line::line(++param, stroke, rect.vert_01(), rect.vert_11(), color, color, cap);
 				Line::line(++param, stroke, rect.vert_11(), rect.vert_10(), color, color, cap);
 				Line::line(++param, stroke, rect.vert_10(), rect.vert_00(), color, color, cap);
+			}
+
+			template <AutoParam M>
+			static void square(
+				M& param,
+				const float stroke,
+				Geom::Transform trans,
+				const float radius,
+				const Color& color){
+				trans.rot += 45.000f;
+				const float dst = stroke / Math::SQRT2;
+
+				Geom::Vec2 vec2_0{}, vec2_1{}, vec2_2{}, vec2_3{}, vec2_4{};
+
+				vec2_0.setPolar(trans.rot, 1);
+
+				vec2_1.set(vec2_0);
+				vec2_2.set(vec2_0);
+
+				vec2_1.scl(radius - dst);
+				vec2_2.scl(radius + dst);
+
+				[&]<std::size_t... I>(std::index_sequence<I...>){
+					vec2_0.rotateRT();
+
+					vec2_3.set(vec2_0).scl(radius - dst);
+					vec2_4.set(vec2_0).scl(radius + dst);
+
+					Drawer::fill(++param, vec2_1 + trans.vec, vec2_2 + trans.vec, vec2_4 + trans.vec, vec2_3 + trans.vec,
+					             color, color, color, color
+					);
+
+					vec2_1.set(vec2_3);
+					vec2_2.set(vec2_4);
+				}(std::make_index_sequence<4>{});
+			}
+
+			template <AutoParam M>
+			static void poly(
+				M& param,
+				const float stroke,
+				Geom::Transform trans, const std::uint32_t sides, const float radius, const Color& color){
+				const float space = Math::DEG_FULL / static_cast<float>(sides);
+				const float h_step = stroke / 2.0f / Math::cosDeg(space / 2.0f);
+				const float r1 = radius - h_step;
+				const float r2 = radius + h_step;
+
+				for(std::uint32_t i = 0; i < sides; i++){
+					const float a = space * static_cast<float>(i) + trans.rot;
+					const float cos1 = Math::cosDeg(a);
+					const float sin1 = Math::sinDeg(a);
+					const float cos2 = Math::cosDeg(a + space);
+					const float sin2 = Math::sinDeg(a + space);
+					Drawer::fill(
+						++param,
+						Geom::Vec2{trans.vec.x + r1 * cos1, trans.vec.y + r1 * sin1},
+						Geom::Vec2{trans.vec.x + r1 * cos2, trans.vec.y + r1 * sin2},
+						Geom::Vec2{trans.vec.x + r2 * cos2, trans.vec.y + r2 * sin2},
+						Geom::Vec2{trans.vec.x + r2 * cos1, trans.vec.y + r2 * sin1},
+						color, color, color, color
+					);
+				}
+			}
+
+
+			template <AutoParam M, std::ranges::random_access_range Rng = std::array<Color, 1>>
+				requires (std::ranges::sized_range<Rng> && std::convertible_to<const Color&, std::ranges::range_value_t<Rng>>)
+			static void poly(
+				M& param,
+				const float stroke,
+				Geom::Transform trans,
+				const int sides,
+				const float radius,
+				const float ratio,
+				const Rng& colorGroup
+			){
+#if DEBUG_CHECK
+				if(std::ranges::empty(colorGroup)){
+					throw std::invalid_argument("Color group is Empty.");
+				}
+#endif
+				const auto fSides = static_cast<float>(sides);
+
+				const float space = Math::DEG_FULL / fSides;
+				const float h_step = stroke / 2.0f / Math::cosDeg(space / 2.0f);
+				const float r1 = radius - h_step;
+				const float r2 = radius + h_step;
+
+				float currentRatio;
+
+				float currentAng = trans.rot;
+				float sin1 = Math::sinDeg(currentAng);
+				float cos1 = Math::cosDeg(currentAng);
+				float sin2, cos2;
+
+				float progress = 0;
+				Color lerpColor1 = colorGroup[0];
+				Color lerpColor2 = colorGroup[std::ranges::size(colorGroup) - 1];
+
+				for(; progress < fSides * ratio - 1.0f; ++progress){
+					// NOLINT(*-flp30-c)
+					// NOLINT(cert-flp30-c)
+					currentAng = trans.rot + (progress + 1.0f) * space;
+
+					sin2 = Math::sinDeg(currentAng);
+					cos2 = Math::cosDeg(currentAng);
+
+					currentRatio = progress / fSides;
+
+					lerpColor2.lerp(currentRatio, colorGroup);
+
+					Drawer::fill(++param,
+					             cos1 * r1 + trans.vec.x, sin1 * r1 + trans.vec.y,
+					             cos1 * r2 + trans.vec.x, sin1 * r2 + trans.vec.y,
+					             cos2 * r2 + trans.vec.x, sin2 * r2 + trans.vec.y,
+					             cos2 * r1 + trans.vec.x, sin2 * r1 + trans.vec.y,
+					             lerpColor1, lerpColor1, lerpColor2, lerpColor2
+					);
+
+					lerpColor1.set(lerpColor2);
+
+					sin1 = sin2;
+					cos1 = cos2;
+				}
+
+				currentRatio = ratio;
+				const float remainRatio = currentRatio * fSides - progress;
+
+				currentAng = trans.rot + (progress + 1.0f) * space;
+
+				sin2 = Math::lerp(sin1, Math::sinDeg(currentAng), remainRatio);
+				cos2 = Math::lerp(cos1, Math::cosDeg(currentAng), remainRatio);
+
+				lerpColor2.lerp<true>(progress / fSides, colorGroup);
+				lerpColor2.lerp<true>(lerpColor1, 1.0f - remainRatio);
+
+				Drawer::fill(++param,
+				             cos1 * r1 + trans.vec.x, sin1 * r1 + trans.vec.y,
+				             cos1 * r2 + trans.vec.x, sin1 * r2 + trans.vec.y,
+				             cos2 * r2 + trans.vec.x, sin2 * r2 + trans.vec.y,
+				             cos2 * r1 + trans.vec.x, sin2 * r1 + trans.vec.y,
+				             lerpColor1, lerpColor1, lerpColor2, lerpColor2
+				);
+			}
+
+			template <AutoParam M>
+			static void circle(M& param,
+			                   const float stroke,
+			                   Geom::Vec2 pos, const float radius, const Color& color){
+				Line::poly(param, stroke, {pos, 0}, getCircleVertices(radius), radius, color);
 			}
 		};
 	};

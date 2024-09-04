@@ -78,7 +78,7 @@ namespace Font{
 
 	export template <std::floating_point T = float>
 	constexpr T normalizeLen(const FT_Pos pos) noexcept {
-		return static_cast<T>(pos) / static_cast<T>(64.);
+		return static_cast<T>(pos) / static_cast<T>(64.); // NOLINT(*-narrowing-conversions)
 	}
 
 	export struct GlyphMetrics{
@@ -154,8 +154,8 @@ namespace Font{
 	};
 
 	export constexpr auto ASCII_CHARS = []() constexpr {
-		constexpr std::size_t Size = '~' - ' ';
-		const auto targetChars = std::ranges::views::iota(' ' + 1, '~' + 1) | std::ranges::to<std::vector<CharCode>>();
+		constexpr std::size_t Size = '~' - ' ' + 1;
+		const auto targetChars = std::ranges::views::iota(' ', '~' + 1) | std::ranges::to<std::vector<CharCode>>();
 		std::array<CharCode, Size> charCodes{};
 
 		for(auto [idx, charCode] : targetChars | std::views::enumerate){
@@ -243,7 +243,8 @@ namespace Font{
 		void free();
 	};
 
-	export struct Stroker{
+	//TODO support stroker
+	struct Stroker{
 		FT_Stroker stroker{};
 
 		[[nodiscard]] Stroker(){
@@ -256,20 +257,20 @@ namespace Font{
 
 	};
 
-	export struct RawGlyph{
+	export struct BitmapGlyph{
 		CharCode code{};
 		Graphic::Pixmap bitmap{};
 		FT_Glyph_Metrics metrics{};
 
-		[[nodiscard]] RawGlyph() = default;
+		[[nodiscard]] BitmapGlyph() = default;
 
-		[[nodiscard]] explicit RawGlyph(const CharCode code, FT_GlyphSlot glyphSlot) :
+		[[nodiscard]] explicit BitmapGlyph(const CharCode code, FT_GlyphSlot glyphSlot) :
 			code{code},
 			bitmap{toPixmap(glyphSlot->bitmap)},
 			metrics{glyphSlot->metrics}{}
 
 
-		[[nodiscard]] explicit RawGlyph(const CharCode code, const FT_Glyph_Metrics& metrics, Geom::Vec2 scale) :
+		[[nodiscard]] explicit BitmapGlyph(const CharCode code, const FT_Glyph_Metrics& metrics, Geom::Vec2 scale) :
 			code{code},
 			metrics{metrics}{
 			this->metrics.width *= scale.x;
@@ -289,7 +290,7 @@ namespace Font{
 		FontFace_Internal face{};
 
 		//OPTM flat it?
-		std::unordered_map<CharCode, std::unordered_map<GlyphSizeType, RawGlyph>> glyphs{};
+		std::unordered_map<CharCode, std::unordered_map<GlyphSizeType, BitmapGlyph>> glyphs{};
 
 		FontFaceStorage* fallback{};
 		ext::TransferAdaptor<std::shared_mutex> readMutex{};
@@ -337,7 +338,7 @@ namespace Font{
 
 				if(const auto itr = emptyFontGlyphGenerators.find(code); itr != emptyFontGlyphGenerators.end()){
 					if(auto rst = face.loadAndGet(itr->second.referenceCode)){
-						return glyphs[code].insert_or_assign(size, RawGlyph{code, rst.value()->metrics, itr->second.scale}).first->second;
+						return glyphs[code].insert_or_assign(size, BitmapGlyph{code, rst.value()->metrics, itr->second.scale}).first->second;
 					}else{
 						error = rst.error();
 					}
@@ -345,7 +346,7 @@ namespace Font{
 					if(auto rst = face.loadAndGet(code)){
 						//TODO better render process
 						FT_Render_Glyph(rst.value(), FT_RENDER_MODE_NORMAL);
-						return glyphs[code].insert_or_assign(size, RawGlyph{code, rst.value()}).first->second;
+						return glyphs[code].insert_or_assign(size, BitmapGlyph{code, rst.value()}).first->second;
 					}else{
 						error = rst.error();
 					}
@@ -384,9 +385,8 @@ namespace Font{
 	};
 }
 
-
-template <>
-struct std::hash<Font::GlyphKey>{
+export template <>
+struct std::hash<Font::GlyphKey>{ // NOLINT(*-dcl58-cpp)
 	constexpr std::size_t operator()(const Font::GlyphKey& key) const noexcept{
 		return std::bit_cast<std::size_t>(key);
 	}

@@ -39,6 +39,9 @@ namespace Core::Vulkan{
 			}
 
 
+			constexpr explicit(false) operator const T&() const noexcept{
+				return val;
+			}
 
 			template <typename A>
 				requires (std::same_as<T, std::decay_t<A>>)

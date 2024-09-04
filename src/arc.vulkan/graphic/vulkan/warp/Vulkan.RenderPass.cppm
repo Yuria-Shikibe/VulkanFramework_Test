@@ -4,14 +4,14 @@ module;
 
 export module Core.Vulkan.RenderPass;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import std;
 
 export namespace Core::Vulkan{
 
-	class RenderPass : public Wrapper<VkRenderPass>{
+	class RenderPass : public ext::wrapper<VkRenderPass>{
 	public:
-		Dependency<VkDevice> device{};
+		ext::dependency<VkDevice> device{};
 
 		std::vector<VkAttachmentDescription> attachmentSockets{};
 
@@ -165,7 +165,7 @@ export namespace Core::Vulkan{
 			: device{device}{}
 
 		[[nodiscard]] RenderPass(VkRenderPass_T* handler, VkDevice device)
-			: Wrapper{handler},
+			: wrapper{handler},
 			  device{device}{}
 
 		~RenderPass(){

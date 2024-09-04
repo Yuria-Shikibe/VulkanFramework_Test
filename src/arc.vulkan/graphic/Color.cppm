@@ -107,12 +107,16 @@ export namespace Graphic{
 
 
 	    static auto stringToRgba(const std::string_view hexStr){
-	    	std::array<std::uint8_t, 4> rgba{};
-	    	for (const auto& [index, v1] : hexStr | std::views::slide(2) | std::views::stride(2) | std::views::take(4) | std::views::enumerate){
-	    		std::from_chars(v1.data(), v1.data() + v1.size(), rgba[index], 16);
-	    	}
+		    std::array<std::uint8_t, 4> rgba{};
+		    for(const auto& [index, v1] : hexStr
+		        | std::views::slide(2)
+		        | std::views::stride(2)
+		        | std::views::take(4)
+		        | std::views::enumerate){
+			    std::from_chars(v1.data(), v1.data() + v1.size(), rgba[index], 16);
+		    }
 
-	    	return rgba;
+		    return rgba;
 	    }
 
 	    static ColorBits stringToRgbaBits(const std::string_view hexStr){
@@ -752,46 +756,42 @@ export namespace Graphic{
 		}
 
 		/** @brief [r, g, b, a] */
-		using ColorData = std::tuple<float, float, float, float>;
+		using ColorData = std::array<float, 4>;
 
-		[[nodiscard]] static constexpr ColorData getLerpVal(float s, const auto&... colors) noexcept{
+		template <std::ranges::random_access_range Rng>
+			requires (std::ranges::sized_range<Rng> && std::convertible_to<const Color&, std::ranges::range_value_t<Rng>>)
+		[[nodiscard]] static constexpr Color getLerpVal(float s, const Rng& colors) noexcept{
 			s = Math::clamp(s);
-
-			constexpr size_t size = sizeof...(colors);
-			constexpr size_t bound = size - 1;
-			const std::array<Color, size> arr = {colors...};
-
-			const Color& from = arr[Math::clamp(static_cast<size_t>(s * bound), 0ull, bound)];
-			const Color& to = arr[Math::clamp(static_cast<size_t>(s * bound + 1), 0ull, bound)];
-
-			const float toWeight = s * bound - static_cast<int>(s * bound);
-			const float fromWeight = 1.0f - toWeight;
-			return ColorData{ from.r * fromWeight + to.r * toWeight, from.g * fromWeight + to.g * toWeight, from.b * fromWeight + to.b * toWeight, from.a * fromWeight + to.a * toWeight};
-		}
-
-		[[nodiscard]] static constexpr ColorData getLerpVal(float s, const std::span<const Color>& colors) noexcept{
-			s = Math::clamp(s);
-			const std::size_t size = colors.size();
+			const std::size_t size = std::ranges::size(colors);
 			const std::size_t bound = size - 1;
+
 			const auto boundf = static_cast<float>(size);
-			const Color& ca = colors[Math::clamp(static_cast<std::size_t>(s * boundf), 0ull, bound)];
-			const Color& cb = colors[Math::clamp(static_cast<std::size_t>(s * boundf + 1), 0ull, bound)];
+
+			const Color& ca = std::ranges::begin(colors)[static_cast<std::size_t>(s * boundf)];
+			const Color& cb = std::ranges::begin(colors)[Math::min(static_cast<std::size_t>(s * boundf + 1), bound)];
 
 			const float n = s * boundf - static_cast<float>(static_cast<int>(s * boundf));
 			const float i = 1.0f - n;
-			return ColorData{ ca.r * i + cb.r * n, ca.g * i + cb.g * n, ca.b * i + cb.b * n, ca.a * i + cb.a * n};
+			return Color{ ca.r * i + cb.r * n, ca.g * i + cb.g * n, ca.b * i + cb.b * n, ca.a * i + cb.a * n};
+		}
+
+
+		[[nodiscard]] static constexpr Color getLerpVal(float s, const auto&... colors) noexcept{
+			return Color::getLerpVal(s, std::array{colors...});
 		}
 
 		static constexpr Color createLerp(const float s, const auto&... colors) noexcept{
-			return Color{::Graphic::Color::getLerpVal(s, colors...)};
+			return Color::getLerpVal(s, colors...);
 		}
 
 		constexpr Color& lerp(const float s, const auto&... colors) noexcept{
-			return this->set(::Graphic::Color::getLerpVal(s, colors...));
+			return this->set(Color::getLerpVal(s, colors...));
 		}
 
-		constexpr Color& lerp(const float s, const std::span<const Color>& colors) noexcept{
-			return set(getLerpVal(s, colors));
+		template <std::ranges::random_access_range Rng>
+			requires (std::ranges::sized_range<Rng> && std::convertible_to<const Color&, std::ranges::range_value_t<Rng>>)
+		constexpr Color& lerp(const float s, const Rng& colors) noexcept{
+			return this->operator=(Color::getLerpVal(s, colors));
 		}
 
 		[[nodiscard]] constexpr Color copy() const noexcept{

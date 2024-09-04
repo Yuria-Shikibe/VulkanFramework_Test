@@ -7,7 +7,7 @@ export module Core.Vulkan.Image;
 import Core.Vulkan.Memory;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 import Core.Vulkan.Buffer.CommandBuffer;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Concepts;
 import Core.Vulkan.Params;
 
@@ -381,9 +381,9 @@ export namespace Core::Vulkan{
 		}
 	}
 
-	class Image : public Wrapper<VkImage>{
+	class Image : public ext::wrapper<VkImage>{
 		DeviceMemory memory{};
-		Dependency<VkDevice> device{};
+		ext::dependency<VkDevice> device{};
 
 	public:
 		Image() = default;
@@ -508,8 +508,8 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	class ImageView : public Wrapper<VkImageView>{
-		Dependency<VkDevice> device{};
+	class ImageView : public ext::wrapper<VkImageView>{
+		ext::dependency<VkDevice> device{};
 
 	public:
 		ImageView() = default;

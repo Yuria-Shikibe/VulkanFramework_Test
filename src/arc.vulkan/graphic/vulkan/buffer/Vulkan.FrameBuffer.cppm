@@ -4,7 +4,7 @@ module;
 
 export module Core.Vulkan.Buffer.FrameBuffer;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Attachment;
 import Core.Vulkan.Concepts;
 
@@ -14,15 +14,15 @@ import Geom.Vector2D;
 export namespace Core::Vulkan{
 	using AttachmentPluginPair = std::pair<std::uint32_t, VkImageView>;
 
-	class FrameBuffer : public Wrapper<VkFramebuffer>{
+	class FrameBuffer : public ext::wrapper<VkFramebuffer>{
 	protected:
-		Dependency<VkDevice> device{};
+		ext::dependency<VkDevice> device{};
 
 		std::vector<VkImageView> attachments{};
 
 		Geom::USize2 size{};
 
-		Dependency<VkRenderPass> renderPass{};
+		ext::dependency<VkRenderPass> renderPass{};
 
 	public:
 		[[nodiscard]] VkDescriptorImageInfo getInputInfo(const std::size_t index, VkImageLayout imageLayout) const{
@@ -69,7 +69,7 @@ export namespace Core::Vulkan{
 			if(this == &other) return *this;
 			destroy();
 
-			Wrapper<VkFramebuffer>::operator =(std::move(other));
+			wrapper<VkFramebuffer>::operator =(std::move(other));
 			device = std::move(other.device);
 			attachments = std::move(other.attachments);
 			size = std::move(other.size);

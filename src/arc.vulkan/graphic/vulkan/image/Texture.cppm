@@ -6,7 +6,7 @@ export module Core.Vulkan.Texture;
 
 import Core.Vulkan.Image;
 import Core.Vulkan.CombinedImage;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 import std;

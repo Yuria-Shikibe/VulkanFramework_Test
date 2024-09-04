@@ -1,11 +1,14 @@
 module Core.InitAndTerminate;
 
+
 import Assets.Ctrl;
 import Assets.Graphic;
 import Assets.Directories;
 import Core.Global.Focus;
 
 import Core.FileTree;
+
+import Core.Vulkan.EXT;
 
 import std;
 
@@ -28,4 +31,8 @@ void Core::initFileSystem() {
 
 void Core::bindCtrlCommands() {
     Assets::Ctrl::load();
+}
+
+void Core::loadEXT(){
+    Core::Vulkan::EXT::load(vulkanManager->context.instance);
 }

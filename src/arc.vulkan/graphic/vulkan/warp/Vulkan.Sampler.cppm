@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Sampler;
 
 import std;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Comp;
 
 export namespace Core::Vulkan{
@@ -116,8 +116,7 @@ export namespace Core::Vulkan{
 				&VkSamplerCreateInfo::unnormalizedCoordinates
 			};
 
-		constexpr VkSamplerCreateInfo TextureSampler = VkSamplerCreateInfo{}
-			| SamplerInfo::Default
+		constexpr VkSamplerCreateInfo TextureSampler = SamplerInfo::Default
 			| SamplerInfo::Filter_Linear
 			| SamplerInfo::AddressMode_Clamp
 			| SamplerInfo::LOD_Max
@@ -170,15 +169,15 @@ export namespace Core::Vulkan{
 		}
 	}
 	
-	class Sampler : public Wrapper<VkSampler>{
-		DeviceDependency device{};
+	class Sampler : public ext::wrapper<VkSampler>{
+		ext::dependency<VkDevice> device{};
 
 	public:
-		using Wrapper::Wrapper;
+		using wrapper::wrapper;
 		[[nodiscard]] constexpr Sampler() = default;
 
 		[[nodiscard]] explicit Sampler(VkDevice device, VkSampler textureSampler = nullptr)
-			: Wrapper{textureSampler}, device{device}{}
+			: wrapper{textureSampler}, device{device}{}
 
 		[[nodiscard]] Sampler(VkDevice device, const VkSamplerCreateInfo& samplerInfo)
 			: device{device}{

@@ -4,14 +4,14 @@ module;
 
 export module Core.Vulkan.Buffer.CommandBuffer;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import std;
 
 export namespace Core::Vulkan{
-	class CommandBuffer : public Wrapper<VkCommandBuffer>{
+	class CommandBuffer : public ext::wrapper<VkCommandBuffer>{
 	protected:
-		Dependency<VkDevice> device{};
-		Dependency<VkCommandPool> pool{};
+		ext::dependency<VkDevice> device{};
+		ext::dependency<VkCommandPool> pool{};
 	
 	public:
 		[[nodiscard]] CommandBuffer() = default;
@@ -51,7 +51,7 @@ export namespace Core::Vulkan{
 			handle = nullptr;
 			pool = nullptr;
 			device = nullptr;
-			Wrapper::operator=(std::move(other));
+			wrapper::operator=(std::move(other));
 			device = std::move(other.device);
 			pool = std::move(other.pool);
 			return *this;

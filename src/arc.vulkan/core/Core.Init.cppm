@@ -25,6 +25,8 @@ export namespace Core{
 
     void bindCtrlCommands();
 
+	void loadEXT();
+
     void init(){
         GLFW::init();
 
@@ -35,6 +37,8 @@ export namespace Core{
         window = new Window;
         vulkanManager = new Vulkan::VulkanManager;
         vulkanManager->initContext(window);
+
+    	loadEXT();
 
         timer = ApplicationTimer<float>{getDelta, getTime, glfwSetTime};
 

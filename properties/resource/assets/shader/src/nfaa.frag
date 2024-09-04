@@ -2,6 +2,8 @@
 #pragma shader_stage(fragment)
 #extension GL_ARB_separate_shader_objects : enable
 
+#include "util"
+
 // Normal filtered anti-aliasing.
 // See http://blenderartists.org/forum/showthread.php?209574-Full-Screen-Anti-Aliasing-(NFAA-DLAA-SSAA)
 // and http://www.gamedev.net/topic/580517-nfaa---a-post-process-anti-aliasing-filter-results-implementation-details/
@@ -19,9 +21,6 @@ layout(push_constant) uniform PushConstants1 {
 layout(binding = 0) uniform sampler2D targetTexture;
 
 
-float lumRGB(vec3 v) {
-    return dot(v, vec3(0.212, 0.716, 0.072));
-}
 
 const float fScale = 1.25f;
 

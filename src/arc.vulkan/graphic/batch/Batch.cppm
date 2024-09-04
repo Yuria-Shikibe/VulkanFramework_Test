@@ -20,7 +20,7 @@ import Core.Vulkan.Fence;
 import Core.Vulkan.BatchData;
 
 import std;
-import ext.Container.ArrayQueue;
+import ext.array_queue;
 import ext.circular_array;
 
 //TODO allow multiple allocation in one operation

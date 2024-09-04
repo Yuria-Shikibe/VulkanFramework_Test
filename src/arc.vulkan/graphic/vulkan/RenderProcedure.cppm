@@ -11,9 +11,10 @@ export import Core.Vulkan.Attachment;
 export import Core.Vulkan.Pipeline;
 export import Core.Vulkan.PipelineLayout;
 export import Core.Vulkan.DescriptorSet;
-export import Core.Vulkan.Dependency;
+export import ext.handle_wrapper;
 export import Core.Vulkan.CommandPool;
 export import Core.Vulkan.RenderPass;
+export import Core.Vulkan.DescriptorBuffer;
 
 import Core.Vulkan.Context;
 import Core.Vulkan.Concepts;
@@ -38,6 +39,9 @@ export namespace Core::Vulkan{
 		PipelineLayout layout{};
 
 		DescriptorSetPool descriptorSetPool{};
+		std::vector<DescriptorBuffer> descriptorBuffers{};
+
+
 		std::vector<DescriptorSet> descriptorSets{};
 		std::vector<UniformBuffer> uniformBuffers{};
 
@@ -87,12 +91,21 @@ export namespace Core::Vulkan{
 		 * @brief Call after descriptors and constants have been set
 		 */
 		void createPipelineLayout(VkPipelineCreateFlags flags = 0){
-			layout = PipelineLayout{context->device, flags, descriptorSetLayout.asSeq(), constantLayout.constants};
+			layout = PipelineLayout{context->device, flags, descriptorSetLayout.as_seq(), constantLayout.constants};
 		}
 
-		void createDescriptorSet(std::uint32_t size){
+		void createDescriptorSet(const std::uint32_t size){
 			descriptorSetPool = DescriptorSetPool{context->device, descriptorSetLayout, size};
 			descriptorSets = descriptorSetPool.obtain(size);
+		}
+
+		void createDescriptorBuffers(const std::uint32_t size){
+			descriptorBuffers.reserve(size);
+			for(std::size_t i = 0; i < size; ++i){
+				descriptorBuffers.push_back(DescriptorBuffer{
+					context->physicalDevice, context->device, descriptorSetLayout, descriptorSetLayout.size()
+				});
+			}
 		}
 
 		void createPipeline(PipelineTemplate& pipelineTemplate){
@@ -101,14 +114,14 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createComputePipeline(const VkPipelineShaderStageCreateInfo& stageCreateInfo){
+		void createComputePipeline(VkPipelineCreateFlags flags, const VkPipelineShaderStageCreateInfo& stageCreateInfo){
 			for(auto& pipeline : pipes | std::views::values){
-				pipeline = Pipeline{context->device, layout, stageCreateInfo};
+				pipeline = Pipeline{context->device, layout, flags, stageCreateInfo};
 			}
 		}
 
-		void createComputePipeline(VkShaderModule shaderModule, const char* entryName = "main"){
-			createComputePipeline({
+		void createComputePipeline(VkPipelineCreateFlags flags, VkShaderModule shaderModule, const char* entryName = "main"){
+			createComputePipeline(flags, {
 					.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 					.pNext = nullptr,
 					.flags = 0,
@@ -147,7 +160,7 @@ export namespace Core::Vulkan{
 			::vkCmdBindDescriptorSets(
 				commandBuffer, bindPoint,
 				layout, 0,
-				1, descriptorSets.at(index).asData(),
+				1, descriptorSets.at(index).as_data(),
 				0, nullptr
 			);
 		}

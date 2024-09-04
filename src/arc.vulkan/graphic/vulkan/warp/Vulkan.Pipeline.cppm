@@ -7,7 +7,7 @@ export module Core.Vulkan.Pipeline;
 export import Core.Vulkan.PipelineLayout;
 import Core.Vulkan.Concepts;
 import Core.Vulkan.Shader;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Preinstall;
 import std;
 
@@ -181,12 +181,12 @@ export namespace Core::Vulkan{
 		}
 	};
 
-	struct Pipeline : Wrapper<VkPipeline>{
-		DeviceDependency device{};
+	struct Pipeline : ext::wrapper<VkPipeline>{
+		ext::dependency<VkDevice> device{};
 
 		[[nodiscard]] Pipeline() = default;
 
-		[[nodiscard]] Pipeline(VkDevice device, VkPipeline pipeline) : Wrapper{pipeline}, device{device}{}
+		[[nodiscard]] Pipeline(VkDevice device, VkPipeline pipeline) : wrapper{pipeline}, device{device}{}
 
 		[[nodiscard]] Pipeline(
 			VkDevice device,
@@ -203,13 +203,13 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] Pipeline(
 			VkDevice device,
-			VkPipelineLayout layout, const VkPipelineShaderStageCreateInfo& stageInfo) : device{device}{
+			VkPipelineLayout layout, const VkPipelineCreateFlags flags, const VkPipelineShaderStageCreateInfo& stageInfo) : device{device}{
 
 
 			VkComputePipelineCreateInfo createInfo{
 				.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
 				.pNext = nullptr,
-				.flags = 0,
+				.flags = flags,
 				.stage = stageInfo,
 				.layout = layout,
 				.basePipelineHandle = nullptr,

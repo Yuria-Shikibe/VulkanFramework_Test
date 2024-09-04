@@ -3,10 +3,34 @@ module;
 #include <vulkan/vulkan.h>
 
 export module Core.Vulkan.Memory;
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import std;
 
 export namespace Core::Vulkan{
+	namespace Util{
+		constexpr VkDeviceSize alignTo(const VkDeviceSize original, const VkDeviceSize alignment){
+			return (original / alignment + 1) * alignment;
+		}
+		// constexpr VkDeviceSize adjustNonCoherentMemoryRange(VkDeviceSize& size, VkDeviceSize& offset, VkDeviceSize alignment) {
+		// 	const VkDeviceSize _offset = offset;
+		//
+		// 	if(size == VK_WHOLE_SIZE){
+		// 		offset = offset / alignment * alignment;
+		// 	}else{
+		// 		VkDeviceSize rangeEnd = size + offset;
+		// 		offset = offset / alignment * alignment;
+		//
+		// 		rangeEnd = (rangeEnd + alignment - 1) / alignment * alignment;
+		//
+		// 		rangeEnd = std::min(rangeEnd, capacity);
+		//
+		// 		size = rangeEnd - offset;
+		// 	}
+		//
+		// 	return _offset - offset;
+		// }
+	}
+
 	std::uint32_t findMemoryType(const std::uint32_t typeFilter, VkPhysicalDevice physicalDevice,
 							 VkMemoryPropertyFlags properties){
 		VkPhysicalDeviceMemoryProperties memProperties;
@@ -22,11 +46,11 @@ export namespace Core::Vulkan{
 		throw std::runtime_error("failed to find suitable memory type!");
 	}
 
-	class DeviceMemory : public Wrapper<VkDeviceMemory>{
+	class DeviceMemory : public ext::wrapper<VkDeviceMemory>{
 	public:
 
 	protected:
-		Dependency<VkDevice> device{};
+		ext::dependency<VkDevice> device{};
 
 		VkDeviceSize capacity{};
 

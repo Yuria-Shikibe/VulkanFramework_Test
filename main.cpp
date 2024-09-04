@@ -11,6 +11,7 @@ import Core.Vulkan.Uniform;
 import Core.Vulkan.Image;
 import Core.Vulkan.Texture;
 import Core.Vulkan.Attachment;
+import Core.Vulkan.EXT;
 
 
 import Core.File;
@@ -37,7 +38,7 @@ Core::Vulkan::Texture texturePesterLight{};
 import Graphic.RendererUI;
 import Graphic.PostProcessor;
 import Graphic.ImageAtlas;
-import Graphic.Draw.Context;
+import Graphic.Draw.Func;
 
 import Font;
 import Font.GlyphToRegion;
@@ -49,31 +50,24 @@ import std;
 
 import Align;
 
+import Core.Vulkan.DescriptorBuffer;
 import ext.MetaProgramming;
+import ext.object_pool;
+import ext.array_stack;
 
 import Assets.Graphic.PostProcess;
 import Assets.Bundle;
 
-template <typename Rng>
-concept Printable = requires(const std::ranges::range_const_reference_t<Rng>& rng, std::ostream& ostream){
-    requires std::ranges::input_range<Rng>;
-    { ostream << rng } -> std::same_as<std::ostream&>;
-};
-
-static_assert(Printable<std::vector<std::string>>);
 
 Graphic::ImageAtlas loadTex(){
     using namespace Core;
     Graphic::ImageAtlas imageAtlas{vulkanManager->context};
 
-    // File file{R"(D:\projects\NewHorizonMod\assets)"};
-    //
     auto& mainPage = imageAtlas.registerPage("main");
     auto& fontPage = imageAtlas.registerPage("font");
 
     auto& page = fontPage.createPage(imageAtlas.context);
 
-    // Core::Vulkan::Util::
     page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {1., 1., 1., 0.});
 
     auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{Assets::Dir::texture.find("white.png")});
@@ -88,6 +82,7 @@ void compileAllShaders() {
     const Core::Vulkan::ShaderCompilerWriter adaptor{compiler, Assets::Dir::shader_spv};
 
     Core::File{Assets::Dir::shader_src}.forSubs([&](Core::File&& file){
+        if(file.extension().empty())return;
         adaptor.compile(file);
     });
 }
@@ -115,28 +110,23 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
         Font::namedFonts.insert_or_assign(key, id);
     }
 
-
-
-    // Core::File file = Assets::Dir::assets.find("test.txt");
-    //
-    // for (char32_t convertCharToChar32 : ext::encode::convertCharToChar32(file.readString())){
-    //     fontManager.getGlyph(id, {convertCharToChar32, {0, 120}});
-    // }
-
     return fontManager;
 }
-
-
+//
+//
 // int main(){
-//     Core::initFileSystem();
-//     Core::Bundle bundle{Assets::Dir::bundle.subFile("bundle.zh_cn.json"), Assets::Dir::bundle.subFile("bundle.def.json")};
+//     std::u32string str{U""}
+//     ext::object_pool<std::string, 5> pool;
 //
+//     auto p = pool.obtain_unique("1234556");
+//     //
+//     auto pd = pool.get_pages().front().as_span();
 //
-//     std::println("{}", bundle.getLocale().name());
+//     auto p1 = std::move(pool);
 //
-//     std::println("{}", bundle["control-bind.group.basic-group"]);
-//     std::println("{}", bundle[{"control-bind", "group", "basic-group"}]);
-//     std::println("{}", bundle[{}]);
+//     p1 = {};
+//
+//     p.reset();
 //
 // }
 
@@ -156,7 +146,6 @@ int main(){
     auto* batch = new Graphic::Batch{vulkanManager->context, sizeof(Vulkan::Vertex_World)};
     vulkanManager->batchVertexData = batch->getBatchData();
 
-
     vulkanManager->registerResizeCallback(
         [rendererUi](auto& e){
             if(e.area()) rendererUi->resize(static_cast<Geom::USize2>(e));
@@ -164,20 +153,6 @@ int main(){
             rendererUi->initRenderPass(e);
         });
 
-    // auto gcm = Assets::PostProcess::Factory::gaussianFactory.generate(vulkanManager->swapChain.size2D(), [&]{
-    //     Graphic::AttachmentPort port{};
-    //     port.in.insert_or_assign(0, rendererUi->mergeFrameBuffer.localAttachments.front().getView());
-    //     port.toTransferOwnership.insert_or_assign(0, rendererUi->mergeFrameBuffer.localAttachments.front().getImage());
-    //     return port;
-    // });
-
-
-    // vulkanManager->registerResizeCallback(
-    //     [&gcm](auto& e){
-    //         if(e.area()) gcm.resize(static_cast<Geom::USize2>(e));
-    //     }, [&gcm](auto e){
-    //         // gcm.resize(e);
-    //     });
 
     vulkanManager->uiImageViewProv = [&]{
         return std::make_pair(rendererUi->mergeFrameBuffer.at(3), rendererUi->mergeFrameBuffer.at(4));
@@ -187,8 +162,31 @@ int main(){
 
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
-
     auto imageAtlas = loadTex();
+
+    {
+        Vulkan::DescriptorSetLayout layout{vulkanManager->context.device, [](Vulkan::DescriptorSetLayout& l){
+            l.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+            l.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+            l.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
+            l.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
+            l.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT);
+        }};
+
+        Vulkan::UniformBuffer uniformBuffer{vulkanManager->context.physicalDevice,
+            vulkanManager->context.device, 36};
+
+        Vulkan::DescriptorBuffer descriptorBuffer{
+            vulkanManager->context.physicalDevice,
+            vulkanManager->context.device, layout, layout.size()};
+
+        descriptorBuffer.map();
+        descriptorBuffer.loadUniform(0, uniformBuffer.getBufferAddress(), uniformBuffer.requestedSize());
+        descriptorBuffer.loadImage(2, imageAtlas.at("main.white").imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, Assets::Sampler::blitSampler);
+        descriptorBuffer.unmap();
+
+        descriptorBuffer = Vulkan::DescriptorBuffer{};
+    }
 
     Font::FontManager fontManager = initFontManager(imageAtlas);
 

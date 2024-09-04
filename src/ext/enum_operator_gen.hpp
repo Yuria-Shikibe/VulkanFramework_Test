@@ -7,18 +7,15 @@
 
 #define BITMASK_OPS(EXPORT_FLAG, BITMASK)                                                         \
     EXPORT_FLAG [[nodiscard]] constexpr BITMASK operator&(BITMASK lhs, BITMASK rhs) noexcept { \
-        using Ty = std:: underlying_type_t<BITMASK>;                                              \
-        return static_cast<BITMASK>(static_cast<Ty>(lhs) & static_cast<Ty>(rhs));       \
+        return static_cast<BITMASK>(std::to_underlying(lhs) & std::to_underlying(rhs));       \
     }                                                                                                 \
                                                                                                       \
     EXPORT_FLAG [[nodiscard]] constexpr BITMASK operator|(BITMASK lhs, BITMASK rhs) noexcept { \
-        using Ty = std:: underlying_type_t<BITMASK>;                                              \
-        return static_cast<BITMASK>(static_cast<Ty>(lhs) | static_cast<Ty>(rhs));       \
+        return static_cast<BITMASK>(std::to_underlying(lhs) | std::to_underlying(rhs));       \
     }                                                                                                 \
                                                                                                       \
     EXPORT_FLAG [[nodiscard]] constexpr BITMASK operator^(BITMASK lhs, BITMASK rhs) noexcept { \
-        using Ty = std:: underlying_type_t<BITMASK>;                                              \
-        return static_cast<BITMASK>(static_cast<Ty>(lhs) ^ static_cast<Ty>(rhs));       \
+        return static_cast<BITMASK>(std::to_underlying(lhs) ^ std::to_underlying(rhs));       \
     }                                                                                                 \
                                                                                                       \
     EXPORT_FLAG constexpr BITMASK& operator&=(BITMASK& lhs, BITMASK rhs) noexcept {         \
@@ -34,8 +31,7 @@
     }                                                                                                 \
                                                                                                       \
     EXPORT_FLAG [[nodiscard]] constexpr BITMASK operator~(BITMASK lhs) noexcept {                  \
-        using Ty = std:: underlying_type_t<BITMASK>;                                              \
-        return static_cast<BITMASK>(~static_cast<Ty>(lhs));                                    \
+        return static_cast<BITMASK>(~std::to_underlying(lhs));                                    \
     }
 
 #endif //ENUM_OPERATOR_GEN_HPP

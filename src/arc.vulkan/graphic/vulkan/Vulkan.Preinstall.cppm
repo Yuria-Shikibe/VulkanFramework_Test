@@ -53,6 +53,9 @@ namespace Core::Vulkan{
 		template <VkDeviceSize ...offset>
 		constexpr VkDeviceSize Offset[sizeof...(offset)]{offset...};
 
+		template <std::uint32_t ...index>
+		constexpr std::uint32_t Indices[sizeof...(index)]{index...};
+
 		constexpr auto NoOffset = Offset<0>;
 
 		template <unsigned ...mask>

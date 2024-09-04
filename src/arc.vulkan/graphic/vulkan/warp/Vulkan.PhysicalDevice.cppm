@@ -14,7 +14,9 @@ import ext.MetaProgramming;
 
 export namespace Core::Vulkan{
 	constexpr std::array DeviceExtensions{
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_EXT_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME,
+		VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME,
 	};
 
 	struct QueueFamilyIndices{

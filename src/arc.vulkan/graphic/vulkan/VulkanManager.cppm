@@ -159,13 +159,13 @@ export namespace Core::Vulkan{
 					.pCommandBuffers = cmds.data(),
 
 					.signalSemaphoreCount = 1,
-					.pSignalSemaphores = currentFrameData.flushFinishedSemaphore.asData(),
+					.pSignalSemaphores = currentFrameData.flushFinishedSemaphore.as_data(),
 				}, currentFrameData.inFlightFence);
 
 			VkPresentInfoKHR presentInfo{};
 
 			presentInfo.waitSemaphoreCount = 1;
-			presentInfo.pWaitSemaphores = currentFrameData.flushFinishedSemaphore.asData();
+			presentInfo.pWaitSemaphores = currentFrameData.flushFinishedSemaphore.as_data();
 			presentInfo.pImageIndices = &imageIndex;
 
 			swapChain.postImage(presentInfo);
@@ -478,9 +478,8 @@ export namespace Core::Vulkan{
 				});
 
 				gussian.descriptorSetUpdator = [this](Graphic::ComputePostProcessor& postProcessor){
-					auto horiUniformInfo = postProcessor.pipelineData.uniformBuffers[0].getDescriptorInfo();
-					auto vertUniformInfo = postProcessor.pipelineData.uniformBuffers[1].getDescriptorInfo();
-					auto scaleInfo = cameraScaleUniformBuffer.getDescriptorInfo();
+					const auto& horiUniformBuffer = postProcessor.pipelineData.uniformBuffers[0];
+					const auto& vertUniformBuffer = postProcessor.pipelineData.uniformBuffers[1];
 
 					VkDescriptorImageInfo imageinfo_input{
 							.sampler = Assets::Sampler::blitSampler,
@@ -494,62 +493,38 @@ export namespace Core::Vulkan{
 							.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 						};
 
-					auto pingpong0 = postProcessor.images[0].getDescriptorInfo(
+					const auto pingpong0 = postProcessor.images[0].getDescriptorInfo(
 						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
-					auto pingpong1 = postProcessor.images[1].getDescriptorInfo(
+					const auto pingpong1 = postProcessor.images[1].getDescriptorInfo(
 						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
 
-					{
-						DescriptorSetUpdator updator{
-								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[0]
-							};
+					postProcessor.pipelineData.descriptorBuffers[0].load([&](const DescriptorBuffer& buffer){
+							buffer.loadImage(0, imageinfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							buffer.loadImage(1, pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+							buffer.loadUniform(2, horiUniformBuffer.getBufferAddress(), horiUniformBuffer.requestedSize());
+							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
+						});
 
-						updator.pushSampledImage(imageinfo_input);
-						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-						updator.push(horiUniformInfo);
-						updator.push(scaleInfo);
+					postProcessor.pipelineData.descriptorBuffers[1].load([&](const DescriptorBuffer& buffer){
+							buffer.loadImage(0, pingpong0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							buffer.loadImage(1, pingpong1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+							buffer.loadUniform(2, vertUniformBuffer.getBufferAddress(), vertUniformBuffer.requestedSize());
+							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
+						});
 
-						updator.update();
-					}
+					postProcessor.pipelineData.descriptorBuffers[2].load([&](const DescriptorBuffer& buffer){
+							buffer.loadImage(0, pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							buffer.loadImage(1, pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+							buffer.loadUniform(2, horiUniformBuffer.getBufferAddress(), horiUniformBuffer.requestedSize());
+							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
+						});
 
-					{
-						DescriptorSetUpdator updator{
-								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[1]
-							};
-
-						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-						updator.push(vertUniformInfo);
-						updator.push(scaleInfo);
-
-						updator.update();
-					}
-
-					{
-						DescriptorSetUpdator updator{
-								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[2]
-							};
-
-						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-						updator.pushImage(pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-						updator.push(horiUniformInfo);
-						updator.push(scaleInfo);
-
-						updator.update();
-					}
-
-					{
-						DescriptorSetUpdator updator{
-								postProcessor.context->device, postProcessor.pipelineData.descriptorSets[3]
-							};
-
-						updator.pushImage(pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-						updator.pushImage(imageinfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-						updator.push(vertUniformInfo);
-						updator.push(scaleInfo);
-
-						updator.update();
-					}
+					postProcessor.pipelineData.descriptorBuffers[3].load([&](const DescriptorBuffer& buffer){
+							buffer.loadImage(0, pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+							buffer.loadImage(1, imageinfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+							buffer.loadUniform(2, vertUniformBuffer.getBufferAddress(), vertUniformBuffer.requestedSize());
+							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
+						});
 				};
 
 				gussian.updateDescriptors();
@@ -796,7 +771,7 @@ export namespace Core::Vulkan{
 
 				vkCmdBindDescriptorSets(commandBuffer,
 				                        VK_PIPELINE_BIND_POINT_GRAPHICS, flushPass.front().layout, 0,
-				                        1, flushPass.front().descriptorSets[i].asData(),
+				                        1, flushPass.front().descriptorSets[i].as_data(),
 				                        0, nullptr);
 
 				commandBuffer.blitDraw();

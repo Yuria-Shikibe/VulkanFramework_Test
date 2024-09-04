@@ -1,4 +1,4 @@
-export module ext.Container.ArrayQueue;
+export module ext.array_queue;
 
 import std;
 
@@ -7,7 +7,7 @@ export namespace ext {
         requires (std::is_default_constructible_v<T>)
     class array_queue {
     public:
-        static constexpr std::size_t MaxSize{capacity};
+        static constexpr std::size_t max_size{capacity};
 
         [[nodiscard]] constexpr array_queue(){}
 
@@ -17,7 +17,7 @@ export namespace ext {
             }
 
             data[backIndex] = item;
-            backIndex = (backIndex + 1) % MaxSize;
+            backIndex = (backIndex + 1) % max_size;
             ++count;
         }
 
@@ -27,7 +27,7 @@ export namespace ext {
             }
 
             data[backIndex] = std::move(item);
-            backIndex = (backIndex + 1) % MaxSize;
+            backIndex = (backIndex + 1) % max_size;
             ++count;
         }
 
@@ -36,7 +36,7 @@ export namespace ext {
                 throw std::underflow_error("Queue is empty");
             }
 
-            frontIndex = (frontIndex + 1) % MaxSize;
+            frontIndex = (frontIndex + 1) % max_size;
             --count;
         }
 
@@ -61,7 +61,7 @@ export namespace ext {
         }
 
         [[nodiscard]] constexpr bool is_full() const noexcept {
-            return count == MaxSize;
+            return count == max_size;
         }
 
         [[nodiscard]] constexpr std::size_t size() const noexcept {

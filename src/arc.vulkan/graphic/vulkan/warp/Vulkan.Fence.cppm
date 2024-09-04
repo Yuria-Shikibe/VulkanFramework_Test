@@ -4,12 +4,12 @@ module;
 
 export module Core.Vulkan.Fence;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import std;
 
 export namespace Core::Vulkan{
-	class Fence : public Wrapper<VkFence>{
-		Dependency<VkDevice> device{};
+	class Fence : public ext::wrapper<VkFence>{
+		ext::dependency<VkDevice> device{};
 
 	public:
 		enum struct CreateFlags : VkFenceCreateFlags{

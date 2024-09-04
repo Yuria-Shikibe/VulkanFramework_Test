@@ -4,15 +4,15 @@ module;
 
 export module Core.Vulkan.CommandPool;
 
-import Core.Vulkan.Dependency;
+import ext.handle_wrapper;
 import Core.Vulkan.Buffer.CommandBuffer;
 import std;
 
 export namespace Core::Vulkan{
 
 
-	struct CommandPool : Wrapper<VkCommandPool>{
-		DeviceDependency device{};
+	struct CommandPool : ext::wrapper<VkCommandPool>{
+		ext::dependency<VkDevice> device{};
 
 		[[nodiscard]] CommandPool() = default;
 

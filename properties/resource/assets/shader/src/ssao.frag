@@ -24,7 +24,6 @@ const float radius = 16.f;
 const float zDiffScl = 1.8f;
 const float zDiffThreshold = 0.05f;
 
-//TODO colored SSAO
 void main() {
     float occlusion = 0.0;
     const float depth = texture(depthTex, fragCoord).x;
