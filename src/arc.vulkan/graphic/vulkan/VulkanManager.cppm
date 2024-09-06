@@ -108,7 +108,7 @@ export namespace Core::Vulkan{
 
 		std::array<InFlightData, MAX_FRAMES_IN_FLIGHT> frameDataArr{};
 
-		BatchData batchVertexData{};
+		Graphic::BatchData batchVertexData{};
 
 		template <std::regular_invocable<Geom::USize2> InitFunc>
 		void registerResizeCallback(std::function<void(const ResizeEvent&)>&& callback, InitFunc initFunc) {

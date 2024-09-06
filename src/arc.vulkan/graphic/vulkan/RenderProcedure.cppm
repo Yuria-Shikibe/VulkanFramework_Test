@@ -90,8 +90,12 @@ export namespace Core::Vulkan{
 		/**
 		 * @brief Call after descriptors and constants have been set
 		 */
-		void createPipelineLayout(VkPipelineCreateFlags flags = 0){
-			layout = PipelineLayout{context->device, flags, descriptorSetLayout.as_seq(), constantLayout.constants};
+		void createPipelineLayout(VkPipelineCreateFlags flags = 0, const std::initializer_list<VkDescriptorSetLayout> layouts = {}){
+			std::vector<VkDescriptorSetLayout> ls{};
+			ls.reserve(layouts.size() + 1);
+			ls.push_back(descriptorSetLayout.get());
+			ls.append_range(layouts);
+			layout = PipelineLayout{context->device, flags, ls, constantLayout.constants};
 		}
 
 		void createDescriptorSet(const std::uint32_t size){

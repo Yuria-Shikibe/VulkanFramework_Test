@@ -12,6 +12,14 @@ import std;
 export namespace Core::Vulkan{
 
 	namespace RequiredFeatures{
+		constexpr VkPhysicalDeviceVulkan13Features PhysicalDeviceVulkan13Features{[]{
+			VkPhysicalDeviceVulkan13Features features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
+
+			features.synchronization2 = true;
+
+			return features;
+		}()};
+
 		constexpr VkPhysicalDeviceFeatures RequiredFeatures{[]{
 			VkPhysicalDeviceFeatures features{};
 
@@ -99,7 +107,7 @@ export namespace Core::Vulkan{
 		template <typename ...Args>
 		ExtChain(Args&& ...) -> ExtChain<std::decay_t<Args> ...>;
 
-		const ExtChain extChain{RequiredDescriptorIndexingFeatures, PhysicalDeviceBufferDeviceAddressFeatures, DescriptorBufferFeatures};
+		const ExtChain extChain{PhysicalDeviceVulkan13Features, RequiredDescriptorIndexingFeatures, PhysicalDeviceBufferDeviceAddressFeatures, DescriptorBufferFeatures};
 	}
 
 
@@ -167,8 +175,12 @@ export namespace Core::Vulkan{
 				createInfo.enabledLayerCount = 0;
 			}
 
-			if(vkCreateDevice(physicalDevice, &createInfo, nullptr, &handle) != VK_SUCCESS){
+			if(auto rst = vkCreateDevice(physicalDevice, &createInfo, nullptr, &handle); rst != VK_SUCCESS){
+				std::println(std::cerr, "Failed To Create Device: {}", static_cast<int>(rst));
 				throw std::runtime_error("Failed to create logical device!");
+			}else{
+				std::println("[Vulkan] Device Created: {:#0X}", reinterpret_cast<std::uintptr_t>(handle));
+
 			}
 
 			//TODO support multiple queue

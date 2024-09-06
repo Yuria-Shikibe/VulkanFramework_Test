@@ -9,6 +9,8 @@ export import Font.TypeSettings;
 import Geom.Vector2D;
 
 import Graphic.Batch;
+import Core.Vulkan.BatchData;
+import Graphic.Batch2;
 import std;
 
 //TEMP
@@ -19,44 +21,48 @@ import Core.Vulkan.Vertex;
 
 export namespace Font::TypeSettings{
 	template <typename T = std::identity>
-	struct AutoDrawParam : Graphic::Draw::DrawParam<T>{
-		Graphic::Batch& batch;
-		std::shared_lock<std::shared_mutex> lk{};
+	struct AutoDrawParamAc : Graphic::AutoDrawSpaceAcquirer<Core::Vulkan::Vertex_UI, AutoDrawParamAc<T>>{
+		Graphic::Batch2& batch;
 		const Graphic::ImageViewRegion* region{};
 
-		[[nodiscard]] explicit AutoDrawParam(Graphic::Batch& batch, const Graphic::ImageViewRegion* region = nullptr)
+		[[nodiscard]] explicit AutoDrawParamAc(Graphic::Batch2& batch, const Graphic::ImageViewRegion* region = nullptr)
 			: batch{batch}, region{region}{}
 
 		void setRegion(const Graphic::ImageViewRegion* region){
 			this->region = region;
 		}
 
-		AutoDrawParam& operator++(){
-			return acquire();
+		void reserve(const std::size_t count){
+			this->append(batch.acquireOnce(region->imageView, count));
 		}
 
-		AutoDrawParam& acquire(){
-			auto [imageIndex, dataPtr, captureLock] = batch.acquire(region->imageView);
-			this->index = {imageIndex};
-			this->uv = region;
-			this->dataPtr = dataPtr;
-			lk = std::move(captureLock);
+		struct Acquirer : Graphic::AutoDrawSpaceAcquirer<Core::Vulkan::Vertex_UI, AutoDrawParamAc<T>>::BasicAcquirer, Graphic::Draw::DrawParam<T>{
+			using Graphic::AutoDrawSpaceAcquirer<Core::Vulkan::Vertex_UI, AutoDrawParamAc<T>>::BasicAcquirer::BasicAcquirer;
 
-			return *this;
+			Acquirer& operator++(){
+				auto rst = (this->next());
+				this->dataPtr = rst.first;
+				this->index.textureIndex = rst.second;
+
+				return *this;
+			}
+		};
+
+		Acquirer get(){
+			Acquirer acquirer{*this};
+			acquirer.uv = region;
+			return acquirer;
 		}
 	};
 
-	void draw(Graphic::Batch& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
+	void draw(Graphic::Batch2& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
 		using namespace Graphic;
 
 		Draw::DrawContext context{};
-		AutoDrawParam param{batch, context.whiteRegion};
+		AutoDrawParamAc ac{batch, context.whiteRegion};
+		auto param = ac.get();
 
-
-		// context.color = Graphic::Colors::BLACK;
-		// Draw::Drawer<Core::Vulkan::Vertex_UI>::rectOrtho(++param, Geom::OrthoRectFloat{layout->size}.move(offset), context.color);
 		context.color = Graphic::Colors::WHITE;
-
 
 		context.color.a = 0.45f;
 		for (const auto& row : layout->elements){
@@ -64,7 +70,8 @@ export namespace Font::TypeSettings{
 			Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, row.getRectBound().move(offset), context.color);
 
 			for (auto && glyph : row.glyphs){
-				auto [imageIndex, dataPtr, captureLock] = batch.acquire(glyph.glyph->imageView);
+				if(!glyph.glyph->imageView)continue;
+				auto [imageIndex, sz, dataPtr, captureLock] = batch.acquire(glyph.glyph->imageView, 1);
 
 				new(dataPtr) std::array{
 					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v01},
@@ -76,7 +83,7 @@ export namespace Font::TypeSettings{
 				Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{glyph.src, glyph.end}.move(lineOff), context.color);
 
 			}
-			
+
 		}
 
 		context.color = Graphic::Colors::PALE_GREEN;

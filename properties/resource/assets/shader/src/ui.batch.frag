@@ -2,6 +2,10 @@
 #pragma shader_stage(fragment)
 #extension GL_ARB_separate_shader_objects : enable
 
+#ifndef MaximumAllowedSamplersSize
+#define MaximumAllowedSamplersSize 1
+#endif
+
 layout(location = 0) in vec2 fragTexCoord;
 
 //[ID, Layer, reserved, reserved]
@@ -11,7 +15,7 @@ layout(location = 2) in vec4 baseColor;
 layout(location = 3) in vec4 mixColor;
 layout(location = 4) in vec4 lightColor;
 
-layout(binding = 1) uniform sampler2DArray texSampler[8];
+layout(set = 1, binding = 0) uniform sampler2DArray texSampler1[MaximumAllowedSamplersSize];
 
 layout(location = 0) out vec4 outBase;
 layout(location = 1) out vec4 outColor;
@@ -19,7 +23,7 @@ layout(location = 2) out vec4 outLight;
 
 
 void main() {
-    vec4 texColor = texture(texSampler[textureID[0]], vec3(fragTexCoord.xy, textureID[1]));
+    vec4 texColor = texture(texSampler1[textureID[0]], vec3(fragTexCoord.xy, textureID[1]));
 
     outBase = texColor * baseColor;
     outColor = vec4(1.f);

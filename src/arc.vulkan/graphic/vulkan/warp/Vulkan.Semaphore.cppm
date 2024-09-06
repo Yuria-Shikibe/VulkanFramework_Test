@@ -45,6 +45,27 @@ export namespace Core::Vulkan{
 		~Semaphore(){
 			if(device)vkDestroySemaphore(device, handle, nullptr);
 		}
+
+		[[nodiscard]] VkSemaphoreSubmitInfo getSubmitInfo(const VkPipelineStageFlags2 flags) const{
+			return {
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+				.pNext = nullptr,
+				.semaphore = handle,
+				.value = 0,
+				.stageMask = flags,
+				.deviceIndex = 0
+			};
+		}
+
+		void signal() const{
+			const VkSemaphoreSignalInfo signalInfo{
+				.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+				.pNext = nullptr,
+				.semaphore = handle,
+				.value = 0
+			};
+			vkSignalSemaphore(device, &signalInfo);
+		}
 	};
 }
 

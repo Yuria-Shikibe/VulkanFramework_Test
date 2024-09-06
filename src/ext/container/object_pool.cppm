@@ -53,16 +53,15 @@ namespace ext{
 
 #if DEBUG_CHECK
 			if(valid_pointers.size() > count){
-				throw std::runtime_error("pool_page::store: pointers overflow");
+				throw std::overflow_error("pool_page::store: pointers overflow");
 			}
 #endif
 		}
 
 		/**
-		 * @return nullptr if the page is empty
+		 * @return nullptr if the page is empty, or uninitialized pointer
 		 */
-		template <typename... Args>
-		constexpr T* borrow(Args&&... args) noexcept(noexcept(T{std::forward<Args>(args)...})){
+		constexpr T* borrow() noexcept{
 			T* p;
 
 			{
@@ -76,7 +75,6 @@ namespace ext{
 				valid_pointers.pop();
 			}
 
-			new (p) T{std::forward<Args>(args)...};
 			return p;
 		}
 
@@ -116,6 +114,8 @@ namespace ext{
 	export
 	template <typename T, std::size_t PageSize = 1000, typename Alloc = std::allocator<T>>
 	struct object_pool{
+		using value_type = T;
+
 		using page_type = object_pool_page<T, PageSize>;
 		using deleter_type = pool_deleter<T, PageSize>;
 		using unique_ptr = std::unique_ptr<T, deleter_type>;
@@ -141,28 +141,35 @@ namespace ext{
 		}
 
 		template <typename... Args>
-		[[nodiscard]] std::tuple<T*, page_type*> obtain_raw(Args&&... args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args)...})){
-			T* rst{};
+		[[nodiscard]] std::pair<T*, page_type*> obtain_raw(Args&&... args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args)...})){
+			std::pair<T*, page_type*> rstPair{};
 
 			{
 				std::shared_lock lk{mutex};
 
 				for (page_type& page : pages){
-					rst = page.borrow(std::forward<Args>(args)...);
-					if(rst)return {rst, &page};
+					rstPair.first = page.borrow(std::forward<Args>(args)...);
+					if(rstPair.first){
+						rstPair.second = &page;
+						goto ret;
+					}
 				}
 			}
 
-			page_type& nextPage = add_page();
-			rst = nextPage.borrow(std::forward<Args>(args)...);
+			rstPair.second = std::addressof(add_page());
+			rstPair.first = rstPair.second->borrow();
 
 #if DEBUG_CHECK
-			if(!rst){
+			if(!rstPair.first){
 				throw std::runtime_error("Failed To Obtain Object!");
 			}
 #endif
 
-			return {rst, &nextPage};
+			ret:
+
+			new (rstPair.first) T{std::forward<Args>(args)...};
+
+			return rstPair;
 		}
 
 		/** @brief DEBUG USAGE */
@@ -225,6 +232,7 @@ namespace ext{
 
 		object_pool& operator=(const object_pool& other) = delete;
 
+		//TODO correct move for allocators
 		object_pool& operator=(object_pool&& other) noexcept{
 			if(this == &other) return *this;
 			std::scoped_lock lk{mutex, other.mutex};

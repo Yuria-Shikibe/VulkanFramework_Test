@@ -39,6 +39,7 @@ export namespace Core::Vulkan{
 	class ExclusiveBuffer : public ext::wrapper<VkBuffer>{
 	public:
 		DeviceMemory memory{};
+		VkDeviceAddress address{};
 
 		template <std::invocable<VkDevice, ExclusiveBuffer&> InitFunc>
 		[[nodiscard]] explicit ExclusiveBuffer(VkDevice device, InitFunc initFunc) : memory{device}{
@@ -68,11 +69,11 @@ export namespace Core::Vulkan{
 			vkBindBufferMemory(device, handle, memory, 0);
 		}
 
-		[[nodiscard]] VkDevice getDevice() const{
+		[[nodiscard]] VkDevice getDevice() const noexcept{
 			return memory.getDevice();
 		}
 
-		[[nodiscard]] auto size() const noexcept{
+		[[nodiscard]] auto memorySize() const noexcept{
 			return memory.size();
 		}
 
@@ -97,13 +98,18 @@ export namespace Core::Vulkan{
 			copyBuffer(commandBuffer, dstBuffer, memory.size());
 		}
 
-		[[nodiscard]] VkDeviceAddress getBufferAddress() const{
+		void setAddress(){
 			const VkBufferDeviceAddressInfo bufferDeviceAddressInfo{
 				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
 				.pNext = nullptr,
 				.buffer = handle
 			};
-			return vkGetBufferDeviceAddress(getDevice(), &bufferDeviceAddressInfo);
+
+			address = vkGetBufferDeviceAddress(getDevice(), &bufferDeviceAddressInfo);
+		}
+
+		[[nodiscard]] VkDeviceAddress getBufferAddress() const{
+			return address;
 		}
 	};
 

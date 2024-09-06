@@ -60,6 +60,7 @@ export namespace Core::Vulkan{
 			}
 
 			if(!physicalDevice){
+				std::println(std::cerr, "Failed to find a suitable GPU");
 				throw std::runtime_error("Failed to find a suitable GPU!");
 			} else{
 				std::println("[Vulkan] On Physical Device: {}", physicalDevice.getName());
@@ -132,7 +133,8 @@ export namespace Core::Vulkan{
 			return commandSubmit_Compute(submitInfo, fence);
 		}
 
-		void triggerSemaphore(VkCommandBuffer commandBuffer, const ContigiousRange<VkSemaphore> auto& semaphores) const{
+		template <ContigiousRange<VkSemaphore> Rng = std::initializer_list<VkSemaphore>>
+		void triggerSemaphore(VkCommandBuffer commandBuffer, const Rng& semaphores) const{
 			VkSubmitInfo submitInfo = {
 				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
 				.commandBufferCount = 1,

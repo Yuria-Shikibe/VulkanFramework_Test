@@ -20,7 +20,9 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] UniformBuffer(VkPhysicalDevice physicalDevice, VkDevice device, const VkDeviceSize uniformBlockSize)
 			: PersistentTransferBuffer(physicalDevice, device, uniformBlockSize,
-			                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT), uniformBlockSize{uniformBlockSize}{}
+			                  VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT), uniformBlockSize{uniformBlockSize}{
+			setAddress();
+		}
 
 		[[nodiscard]] constexpr VkDescriptorBufferInfo getDescriptorInfo() const & noexcept{
 			return {

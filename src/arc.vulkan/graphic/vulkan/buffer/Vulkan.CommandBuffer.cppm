@@ -57,6 +57,15 @@ export namespace Core::Vulkan{
 			return *this;
 		}
 
+		[[nodiscard]] VkCommandBufferSubmitInfo submitInfo() const{
+			return {
+				.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+				.pNext = nullptr,
+				.commandBuffer = handle,
+				.deviceMask = 0
+			};
+		}
+
 		void begin(const VkCommandBufferUsageFlags flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT, const VkCommandBufferInheritanceInfo& inheritance = {}) const{
 			VkCommandBufferBeginInfo beginInfo{VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO};
 

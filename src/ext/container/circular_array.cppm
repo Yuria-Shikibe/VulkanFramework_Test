@@ -55,7 +55,7 @@ export namespace ext{
 			return this->array::operator[](current);
 		}
 
-		[[nodiscard]] constexpr std::size_t getIndex() const noexcept{
+		[[nodiscard]] constexpr std::size_t get_index() const noexcept{
 			return current;
 		}
 

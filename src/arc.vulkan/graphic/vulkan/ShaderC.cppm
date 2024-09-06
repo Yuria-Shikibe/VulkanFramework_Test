@@ -14,7 +14,7 @@ export namespace Core::Vulkan {
             std::string_view{"compute"},
         };
 
-        struct Includer : public shaderc::CompileOptions::IncluderInterface {
+        struct Includer final : shaderc::CompileOptions::IncluderInterface {
 
             struct result_t : shaderc_include_result {
                 std::string filepath;
@@ -23,26 +23,20 @@ export namespace Core::Vulkan {
 
             shaderc_include_result *GetInclude(const char *requested_source, shaderc_include_type type,
                                                const char *requesting_source, size_t include_depth) override {
-                auto &result = *(new result_t);
-                auto &filepath = result.filepath;
-                auto &code = result.code;
+                File file{requesting_source};
 
-                filepath = requesting_source;
-                Core::File file{filepath};
+                result_t& result = *new result_t;
 
                 file = file.getParent().find(requested_source);
+                result.filepath = file.getPath().string();
 
-
-                filepath = file.getPath().string();
-
-                // OS::File file{filepath};
-                code = file.readString();
+                result.code = file.readString();
 
                 static_cast<shaderc_include_result &>(result) = {
-                        filepath.c_str(),
-                        filepath.length(),
-                        code.data(),
-                        code.size(),
+                        result.filepath.c_str(),
+                        result.filepath.length(),
+                        result.code.data(),
+                        result.code.size(),
                         this
                     };
 
@@ -67,6 +61,10 @@ export namespace Core::Vulkan {
             options.SetOptimizationLevel(shaderc_optimization_level_performance);
 
             options.SetIncluder(std::make_unique<Includer>());
+        }
+
+        void addMarco(const std::string& name, const std::string& val){
+            options.AddMacroDefinition(name, val);
         }
         //C:\VulkanSDK\1.3.290.0\Bin\spirv-val.exe D:\projects\vulkan_framework\properties\shader\spv\fxaa.frag.spv
         auto compile(const std::span<const char> code, const char *filepath, const char *entry = "main") const {

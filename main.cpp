@@ -17,6 +17,7 @@ import Core.Vulkan.EXT;
 import Core.File;
 import Graphic.Color;
 import Graphic.Batch;
+import Graphic.Batch2;
 import Graphic.Pixmap;
 
 import Core.Input;
@@ -68,7 +69,7 @@ Graphic::ImageAtlas loadTex(){
 
     auto& page = fontPage.createPage(imageAtlas.context);
 
-    page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {1., 1., 1., 0.});
+    page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {0., 1., 1., 1.});
 
     auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{Assets::Dir::texture.find("white.png")});
     region.shrink(15);
@@ -78,7 +79,8 @@ Graphic::ImageAtlas loadTex(){
 }
 
 void compileAllShaders() {
-    const Core::Vulkan::ShaderRuntimeCompiler compiler{};
+    Core::Vulkan::ShaderRuntimeCompiler compiler{};
+    compiler.addMarco("MaximumAllowedSamplersSize", std::format("{}", Graphic::Batch2::MaximumAllowedSamplersSize));
     const Core::Vulkan::ShaderCompilerWriter adaptor{compiler, Assets::Dir::shader_spv};
 
     Core::File{Assets::Dir::shader_src}.forSubs([&](Core::File&& file){
@@ -132,6 +134,8 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 
 int main(){
     using namespace Core;
+
+    // auto [availableLayers, rst] = Vulkan::Util::enumerate(vkEnumerateInstanceExtensionProperties);
 
 	init();
 
@@ -205,12 +209,12 @@ int main(){
 	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
 
 
-    batch->externalDrawCall = [](const Graphic::Batch& b){
-        vulkanManager->drawFrame(b.drawCommandFence);
-    };
+    // batch->externalDrawCall = [](const Graphic::Batch& b){
+    //     vulkanManager->drawFrame(b.drawCommandFence);
+    // };
 
     batch->descriptorChangedCallback = [](const Graphic::Batch& b, std::span<const VkImageView> data){
-        vulkanManager->updateBatchDescriptorSet(data, &b.drawCommandFence);
+        vulkanManager->updateBatchDescriptorSet(data, nullptr);
         vulkanManager->createBatchDrawCommands();
     };
 
@@ -232,7 +236,7 @@ int main(){
 
 
         constexpr auto baseColor = Graphic::Colors::WHITE;
-        constexpr auto lightColor = Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
+        constexpr auto lightColor = Graphic::Colors::WHITE;//Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
 
         Geom::Vec2 off{ timer.getGlobalTime() * 5.f + 0, 0};
         Geom::Vec2 off2 = off.copy().add(50, 50);
@@ -245,56 +249,58 @@ int main(){
         }
         fps_count++;
 
+        Font::TypeSettings::draw(rendererUi->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
+
+
          {
-            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePester.getView());
+            auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePester.getView());
             new(dataPtr) std::array{
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off), {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off), {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off), {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off), {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
         }
-
-        {
-            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePesterLight.getView());
-            new(dataPtr) std::array{
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.5f, {imageIndex}, lightColor, {1.0f, 0.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.5f, {imageIndex}, lightColor, {0.0f, 0.0f}},
-                };
-        }
-
-        {
-            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePester.getView());
-            new(dataPtr) std::array{
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
-                };
-        }
-
-        {
-            auto [imageIndex, dataPtr, captureLock] = batch->acquire(texturePesterLight.getView());
-            new(dataPtr) std::array{
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
-                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
-                };
-        }
-
-        batch->consumeAll();
+        //
+        // {
+        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePesterLight.getView());
+        //     new(dataPtr) std::array{
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off), {imageIndex}, lightColor, {0.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off), {imageIndex}, lightColor, {1.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off), {imageIndex}, lightColor, {1.0f, 0.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off), {imageIndex}, lightColor, {0.0f, 0.0f}},
+        //         };
+        // }
+        //
+        // {
+        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePester.getView());
+        //     new(dataPtr) std::array{
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off2), {imageIndex}, baseColor, {0.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off2), {imageIndex}, baseColor, {1.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off2), {imageIndex}, baseColor, {1.0f, 0.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off2), {imageIndex}, baseColor, {0.0f, 0.0f}},
+        //         };
+        // }
+        //
+        // {
+        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePesterLight.getView());
+        //     new(dataPtr) std::array{
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off2), {imageIndex}, lightColor, {0.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off2), {imageIndex}, lightColor, {1.0f, 1.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off2), {imageIndex}, lightColor, {1.0f, 0.0f}},
+        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off2), {imageIndex}, lightColor, {0.0f, 0.0f}},
+        //         };
+        // }
+        //
+        // batch->consumeAll();
 
 
         // rendererUi->pushScissor({100, 100, 500, 500});
-        Font::TypeSettings::draw(rendererUi->batch, layout, {200, 200});
         Font::TypeSettings::draw(rendererUi->batch, fps, {300, 300});
         // rendererUi->pushScissor({200, 200, 1200, 1200}, false);
-        Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
-        rendererUi->batch.consumeAll();
+        // Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
 
+        rendererUi->batch.consumeAll();
         rendererUi->blit();
         rendererUi->endBlit();
 
