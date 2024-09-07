@@ -67,7 +67,7 @@ export namespace Core::Vulkan{
 			{
 				const StagingBuffer stagingBuffer(context.physicalDevice, context.device, bufferSize);
 
-				stagingBuffer.memory.loadData(range);
+				stagingBuffer.memory.loadData(std::from_range, range);
 
 				stagingBuffer.copyBuffer(TransientCommand{context.device, commandPool, context.device.getGraphicsQueue()},
 										 buffer);

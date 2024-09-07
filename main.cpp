@@ -36,7 +36,8 @@ import Assets.Directories;
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
-import Graphic.RendererUI;
+import Graphic.Renderer.UI;
+import Graphic.Renderer.World;
 import Graphic.PostProcessor;
 import Graphic.ImageAtlas;
 import Graphic.Draw.Func;
@@ -54,11 +55,13 @@ import Align;
 import Core.Vulkan.DescriptorBuffer;
 import ext.MetaProgramming;
 import ext.object_pool;
+import ext.array_queue;
 import ext.array_stack;
 
 import Assets.Graphic.PostProcess;
 import Assets.Bundle;
 
+import MainTest;
 
 Graphic::ImageAtlas loadTex(){
     using namespace Core;
@@ -76,17 +79,6 @@ Graphic::ImageAtlas loadTex(){
     Graphic::Draw::WhiteRegion = &mainPage.registerNamedRegion("white", std::move(region)).first;
 
     return imageAtlas;
-}
-
-void compileAllShaders() {
-    Core::Vulkan::ShaderRuntimeCompiler compiler{};
-    compiler.addMarco("MaximumAllowedSamplersSize", std::format("{}", Graphic::Batch2::MaximumAllowedSamplersSize));
-    const Core::Vulkan::ShaderCompilerWriter adaptor{compiler, Assets::Dir::shader_spv};
-
-    Core::File{Assets::Dir::shader_src}.forSubs([&](Core::File&& file){
-        if(file.extension().empty())return;
-        adaptor.compile(file);
-    });
 }
 
 Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
@@ -114,41 +106,31 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 
     return fontManager;
 }
-//
-//
-// int main(){
-//     std::u32string str{U""}
-//     ext::object_pool<std::string, 5> pool;
-//
-//     auto p = pool.obtain_unique("1234556");
-//     //
-//     auto pd = pool.get_pages().front().as_span();
-//
-//     auto p1 = std::move(pool);
-//
-//     p1 = {};
-//
-//     p.reset();
-//
-// }
+
+
+int main_(){
+    using namespace std::literals;
+
+    auto sv = "t\0abc"sv;
+    auto str = "t\0abc";
+
+    std::println("{}", sv);
+    std::println("{}", str);
+    return 0;
+}
 
 int main(){
     using namespace Core;
 
-    // auto [availableLayers, rst] = Vulkan::Util::enumerate(vkEnumerateInstanceExtensionProperties);
+	::Core::init();
 
-	init();
-
-    compileAllShaders();
+    Test::compileAllShaders();
 
 	Assets::load(vulkanManager->context);
 
 
     Graphic::RendererUI* rendererUi = new Graphic::RendererUI{vulkanManager->context};
-
-
-    auto* batch = new Graphic::Batch{vulkanManager->context, sizeof(Vulkan::Vertex_World)};
-    vulkanManager->batchVertexData = batch->getBatchData();
+    Graphic::RendererWorld* rendererWorld = new Graphic::RendererWorld{vulkanManager->context};
 
     vulkanManager->registerResizeCallback(
         [rendererUi](auto& e){
@@ -157,12 +139,24 @@ int main(){
             rendererUi->initRenderPass(e);
         });
 
+    vulkanManager->rendererWorld = rendererWorld;
+
+    vulkanManager->registerResizeCallback(
+    [rendererWorld](auto& e){
+        if(e.area()){
+            rendererWorld->resize(static_cast<Geom::USize2>(e));
+        }
+    }, [&rendererWorld](auto e){
+        rendererWorld->initPipeline(e);
+    });
 
     vulkanManager->uiImageViewProv = [&]{
         return std::make_pair(rendererUi->mergeFrameBuffer.at(3), rendererUi->mergeFrameBuffer.at(4));
     };
 
     vulkanManager->initPipeline();
+
+
 
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
@@ -208,16 +202,6 @@ int main(){
 	texturePesterLight = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
 	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
 
-
-    // batch->externalDrawCall = [](const Graphic::Batch& b){
-    //     vulkanManager->drawFrame(b.drawCommandFence);
-    // };
-
-    batch->descriptorChangedCallback = [](const Graphic::Batch& b, std::span<const VkImageView> data){
-        vulkanManager->updateBatchDescriptorSet(data, nullptr);
-        vulkanManager->createBatchDrawCommands();
-    };
-
     std::uint32_t fps_count{};
     float sec{};
 
@@ -230,13 +214,17 @@ int main(){
         mainCamera->update(timer.globalDeltaTick());
 
         if(mainCamera->checkChanged()){
-            vulkanManager->updateBatchUniformBuffer(Vulkan::UniformBlock{mainCamera->getWorldToScreen(), 0.f});
+            rendererWorld->updateProjection(Vulkan::UniformProjectionBlock{mainCamera->getWorldToScreen(), 0.f});
+            rendererWorld->updateCameraProperties(Graphic::CameraProperties{
+                .scale = mainCamera->getScale()
+            });
+
             vulkanManager->updateCameraScale(mainCamera->getScale());
         }
 
 
         constexpr auto baseColor = Graphic::Colors::WHITE;
-        constexpr auto lightColor = Graphic::Colors::WHITE;//Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
+        constexpr auto lightColor = Graphic::Colors::CLEAR.copy().appendLightColor(Graphic::Colors::WHITE);
 
         Geom::Vec2 off{ timer.getGlobalTime() * 5.f + 0, 0};
         Geom::Vec2 off2 = off.copy().add(50, 50);
@@ -248,59 +236,69 @@ int main(){
             fps_count = 0;
         }
         fps_count++;
+        // Font::TypeSettings::draw(rendererUi->batch, fps, {300, 300});
 
-        Font::TypeSettings::draw(rendererUi->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 
 
          {
-            auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePester.getView());
+            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
             new(dataPtr) std::array{
-                    Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off), {imageIndex}, baseColor, {0.0f, 1.0f}},
-                    Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off), {imageIndex}, baseColor, {1.0f, 1.0f}},
-                    Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off), {imageIndex}, baseColor, {1.0f, 0.0f}},
-                    Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off), {imageIndex}, baseColor, {0.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
         }
-        //
-        // {
-        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePesterLight.getView());
-        //     new(dataPtr) std::array{
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off), {imageIndex}, lightColor, {0.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off), {imageIndex}, lightColor, {1.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off), {imageIndex}, lightColor, {1.0f, 0.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off), {imageIndex}, lightColor, {0.0f, 0.0f}},
-        //         };
-        // }
-        //
-        // {
-        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePester.getView());
-        //     new(dataPtr) std::array{
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off2), {imageIndex}, baseColor, {0.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off2), {imageIndex}, baseColor, {1.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off2), {imageIndex}, baseColor, {1.0f, 0.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off2), {imageIndex}, baseColor, {0.0f, 0.0f}},
-        //         };
-        // }
-        //
-        // {
-        //     auto [imageIndex, s, dataPtr, captureLock] = rendererUi->batch.acquire(texturePesterLight.getView());
-        //     new(dataPtr) std::array{
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 0  }.add(off2), {imageIndex}, lightColor, {0.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 0  }.add(off2), {imageIndex}, lightColor, {1.0f, 1.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{800, 800}.add(off2), {imageIndex}, lightColor, {1.0f, 0.0f}},
-        //             Vulkan::Vertex_UI{Geom::Vec2{0  , 800}.add(off2), {imageIndex}, lightColor, {0.0f, 0.0f}},
-        //         };
-        // }
-        //
-        // batch->consumeAll();
+
+        {
+            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+            new(dataPtr) std::array{
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
+                };
+        }
+
+        {
+            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
+            new(dataPtr) std::array{
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
+                };
+        }
+
+        {
+            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+            new(dataPtr) std::array{
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.5f, {imageIndex}, lightColor, {1.0f, 0.0f}},
+                    Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.5f, {imageIndex}, lightColor, {0.0f, 0.0f}},
+                };
+        }
+
 
 
         // rendererUi->pushScissor({100, 100, 500, 500});
-        Font::TypeSettings::draw(rendererUi->batch, fps, {300, 300});
-        // rendererUi->pushScissor({200, 200, 1200, 1200}, false);
-        // Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
+        // rendererUi->batch.consumeAll();
 
+        Font::TypeSettings::draw(rendererUi->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
+
+        // rendererUi->pushScissor({200, 200, 1200, 1200}, false);
+        Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
+		// rendererUi->batch.consumeAll();
+
+        // rendererUi->batch.consumeAll();
+        // rendererUi->pushScissor({250, 200, 1200, 1200}, false);
+
+        // rendererUi->resetScissors();
+        Font::TypeSettings::draw(rendererUi->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
         rendererUi->batch.consumeAll();
+        rendererWorld->batch.consumeAll();
+
         rendererUi->blit();
         rendererUi->endBlit();
 
@@ -317,8 +315,8 @@ int main(){
 
 
     imageAtlas = {};
-    delete batch;
     delete rendererUi;
+    delete rendererWorld;
 
     fontManager = {};
     texturePester = {};

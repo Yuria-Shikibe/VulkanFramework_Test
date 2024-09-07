@@ -84,23 +84,23 @@ export namespace Core::Vulkan{
 
 		template <std::ranges::contiguous_range T>
 			requires (std::ranges::sized_range<T>)
-		void loadData(const T& range) const{
+		void loadData(std::from_range_t, const T& range) const{
 			const std::size_t dataSize = std::ranges::size(range) * sizeof(std::ranges::range_value_t<T>);
 
-			this->loadData(std::ranges::data(range), dataSize);
+			this->loadData(std::ranges::data(range), dataSize, 0);
 		}
 
 		template <typename T>
-			requires (std::is_trivially_copyable_v<T>)
-		void loadData(const T& data) const{
+			requires (std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>)
+		void loadData(const T& data, const std::size_t offset = 0) const{
 			static constexpr std::size_t dataSize = sizeof(T);
 
-			this->loadData(&data, dataSize);
+			this->loadData(&data, dataSize, offset);
 		}
 
 		template <typename T, std::size_t size>
 		void loadData(const std::array<T, size>& data) const{
-			this->loadData(&data, size);
+			this->loadData(data.data(), size, 0);
 		}
 
 		template <typename T, typename... Args>
@@ -119,17 +119,17 @@ export namespace Core::Vulkan{
 		template <typename T>
 			requires (std::is_trivially_copyable_v<T>)
 		void loadData(const T* data) const{
-			this->loadData(*data);
+			this->loadData(*data, 0);
 		}
 
 
-		void loadData(const void* src, const std::size_t size) const{
-			if(size > capacity){
+		void loadData(const void* src, const std::size_t size, const std::size_t offset = 0) const{
+			if(size > capacity - offset){
 				throw std::runtime_error("Insufficient buffer capacity!");
 			}
 
 			const auto pdata = map();
-			std::memcpy(pdata, src, size);
+			std::memcpy(static_cast<std::byte*>(pdata) + offset, src , size);
 			unmap();
 		}
 

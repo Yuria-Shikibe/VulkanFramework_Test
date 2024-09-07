@@ -1,20 +1,24 @@
 #version 460
 #pragma shader_stage(compute)
 
+#include "camera_property"
+
+
 #define MaxKernalSize 64
 
 layout (local_size_x = 16, local_size_y = 16) in;
 
-layout(set = 0, binding = 0) uniform UBO {
+layout(binding = 0) uniform sampler2D depthTex;
+layout(binding = 1, rgba32f) uniform image2D outTex;
+
+layout(set = 0, binding = 2) uniform UBO {
     vec4 kernal[MaxKernalSize];
     uint kernalSize;
 } ubo;
 
-layout(binding = 1) uniform sampler2D depthTex;
-layout(binding = 2, rgba32f) uniform image2D outTex;
 
-layout(set = 0, binding = 3) uniform UBOScale {
-    float scale;
+layout(set = 1, binding = 0) uniform CameraProperty_ {
+    CameraProperty camera;
 };
 
 const float radius = 16.f;
@@ -27,11 +31,11 @@ void main() {
     const  ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
     const  vec2 uv = (vec2(pos) + vec2(0.5f, 0.5f)) / vec2(imageSize(outTex));
 
-    const float depth = texture(depthTex, uv).x;
+    const float depth = texelFetch(depthTex, pos, 0).x;
 
     for (uint i = 0; i < ubo.kernalSize; ++i){
         // get smp position
-        const vec2 smp = uv + ubo.kernal[i].xy * radius * scale;// From tangent to view-space
+        const vec2 smp = uv + ubo.kernal[i].xy * radius * camera.scale;// From tangent to view-space
 
         const float sampleDepth = texture(depthTex, smp).x;// Get depth value of kernel smp
 

@@ -1,6 +1,8 @@
 #version 460
 #pragma shader_stage(compute)
 
+#include "camera_property"
+
 #define KernalSize 3
 
 layout (local_size_x = 16, local_size_y = 16) in;
@@ -13,19 +15,19 @@ layout (binding = 2) uniform Kernal{
     float srcWeight;
 };
 
-layout (binding = 3) uniform Scale{
-    float scale;
+layout (set = 1, binding = 0) uniform CameraProperty_{
+    CameraProperty camera;
 };
 
 void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
     vec2 uv = (vec2(pos) + vec2(0.5f, 0.5f)) / vec2(imageSize(outputImage));
 
-    vec4 color = texture(inputImage, uv) * srcWeight;
+    vec4 color = texelFetch(inputImage, pos, 0) * srcWeight;
 
     for (uint i = 0; i < KernalSize; ++i) {
-        color += texture(inputImage, uv + off[i].xy / imageSize(outputImage) * scale) * off[i].z;
-        color += texture(inputImage, uv - off[i].xy / imageSize(outputImage) * scale) * off[i].z;
+        color += texture(inputImage, uv + off[i].xy / imageSize(outputImage) * camera.scale) * off[i].z;
+        color += texture(inputImage, uv - off[i].xy / imageSize(outputImage) * camera.scale) * off[i].z;
     }
 
     imageStore(outputImage, pos, color);

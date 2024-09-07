@@ -14,7 +14,7 @@ import Graphic.Batch2;
 import std;
 
 //TEMP
-import Graphic.RendererUI;
+import Graphic.Renderer.UI;
 import Graphic.Draw.Func;
 import Core.Vulkan.Vertex;
 

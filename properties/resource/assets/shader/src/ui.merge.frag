@@ -16,7 +16,6 @@ const float intensity_ori = 0.95f;
 
 const float lightScl = 1.5f;
 
-
 void main() {
     vec4 baseColor = subpassLoad(sourceTex);
     vec4 original = subpassLoad(lightSourceTex) * intensity_ori;

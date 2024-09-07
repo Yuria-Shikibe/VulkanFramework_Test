@@ -15,6 +15,46 @@ namespace Core::Vulkan::Util{
 		return extensions;
 	}
 
+	export
+	template <std::ranges::range Rng>
+		requires (std::convertible_to<std::ranges::range_value_t<Rng>, VkImageView>)
+	[[nodiscard]] std::vector<VkDescriptorImageInfo> getDescriptorInfoRange_ShaderRead(VkSampler handle, const Rng& imageViews) noexcept{
+		std::vector<VkDescriptorImageInfo> rst{};
+
+		for (const auto& view : imageViews){
+			rst.emplace_back(handle, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+		}
+
+		return rst;
+	}
+
+	export
+	template <typename T>
+		requires requires(T& t){
+			t.srcAccessMask;
+			t.dstAccessMask;
+			t.srcStageMask;
+			t.dstStageMask;
+
+			std::swap(t.srcAccessMask, t.dstAccessMask);
+			std::swap(t.srcStageMask, t.dstStageMask);
+		}
+	void swapStage(T& t){
+		std::swap(t.srcAccessMask, t.dstAccessMask);
+		std::swap(t.srcStageMask, t.dstStageMask);
+	}
+
+	export
+	template <>
+
+	void swapStage(VkImageMemoryBarrier2& t){
+		std::swap(t.srcAccessMask, t.dstAccessMask);
+		std::swap(t.srcStageMask, t.dstStageMask);
+		std::swap(t.srcQueueFamilyIndex, t.srcQueueFamilyIndex);
+		std::swap(t.oldLayout, t.newLayout);
+	}
+
+
 
 	export
 	template <std::ranges::range Range, std::ranges::range ValidRange, typename Proj = std::identity>

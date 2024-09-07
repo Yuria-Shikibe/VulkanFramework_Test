@@ -28,6 +28,14 @@ export namespace Core::Vulkan{
 
 		//TODO globalCommandPool?
 
+		[[nodiscard]] auto graphicFamily() const noexcept{
+			return physicalDevice.queues.graphicsFamily;
+		}
+
+		[[nodiscard]] auto computeFamily() const noexcept{
+			return physicalDevice.queues.computeFamily;
+		}
+
 		void init(){
 			instance.init();
 			if constexpr(EnableValidationLayers){

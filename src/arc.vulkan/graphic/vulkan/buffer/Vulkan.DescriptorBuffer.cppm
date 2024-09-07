@@ -14,6 +14,7 @@ import std;
 
 export namespace Core::Vulkan{
 	//OPTM bad interface design
+	//TODO rewrite CRTP pattern
 	template <typename T>
 	struct DescriptorBufferBase{
 	private:

@@ -59,7 +59,7 @@ namespace ext::algo{
 	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
 	[[nodiscard]] constexpr Itr
 		remove_if_unstable_impl(Itr first, Sentinel sentinel, Pred&& pred, const Proj porj = {}){
-		ext::algo::itrRangeOrderCheck(first, sentinel);
+		algo::itrRangeOrderCheck(first, sentinel);
 
 		Itr firstFound = std::ranges::find_if(first, sentinel, pred, porj);
 		Sentinel sl = sentinel;
@@ -70,7 +70,7 @@ namespace ext::algo{
 
 			if constexpr(itrSentinelCompariable<Itr, Sentinel>){
 				while(firstFound < sl){
-					ext::algo::swapItr<replace>(sl, firstFound);
+					algo::swapItr<replace>(sl, firstFound);
 
 					firstFound = std::ranges::find_if(firstFound, sl, pred, porj);
 					while(pred(std::invoke(porj, *sl))) --sl;
@@ -78,7 +78,7 @@ namespace ext::algo{
 			} else{
 				while(firstFound != sentinel){
 					if(pred(std::invoke(porj, *firstFound))){
-						ext::algo::swapItr<replace>(sentinel, firstFound);
+						algo::swapItr<replace>(sentinel, firstFound);
 						if(!(--sentinel != firstFound)) break;
 					} else{
 						++firstFound;
@@ -91,17 +91,17 @@ namespace ext::algo{
 	}
 
 	template <bool replace, std::permutable Itr, std::permutable Sentinel, typename Ty, typename Proj = std::identity>
-	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
+		requires requires(Sentinel sentinel){
+		--sentinel;
+		requires std::sentinel_for<Sentinel, Itr>;
+	}
 	[[nodiscard]] constexpr Itr remove_unstable_impl(Itr first, Sentinel sentinel, const Ty& val, const Proj porj = {}){
 		if constexpr(requires{
-			ext::algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val),
-				porj);
+			algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
 		}){
-			return ext::algo::remove_if_unstable_impl<replace>(first, sentinel,
-				std::bind_front(std::equal_to<Ty>{}, val), porj);
+			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
 		} else{
-			return ext::algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val),
-				porj);
+			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val), porj);
 		}
 	}
 
@@ -110,7 +110,7 @@ namespace ext::algo{
 	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
 	[[nodiscard]] constexpr Itr remove_unique_if_unstable_impl(Itr first, Sentinel sentinel, Pred&& pred,
 		const Proj porj = {}){
-		ext::algo::itrRangeOrderCheck(first, sentinel);
+		algo::itrRangeOrderCheck(first, sentinel);
 
 		Itr firstFound = std::ranges::find_if(first, sentinel, pred, porj);
 		if(firstFound != sentinel){
@@ -118,7 +118,7 @@ namespace ext::algo{
 
 			if(firstFound != sentinel){
 				if(pred(std::invoke(porj, *firstFound))){
-					ext::algo::swapItr<replace>(sentinel, firstFound);
+					algo::swapItr<replace>(sentinel, firstFound);
 				}
 				++firstFound;
 			}
@@ -133,11 +133,11 @@ namespace ext::algo{
 		const Proj porj = {}){
 
 		if constexpr(requires{
-			ext::algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
 		}){
-			return ext::algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
 		} else{
-			return ext::algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val), porj);
+			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val), porj);
 		}
 	}
 
@@ -147,7 +147,7 @@ namespace ext::algo{
 	[[nodiscard]] constexpr auto remove_unstable(Itr first, const Sentinel sentinel, const Ty& val,
 		const Proj porj = {}){
 		return std::ranges::subrange<Itr>{
-				ext::algo::remove_unstable_impl<replace>(first, sentinel, val, porj), sentinel
+				algo::remove_unstable_impl<replace>(first, sentinel, val, porj), sentinel
 			};
 	}
 
@@ -155,7 +155,7 @@ namespace ext::algo{
 	template <bool replace = false, std::ranges::random_access_range Rng, typename Ty, typename Proj = std::identity>
 	[[nodiscard]] constexpr auto remove_unstable(Rng& range, const Ty& val, const Proj porj = {}){
 		return std::ranges::borrowed_subrange_t<Rng>{
-				ext::algo::remove_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val, porj),
+				algo::remove_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val, porj),
 				std::ranges::end(range)
 			};
 	}
@@ -166,7 +166,7 @@ namespace ext::algo{
 	[[nodiscard]] constexpr auto remove_if_unstable(Itr first, const Sentinel sentinel, Pred&& pred,
 		const Proj porj = {}){
 		return std::ranges::subrange<Itr>{
-				ext::algo::remove_if_unstable_impl<replace>(first, sentinel, pred, porj), sentinel
+				algo::remove_if_unstable_impl<replace>(first, sentinel, pred, porj), sentinel
 			};
 	}
 
@@ -175,7 +175,7 @@ namespace ext::algo{
 	          std::indirect_unary_predicate<std::projected<std::ranges::iterator_t<Rng>, Proj>> Pred>
 	[[nodiscard]] constexpr auto remove_if_unstable(Rng& range, Pred&& pred, const Proj porj = {}){
 		return std::ranges::borrowed_subrange_t<Rng>{
-				ext::algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred,
+				algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred,
 					porj),
 				std::ranges::end(range)
 			};
@@ -190,7 +190,7 @@ namespace ext::algo{
 	constexpr decltype(auto) erase_unstable(Rng& range, const Ty& val, const Proj porj = {}){
 		auto oldSize = range.size();
 		range.erase(
-			ext::algo::remove_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val, porj),
+			algo::remove_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val, porj),
 			std::ranges::end(range));
 		return oldSize - range.size();
 	}
@@ -205,7 +205,7 @@ namespace ext::algo{
 	constexpr decltype(auto) erase_if_unstable(Rng& range, Pred&& pred, const Proj porj = {}){
 		auto oldSize = range.size();
 		range.erase(
-			ext::algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj),
+			algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj),
 			std::ranges::end(range));
 		return oldSize - range.size();
 	}
@@ -219,7 +219,7 @@ namespace ext::algo{
 	constexpr decltype(auto) erase_unique_unstable(Rng& range, const Ty& val, const Proj porj = {}){
 		auto oldSize = range.size();
 		range.erase(
-			ext::algo::remove_unique_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val,
+			algo::remove_unique_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), val,
 				porj),
 			std::ranges::end(range));
 		return oldSize - range.size();
@@ -235,7 +235,7 @@ namespace ext::algo{
 	constexpr decltype(auto) erase_unique_if_unstable(Rng& range, Pred&& pred, const Proj porj = {}){
 		auto oldSize = range.size();
 		range.erase(
-			ext::algo::remove_unique_if_unstable_impl<
+			algo::remove_unique_if_unstable_impl<
 				replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj), std::ranges::end(range));
 		return oldSize - range.size();
 	}

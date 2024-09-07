@@ -4,6 +4,7 @@ import std;
 
 export namespace ext{
 	//TODO as container adaptor?
+	//OPTM using pointer instead of index?
 	template <typename T, std::size_t size>
 		requires (std::is_default_constructible_v<T>)
 	struct circular_array : std::array<T, size>{
@@ -13,41 +14,41 @@ export namespace ext{
 		std::size_t current{};
 
 	public:
-		constexpr auto& operator++(){
+		constexpr auto& operator++() noexcept{
 			next();
 			return get();
 		}
 
-		constexpr auto& operator++(int){
+		constexpr auto& operator++(int) noexcept{
 			auto& cur = get();
 			next();
 			return cur;
 		}
 
-		constexpr auto& operator--(){
+		constexpr auto& operator--() noexcept{
 			prev();
 			return get();
 		}
 
-		constexpr auto& operator--(int){
+		constexpr auto& operator--(int) noexcept{
 			auto& cur = get();
 			prev();
 			return cur;
 		}
 
-		constexpr void next(){
+		constexpr void next() noexcept{
 			current = (current + 1) % size;
 		}
 
-		constexpr void prev(){
+		constexpr void prev() noexcept{
 			current = (current - 1 + size) % size;
 		}
 
-		constexpr void next(typename std::array<T, size>::difference_type off){
+		constexpr void next(typename std::array<T, size>::difference_type off) noexcept{
 			current = (current + off % size) % size;
 		}
 
-		constexpr void prev(typename std::array<T, size>::difference_type off){
+		constexpr void prev(typename std::array<T, size>::difference_type off) noexcept{
 			current = (current - off % size + size) % size;
 		}
 

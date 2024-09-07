@@ -32,7 +32,7 @@ export namespace Graphic{
 		static constexpr std::size_t MaxGroupCount{2048 * 4};
 		static constexpr std::size_t BufferSize{3};
 
-		static constexpr std::size_t MaximumAllowedSamplersSize{1};
+		static constexpr std::size_t MaximumAllowedSamplersSize{8};
 
 	    static constexpr std::uint32_t VerticesGroupCount{4};
 	    static constexpr std::uint32_t IndicesGroupCount{6};
@@ -87,7 +87,7 @@ export namespace Graphic{
 				stagingBuffer = {
 					batch.context->physicalDevice, batch.context->device, (batch.unitOffset * MaxGroupCount),
 					VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+					VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 				};
 				vertData = stagingBuffer.memory.map_noInvalidation();
 			}
@@ -436,7 +436,7 @@ export namespace Graphic{
 				.vertexOffset = 0,
 				.firstInstance = 0
 			};
-			commandUnit.indirectBuffer.flush(sizeof(VkDrawIndexedIndirectCommand));
+			commandUnit.indirectBuffer.flush(VK_WHOLE_SIZE);
 			commandUnit.fence.waitAndReset();
 
 			{

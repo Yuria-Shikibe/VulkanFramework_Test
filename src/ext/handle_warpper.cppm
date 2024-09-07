@@ -16,13 +16,13 @@ export namespace ext{
 		[[nodiscard]] constexpr explicit(false) wrapper(const T handler)
 			: handle{handler}{}
 
-		constexpr T release(){
+		constexpr T release() noexcept{
 			return std::exchange(handle, nullptr);
 		}
 
-		constexpr wrapper(const wrapper& other) requires (enableCopy) = default;
+		constexpr wrapper(const wrapper& other) noexcept requires (enableCopy) = default;
 
-		constexpr wrapper& operator=(const wrapper& other) requires (enableCopy) = default;
+		constexpr wrapper& operator=(const wrapper& other) noexcept requires (enableCopy) = default;
 
 		constexpr wrapper(wrapper&& other) noexcept
 			: handle{std::move(other.handle)}{

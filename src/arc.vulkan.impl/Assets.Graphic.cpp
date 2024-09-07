@@ -68,6 +68,15 @@ void Assets::Shader::load(const VkDevice device){
     };
 
 
+    Vert::worldBatch = Core::Vulkan::ShaderModule{
+        device, dir / R"(world.vert.spv)"
+    };
+
+    Frag::worldBatch = Core::Vulkan::ShaderModule{
+        device, dir / R"(world.frag.spv)"
+    };
+
+
     Comp::Gaussian = Core::Vulkan::ShaderModule{
         device, dir / R"(gaussian.comp.spv)"
     };

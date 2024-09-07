@@ -12,7 +12,9 @@ import Core.Vulkan.Preinstall;
 import std;
 
 export namespace Core::Vulkan{
-	struct PipelineTemplate : VkGraphicsPipelineCreateInfo{
+	struct PipelineTemplate{
+		VkGraphicsPipelineCreateInfo info{VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO};
+
 		ShaderChain shaderChain{};
 
 		std::vector<VkDynamicState> dynamicStates{};
@@ -30,25 +32,23 @@ export namespace Core::Vulkan{
 			return dynamicViewportSize > 0 ? dynamicViewportSize : staticViewports.size();
 		}
 
-		[[nodiscard]] PipelineTemplate() : VkGraphicsPipelineCreateInfo{
-				VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO
-			}{
+		[[nodiscard]] PipelineTemplate(){
 			useDefaultFixedStages();
 		}
 
 		PipelineTemplate& useDefaultFixedStages(){
 			viewportState = Default::DynamicViewportState<1>;
 
-			pInputAssemblyState = &Default::InputAssembly;
-			pRasterizationState = &Default::Rasterizer;
-			pMultisampleState = &Default::Multisampling;
-			pColorBlendState = &Default::ColorBlending<std::array{Blending::ScaledAlphaBlend}>;
+			info.pInputAssemblyState = &Default::InputAssembly;
+			info.pRasterizationState = &Default::Rasterizer;
+			info.pMultisampleState = &Default::Multisampling;
+			info.pColorBlendState = &Default::ColorBlending<std::array{Blending::ScaledAlphaBlend}>;
 
 			return *this;
 		}
 
 		PipelineTemplate& setColorBlend(const VkPipelineColorBlendStateCreateInfo* info){
-			pColorBlendState = info;
+			this->info.pColorBlendState = info;
 			return *this;
 		}
 
@@ -132,8 +132,8 @@ export namespace Core::Vulkan{
 		PipelineTemplate& setShaderChain(ShaderChain&& shaderChain){
 			this->shaderChain = std::move(shaderChain);
 
-			stageCount = shaderChain.size();
-			pStages = shaderChain.data();
+			info.stageCount = shaderChain.size();
+			info.pStages = shaderChain.data();
 
 			return *this;
 		}
@@ -158,26 +158,61 @@ export namespace Core::Vulkan{
 			return *this;
 		}
 
+		void apply(VkPipelineLayout layout, VkRenderPass renderPass = nullptr, const std::uint32_t subpassIndex = 0){
+			info.layout = layout;
+			info.renderPass = renderPass;
+			info.subpass = subpassIndex;
+
+			info.stageCount = shaderChain.size();
+			info.pStages = shaderChain.data();
+
+			info.pVertexInputState = &vertexInputInfo;
+
+			info.pDynamicState = &dynamicStateInfo;
+
+			info.pViewportState = &viewportState;
+			info.pDepthStencilState = &depthStencilState;
+		}
+
+
 		[[nodiscard]] auto create(VkDevice device,
 			VkPipelineLayout layout, VkRenderPass renderPass, std::uint32_t subpassIndex = 0){
-
-			this->layout = layout;
-			this->renderPass = renderPass;
-			this->subpass = subpassIndex;
-
-			this->stageCount = shaderChain.size();
-			this->pStages = shaderChain.data();
-
-			this->pVertexInputState = &vertexInputInfo;
-
-			this->pDynamicState = &dynamicStateInfo;
-
-			this->pViewportState = &viewportState;
-			this->pDepthStencilState = &depthStencilState;
+			apply(layout, renderPass, subpassIndex);
 
 			VkPipeline pipeline{};
-			auto rst = vkCreateGraphicsPipelines(device, nullptr, 1, this, nullptr, &pipeline);
+			auto rst = vkCreateGraphicsPipelines(device, nullptr, 1, &info, nullptr, &pipeline);
 			return std::make_pair(pipeline, rst);
+		}
+	};
+
+	struct DynamicPipelineTemplate : PipelineTemplate{
+		std::vector<VkFormat> usedColorAttachmentFormats{};
+
+		VkPipelineRenderingCreateInfo pipelineRenderingCreateInfo{
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
+			.pNext = nullptr,
+			.viewMask = 0,
+			.depthAttachmentFormat = VK_FORMAT_D24_UNORM_S8_UINT,
+			.stencilAttachmentFormat = VK_FORMAT_UNDEFINED
+		};
+
+		void pushColorAttachmentFormat(const VkFormat format){
+			usedColorAttachmentFormats.push_back(format);
+		}
+
+		void pushColorAttachmentFormat(const VkFormat format, std::size_t count){
+			for (const auto & repeat : std::ranges::views::repeat(format, count)){
+				usedColorAttachmentFormats.push_back(repeat);
+			}
+			//TODO uses append range
+			// ...(std::ranges::views::repeat(format, count));
+		}
+
+		void applyDynamicRendering(){
+			pipelineRenderingCreateInfo.colorAttachmentCount = usedColorAttachmentFormats.size();
+			pipelineRenderingCreateInfo.pColorAttachmentFormats = usedColorAttachmentFormats.data();
+
+			info.pNext = &pipelineRenderingCreateInfo;
 		}
 	};
 

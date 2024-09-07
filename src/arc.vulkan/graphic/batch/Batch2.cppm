@@ -4,39 +4,35 @@ module;
 
 export module Graphic.Batch2;
 
-import Core.Vulkan.Uniform;
-import Core.Vulkan.Buffer.UniformBuffer;
 import Core.Vulkan.Buffer.PersistentTransferBuffer;
 import Core.Vulkan.Buffer.IndexBuffer;
 import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.CommandPool;
-import Core.Vulkan.Sampler;
-import Core.Vulkan.DescriptorSet;
-import Core.Vulkan.Semaphore;
 import Core.Vulkan.Context;
 import Core.Vulkan.Fence;
 import Core.Vulkan.BatchData;
 import Core.Vulkan.Event;
+import Core.Vulkan.Util;
 
 import Core.Vulkan.DescriptorBuffer;
-import Core.Vulkan.DescriptorSet;
+import Core.Vulkan.DescriptorLayout;
 import Core.Vulkan.Preinstall;
-
-//TODO TEMP
-import Assets.Graphic;
 
 import std;
 import ext.array_queue;
 import ext.circular_array;
 
 export namespace Graphic{
+
+	//TODO support move assignment
 	struct Batch2{
 		static constexpr std::size_t MaxGroupCount{2048 * 4};
-		static constexpr std::size_t BufferSize{4};
+		static constexpr std::size_t BufferSize{3};
+		static constexpr std::size_t UnitSize{4};
 
-		static constexpr std::size_t MaximumAllowedSamplersSize{4};
+		static constexpr std::size_t MaximumAllowedSamplersSize{8};
 
 		static constexpr std::uint32_t VerticesGroupCount{4};
 		static constexpr std::uint32_t IndicesGroupCount{6};
@@ -53,10 +49,20 @@ export namespace Graphic{
 			Core::Vulkan::PersistentTransferDoubleBuffer indirectBuffer{};
 			Core::Vulkan::DescriptorBuffer_Double descriptorBuffer_Double{};
 
-			Core::Vulkan::CommandBuffer flushCommandBuffer{};
+			Core::Vulkan::CommandBuffer transferCommand{};
 			Core::Vulkan::Fence fence{};
 			ImageSet usedImages_prev{};
 
+			decltype(auto) getBarriers() const{
+				return getBarriars(
+						vertexBuffer,
+						indirectBuffer.getTargetBuffer(),
+						descriptorBuffer_Double);
+			}
+
+			auto getDescriptorBufferBindInfo() const{
+				return descriptorBuffer_Double.getBindInfo(VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT);
+			}
 
 			[[nodiscard]] CommandUnit() = default;
 
@@ -74,19 +80,18 @@ export namespace Graphic{
 					VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
 				},
 				descriptorBuffer_Double{batch.context->physicalDevice, batch.context->device, batch.layout, batch.layout.size()},
-				flushCommandBuffer{batch.context->device, batch.transientCommandPool},
+				transferCommand{batch.context->device, batch.transientCommandPool},
 				fence{batch.context->device, Core::Vulkan::Fence::CreateFlags::signal}
 			{}
 
-			void updateDescriptorSets(const ImageSet& imageSet) const{
+			void updateDescriptorSets(const ImageSet& imageSet, VkSampler sampler) const{
 				const auto end = std::ranges::find(imageSet, static_cast<VkImageView>(nullptr));
 				const std::span span{imageSet.begin(), end};
 
 				const auto imageInfos =
-					Core::Vulkan::Util::getDescriptorInfoRange_ShaderRead(Assets::Sampler::textureDefaultSampler, span);
+					Core::Vulkan::Util::getDescriptorInfoRange_ShaderRead(sampler, span);
 
 				descriptorBuffer_Double.loadImage(0, imageInfos);
-				descriptorBuffer_Double.flush(descriptorBuffer_Double.size);
 			}
 		};
 
@@ -103,16 +108,20 @@ export namespace Graphic{
 			std::shared_mutex capturedMutex{};
 
 		public:
-			Core::Vulkan::Event drawCompleteEvent{};
+			Core::Vulkan::Event transferEvent{};
 
 			[[nodiscard]] FrameData() = default;
 
+			[[nodiscard]] bool empty() const noexcept{
+				return currentCount == 0;
+			}
+
 			void init(const Batch2& batch){
-				drawCompleteEvent = Core::Vulkan::Event{batch.context->device, false};
+				transferEvent = Core::Vulkan::Event{batch.context->device, false};
 				vertexStagingBuffer = {
 						batch.context->physicalDevice, batch.context->device, (batch.unitOffset * MaxGroupCount),
 						VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT,
+						VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 					};
 				vertData = vertexStagingBuffer.memory.map_noInvalidation();
 			}
@@ -135,7 +144,7 @@ export namespace Graphic{
 
 			void resetState(){
 				currentCount = 0;
-				drawCompleteEvent.reset();
+				transferEvent.reset();
 			}
 
 			void activate() noexcept{
@@ -173,32 +182,61 @@ export namespace Graphic{
 		Core::Vulkan::DescriptorSetLayout layout{};
 		Core::Vulkan::IndexBuffer indexBuffer{};
 
+		VkSampler sampler{};
 		ImageSet usedImages{};
 
+	private:
 		std::shared_mutex imageUpdateMutex{};
+
 		std::mutex overflowMutex{};
 
 		std::array<FrameData, BufferSize> frames{};
+
 		std::size_t currentIndex{};
+
 		std::binary_semaphore semaphore_indexIncrement{1};
 
 		/** @brief shared lock when acquire valid draw args, unique lock when swap frame*/
 		std::shared_mutex frameSeekingMutex{};
 
-		// /** @brief Used to notify all threads waiting for an available frame*/
-		// std::condition_variable_any frameSeekingConditions{};
-
-		ext::circular_array<CommandUnit, BufferSize> flushCommandBuffers{};
 		ext::array_queue<DrawCall, BufferSize> drawCalls{};
 		std::mutex drawQueueMutex{};
 
-		std::function<void(VkCommandBuffer, const VkDescriptorBufferBindingInfoEXT&)> cmdBinderBegin{};
+	public:
+		ext::circular_array<CommandUnit, UnitSize> units{};
+		std::function<void(std::size_t)> drawCall{};
 
 		[[nodiscard]] Batch2() = default;
 
-		[[nodiscard]] explicit Batch2(const Core::Vulkan::Context& context, const std::size_t vertexSize) :
-			context{&context}, unitOffset{static_cast<std::ptrdiff_t>(vertexSize * VerticesGroupCount)}{
-			init(&context);
+		[[nodiscard]] explicit Batch2(const Core::Vulkan::Context& context, const std::size_t vertexSize, VkSampler sampler) :
+			context{&context}, transientCommandPool{
+				context.device,
+				context.physicalDevice.queues.graphicsFamily,
+				VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+			},
+			unitOffset{static_cast<std::ptrdiff_t>(vertexSize * VerticesGroupCount)},
+			layout{
+				context.device, [](Core::Vulkan::DescriptorSetLayout& layout){
+					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+					                        MaximumAllowedSamplersSize);
+
+					layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+				}
+			},
+			indexBuffer{
+				Core::Vulkan::Util::createIndexBuffer(
+					context, transientCommandPool, Core::Vulkan::Util::BatchIndices<MaxGroupCount>)
+			}, sampler{sampler}{
+
+			for(auto& frame : frames)frame.init(*this);
+			for(auto& commands : units)commands = CommandUnit{*this};
+		}
+
+		void bindBuffersTo(VkCommandBuffer commandBuffer, const std::size_t unitIndex){
+			vkCmdBindVertexBuffers(commandBuffer, 0, 1, units[unitIndex].vertexBuffer.as_data(), Core::Vulkan::Seq::Offset<0>);
+			vkCmdBindIndexBuffer(commandBuffer, indexBuffer, 0, indexBuffer.indexType);
+			vkCmdDrawIndexedIndirect(commandBuffer, units[unitIndex].indirectBuffer.getTargetBuffer(), 0, 1,
+									 sizeof(VkDrawIndexedIndirectCommand));
 		}
 
 
@@ -207,17 +245,20 @@ export namespace Graphic{
 		}
 
 		void consumeAll(){
+
+			while(true){
+				if(!consumeFrame())break;
+			}
+
 			{
 				std::shared_lock lkm{frameSeekingMutex};
 				if(overflowMutex.try_lock()){
 					std::lock_guard lk{overflowMutex, std::adopt_lock};
-
-					toNextFrame(currentIndex, lkm, false);
+					if(!currentFrame().empty()){
+						toNextFrame(currentIndex, lkm, true);
+						consumeFrame();
+					}
 				}
-			}
-
-			while(true){
-				if(!consumeFrame())break;
 			}
 		}
 
@@ -238,17 +279,18 @@ export namespace Graphic{
 				drawCalls.pop();
 			}
 
-			CommandUnit& commandUnit = flushCommandBuffers++;
+			auto index = units.get_index();
+			CommandUnit& commandUnit = units++;
 
 			if(topDrawCall.usedImages != commandUnit.usedImages_prev){
-				commandUnit.updateDescriptorSets(topDrawCall.usedImages);
+				commandUnit.updateDescriptorSets(topDrawCall.usedImages, sampler);
 				commandUnit.usedImages_prev = topDrawCall.usedImages;
 			}
 
 			recordCommand(topDrawCall.frameData, commandUnit);
 			topDrawCall.frameData->resetState();
 
-			context->commandSubmit_Graphics(commandUnit.flushCommandBuffer, commandUnit.fence.get());
+			submitCommand(commandUnit, index);
 
 			return true;
 		}
@@ -285,6 +327,9 @@ export namespace Graphic{
 
 			while(count > 0){
 				const auto& rst = drawArgs.emplace_back(acquire(imageView, count));
+				if(rst.validCount == 0){
+					throw std::invalid_argument("Failed to acquire draw arguments");
+				}
 				count -= rst.validCount;
 			}
 
@@ -292,34 +337,9 @@ export namespace Graphic{
 		}
 
 	private:
-		void init(const Core::Vulkan::Context* context){
-			using namespace Core::Vulkan;
-
-			transientCommandPool = CommandPool{
-					context->device,
-					context->physicalDevice.queues.graphicsFamily,
-					VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-				};
-
-			indexBuffer = Util::createIndexBuffer(
-				*context, transientCommandPool, Core::Vulkan::Util::BatchIndices<MaxGroupCount>);
-
-			layout = DescriptorSetLayout{
-					context->device, [](DescriptorSetLayout& layout){
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
-						                        MaximumAllowedSamplersSize);
-
-						layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-					}
-				};
-
-			for(auto& frame : frames){
-				frame.init(*this);
-			}
-
-			for(auto& commands : flushCommandBuffers){
-				commands = CommandUnit{*this};
-			}
+		void submitCommand(const CommandUnit& commandUnit, const std::size_t index) const{
+			context->commandSubmit_Graphics(commandUnit.transferCommand, commandUnit.fence);
+			drawCall(index);
 		}
 
 		[[nodiscard]] ImageIndex getMappedImageIndex(VkImageView imageView){
@@ -382,7 +402,7 @@ export namespace Graphic{
 		* @return next frame
 		*/
 		FrameData& toNextFrame(const std::size_t currentFrameIndex, std::shared_lock<std::shared_mutex>& acquirer, const bool checkState = true){
-			std::size_t nextFrameIndex = (currentFrameIndex + 1) % BufferSize;
+			const std::size_t nextFrameIndex = (currentFrameIndex + 1) % BufferSize;
 			FrameData& currentFrame = frames[currentFrameIndex];
 			FrameData& nextFrame = frames[nextFrameIndex];
 
@@ -404,7 +424,7 @@ export namespace Graphic{
 				}
 
 				//forbid write, enter waiting stage
-				//dont wait the capture of each frame
+				//don't wait the capture of each frame
 				currentFrame.close();
 				{
 					std::lock_guard lkq{drawQueueMutex};
@@ -420,7 +440,7 @@ export namespace Graphic{
 					while(!nextFrame.isAcquirable()){
 						consumeFrame();
 
-						if(nextFrame.drawCompleteEvent.isSet()){
+						if(nextFrame.transferEvent.isSet()){
 							nextFrame.activate();
 							break;
 						}
@@ -444,20 +464,13 @@ export namespace Graphic{
 				count = frameData->getCount();
 			}
 
-
 			auto barriers =
 				getBarriars(commandUnit.vertexBuffer, commandUnit.indirectBuffer.getTargetBuffer(), commandUnit.descriptorBuffer_Double);
 
 			VkDependencyInfo dependencyInfo{
 					.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-					.pNext = nullptr,
-					.dependencyFlags = 0,
-					.memoryBarrierCount = 0,
-					.pMemoryBarriers = nullptr,
 					.bufferMemoryBarrierCount = static_cast<std::uint32_t>(barriers.size()),
 					.pBufferMemoryBarriers = barriers.data(),
-					.imageMemoryBarrierCount = 0,
-					.pImageMemoryBarriers = nullptr
 				};
 
 			new(commandUnit.indirectBuffer.getMappedData()) VkDrawIndexedIndirectCommand{
@@ -467,62 +480,28 @@ export namespace Graphic{
 					.vertexOffset = 0,
 					.firstInstance = 0
 				};
-			commandUnit.indirectBuffer.flush(sizeof(VkDrawIndexedIndirectCommand));
 			commandUnit.fence.waitAndReset();
 
 			{
 				Core::Vulkan::ScopedCommand scopedCommand{
-						commandUnit.flushCommandBuffer, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
-					};
-
-
-				// for (auto && barrier : barriers){
-				// 	std::swap(barrier.srcAccessMask, barrier.dstAccessMask);
-				// 	std::swap(barrier.srcStageMask, barrier.dstStageMask);
-				// }
-
-				// vkCmdPipelineBarrier2(scopedCommand, &dependencyInfo);
+					commandUnit.transferCommand, VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+				};
 
 				if(count){
 					frameData->getVertexStagingBuffer().copyBuffer(
-						scopedCommand, commandUnit.vertexBuffer.get(), count * unitOffset);
+								  scopedCommand, commandUnit.vertexBuffer.get(), count * unitOffset);
 				}
-
 				commandUnit.indirectBuffer.cmdFlushToDevice(scopedCommand, sizeof(VkDrawIndexedIndirectCommand));
 				commandUnit.descriptorBuffer_Double.cmdFlushToDevice(scopedCommand, commandUnit.descriptorBuffer_Double.size);
 
-				// for (auto && barrier : barriers){
-				// 	std::swap(barrier.srcAccessMask, barrier.dstAccessMask);
-				// 	std::swap(barrier.srcStageMask, barrier.dstStageMask);
-				// }
-
-				vkCmdPipelineBarrier2(scopedCommand, &dependencyInfo);
-
-				cmdBinderBegin(scopedCommand->get(), commandUnit.descriptorBuffer_Double.getBindInfo(VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT));
-
-				constexpr std::size_t off[]{0};
-				vkCmdBindVertexBuffers(scopedCommand, 0, 1, commandUnit.vertexBuffer.as_data(), off);
-				vkCmdBindIndexBuffer(scopedCommand, indexBuffer, 0, indexBuffer.indexType);
-				vkCmdDrawIndexedIndirect(scopedCommand, commandUnit.indirectBuffer.getTargetBuffer(), 0, 1,
-				                         sizeof(VkDrawIndexedIndirectCommand));
-
-
-
-				vkCmdEndRenderPass(scopedCommand);
-
-				for (auto && barrier : barriers){
-					std::swap(barrier.srcAccessMask, barrier.dstAccessMask);
-					std::swap(barrier.srcStageMask, barrier.dstStageMask);
-				}
-
-				vkCmdPipelineBarrier2(scopedCommand, &dependencyInfo);
-
-				frameData->drawCompleteEvent.cmdSet(scopedCommand, dependencyInfo);
+				frameData->transferEvent.cmdSet(scopedCommand, dependencyInfo);
 			}
 		}
 
+	public:
+		template <std::size_t size = 3>
 		static constexpr auto getBarriars(VkBuffer Vertex, VkBuffer Indirect, const Core::Vulkan::DescriptorBuffer_Double& db){
-			std::array<VkBufferMemoryBarrier2, 3> barriers{};
+			std::array<VkBufferMemoryBarrier2, size> barriers{};
 			barriers[0] = {
 					.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
 					.pNext = nullptr,
@@ -559,7 +538,7 @@ export namespace Graphic{
 					.pNext = nullptr,
 					.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
 					.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT,
+					.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
 					.dstAccessMask = VK_ACCESS_2_DESCRIPTOR_BUFFER_READ_BIT_EXT,
 					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,

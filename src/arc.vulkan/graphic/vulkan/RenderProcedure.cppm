@@ -16,6 +16,8 @@ export import Core.Vulkan.CommandPool;
 export import Core.Vulkan.RenderPass;
 export import Core.Vulkan.DescriptorBuffer;
 
+
+
 import Core.Vulkan.Context;
 import Core.Vulkan.Concepts;
 
@@ -26,21 +28,84 @@ import std;
 export namespace Core::Vulkan{
 	struct RenderProcedure;
 
-	struct PipelineData{
+	struct BasicPipelineData{
 		const Context* context{};
 
 		Geom::USize2 size{};
 
+		DescriptorSetLayout descriptorSetLayout{};
+		ConstantLayout constantLayout{};
+
+		PipelineLayout layout{};
+
+		[[nodiscard]] BasicPipelineData() = default;
+
+		[[nodiscard]] explicit BasicPipelineData(const Context* context, const Geom::USize2 size = {})
+			: context{context},
+			  size{size}{}
+
+		[[nodiscard]] Geom::USize2 getSize() const{
+			return size;
+		}
+
+		template <std::regular_invocable<DescriptorSetLayout&> Func>
+		void createDescriptorLayout(Func&& func){
+			descriptorSetLayout = DescriptorSetLayout{context->device, std::forward<Func>(func)};
+		}
+
+		void pushConstant(const VkPushConstantRange& constantRange){
+			constantLayout.push(constantRange);
+		}
+
+		/**
+		 * @brief Call after descriptors and constants have been set
+		 */
+		template <std::ranges::range Range = std::initializer_list<VkDescriptorSetLayout>>
+			requires (std::convertible_to<std::ranges::range_value_t<Range>, VkDescriptorSetLayout>)
+		void createPipelineLayout(const VkPipelineCreateFlags flags = 0, Range&& appendLayouts = {}){
+			std::vector<VkDescriptorSetLayout> ls{};
+			ls.push_back(descriptorSetLayout.get());
+			ls.append_range(appendLayouts);
+			layout = PipelineLayout{context->device, flags, ls, constantLayout.constants};
+		}
+	};
+
+	struct SinglePipelineData : BasicPipelineData{
+		using BasicPipelineData::BasicPipelineData;
+		Pipeline pipeline{};
+
+		void createPipeline(PipelineTemplate& pipelineTemplate){
+			pipeline = Pipeline{context->device, pipelineTemplate, layout, nullptr, 0};
+		}
+		void createComputePipeline(VkPipelineCreateFlags flags, const VkPipelineShaderStageCreateInfo& stageCreateInfo){
+			pipeline = Pipeline{context->device, layout, flags, stageCreateInfo};
+		}
+
+		void bind(VkCommandBuffer commandBuffer, const VkPipelineBindPoint bindPoint) const{
+			vkCmdBindPipeline(commandBuffer, bindPoint, pipeline);
+		}
+
+		void createComputePipeline(VkPipelineCreateFlags flags, VkShaderModule shaderModule, const char* entryName = "main"){
+			createComputePipeline(flags, {
+					.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+					.pNext = nullptr,
+					.flags = 0,
+					.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+					.module = shaderModule,
+					.pName = entryName,
+					.pSpecializationInfo = nullptr
+				});
+		}
+	};
+
+	struct PipelineData : BasicPipelineData{
+		using BasicPipelineData::BasicPipelineData;
+
 		VkRenderPass renderPass{};
 		std::vector<std::pair<std::uint32_t, Pipeline>> pipes{};
 
-		DescriptorSetLayout descriptorSetLayout{};
-		ConstantLayout constantLayout{};
-		PipelineLayout layout{};
-
 		DescriptorSetPool descriptorSetPool{};
 		std::vector<DescriptorBuffer> descriptorBuffers{};
-
 
 		std::vector<DescriptorSet> descriptorSets{};
 		std::vector<UniformBuffer> uniformBuffers{};
@@ -76,26 +141,6 @@ export namespace Core::Vulkan{
 			for(std::uint32_t index : list){
 				pipes.push_back({index, {}});
 			}
-		}
-
-		template <std::regular_invocable<DescriptorSetLayout&> Func>
-		void createDescriptorLayout(Func&& func){
-			descriptorSetLayout = DescriptorSetLayout{context->device, std::forward<Func>(func)};
-		}
-
-		void pushConstant(const VkPushConstantRange& constantRange){
-			constantLayout.push(constantRange);
-		}
-
-		/**
-		 * @brief Call after descriptors and constants have been set
-		 */
-		void createPipelineLayout(VkPipelineCreateFlags flags = 0, const std::initializer_list<VkDescriptorSetLayout> layouts = {}){
-			std::vector<VkDescriptorSetLayout> ls{};
-			ls.reserve(layouts.size() + 1);
-			ls.push_back(descriptorSetLayout.get());
-			ls.append_range(layouts);
-			layout = PipelineLayout{context->device, flags, ls, constantLayout.constants};
 		}
 
 		void createDescriptorSet(const std::uint32_t size){
@@ -136,8 +181,8 @@ export namespace Core::Vulkan{
 				});
 		}
 
-		void addUniformBuffer(const std::size_t size){
-			uniformBuffers.push_back(UniformBuffer{context->physicalDevice, context->device, size});
+		void addUniformBuffer(const std::size_t size, const VkBufferUsageFlags otherUsages = 0){
+			uniformBuffers.push_back(UniformBuffer{context->physicalDevice, context->device, size, otherUsages});
 		}
 
 		template <typename T>

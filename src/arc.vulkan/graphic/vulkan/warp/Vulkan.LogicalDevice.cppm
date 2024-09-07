@@ -16,6 +16,7 @@ export namespace Core::Vulkan{
 			VkPhysicalDeviceVulkan13Features features{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES};
 
 			features.synchronization2 = true;
+			features.dynamicRendering = true;
 
 			return features;
 		}()};
@@ -107,7 +108,12 @@ export namespace Core::Vulkan{
 		template <typename ...Args>
 		ExtChain(Args&& ...) -> ExtChain<std::decay_t<Args> ...>;
 
-		const ExtChain extChain{PhysicalDeviceVulkan13Features, RequiredDescriptorIndexingFeatures, PhysicalDeviceBufferDeviceAddressFeatures, DescriptorBufferFeatures};
+		const ExtChain extChain{
+			PhysicalDeviceVulkan13Features,
+			RequiredDescriptorIndexingFeatures,
+			PhysicalDeviceBufferDeviceAddressFeatures,
+			DescriptorBufferFeatures,
+		};
 	}
 
 

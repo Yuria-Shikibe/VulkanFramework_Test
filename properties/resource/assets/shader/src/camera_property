@@ -1,0 +1,3 @@
+struct CameraProperty  {
+    float scale;
+};

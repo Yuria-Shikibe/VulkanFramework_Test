@@ -150,18 +150,6 @@ export namespace Core::Vulkan{
 			return rst;
 		}
 
-		template <std::ranges::range Rng>
-			requires (std::convertible_to<std::ranges::range_value_t<Rng>, VkImageView>)
-		[[nodiscard]] std::vector<VkDescriptorImageInfo> getDescriptorInfoRange_ShaderRead(VkSampler handle, const Rng& imageViews) noexcept{
-			std::vector<VkDescriptorImageInfo> rst{};
-
-			for (const auto& view : imageViews){
-				rst.emplace_back(handle, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-			}
-
-			return rst;
-		}
-
 		VkDescriptorImageInfo getDescriptorInfo(VkSampler handle){
 			return {
 				.sampler = handle,

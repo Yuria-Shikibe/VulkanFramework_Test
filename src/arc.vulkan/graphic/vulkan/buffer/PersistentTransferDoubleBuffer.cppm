@@ -48,7 +48,7 @@ export namespace Core::Vulkan{
 			) :
 			stagingBuffer{
 				physicalDevice, device, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT
+				VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
 			}, targetBuffer{
 				physicalDevice, device, size,
 				VK_BUFFER_USAGE_TRANSFER_DST_BIT | usage,
@@ -71,8 +71,8 @@ export namespace Core::Vulkan{
 			mappedData = nullptr;
 		}
 
-		void flush(VkDeviceSize size) const{
-			stagingBuffer.memory.flush(size);
+		void flush(VkDeviceSize size, VkDeviceSize offset = 0) const{
+			stagingBuffer.memory.flush(size, offset);
 		}
 
 		//TODO support
@@ -82,12 +82,65 @@ export namespace Core::Vulkan{
 			stagingBuffer.copyBuffer(commandBuffer, targetBuffer.get(), size);
 		}
 
+		void cmdFlushToDevice(VkCommandBuffer commandBuffer, const VkBufferCopy& copy) const{
+			stagingBuffer.copyBuffer(commandBuffer, targetBuffer.get(), copy);
+		}
+
 		[[nodiscard]] VkDevice getDevice() const noexcept{
 			return targetBuffer.getDevice();
 		}
 
 		[[nodiscard]] VkDeviceAddress getBufferAddress() const{
 			return targetBuffer.getBufferAddress();
+		}
+
+
+		template <std::ranges::contiguous_range T>
+			requires (std::ranges::sized_range<T>)
+		void loadData(const T& range) const{
+			const std::size_t dataSize = std::ranges::size(range) * sizeof(std::ranges::range_value_t<T>);
+
+			this->loadData(std::ranges::data(range), dataSize, 0);
+		}
+
+		template <typename T>
+			requires (std::is_trivially_copyable_v<T> && !std::is_pointer_v<T>)
+		void loadData(const T& data, const std::size_t offset = 0) const{
+			static constexpr std::size_t dataSize = sizeof(T);
+
+			this->loadData(&data, dataSize, offset);
+		}
+
+		template <typename T, std::size_t size>
+		void loadData(const std::array<T, size>& data) const{
+			this->loadData(data.data(), size, 0);
+		}
+
+		template <typename T, typename... Args>
+		void emplace(Args&&... args) const{
+			static constexpr std::size_t dataSize = sizeof(T);
+
+			if(dataSize > stagingBuffer.memorySize()){
+				throw std::runtime_error("Insufficient buffer capacity!");
+			}
+
+			new(mappedData) T(std::forward<Args>(args)...);
+		}
+
+		template <typename T>
+			requires (std::is_trivially_copyable_v<T>)
+		void loadData(const T* data) const{
+			this->loadData(*data, 0);
+		}
+
+
+		void loadData(const void* src, const std::size_t size, const std::size_t offset = 0) const{
+			if(size > stagingBuffer.memorySize() - offset){
+				throw std::runtime_error("Insufficient buffer capacity!");
+			}
+
+			const auto pdata = mappedData;
+			std::memcpy(static_cast<std::byte*>(pdata) + offset, src , size);
 		}
 	};
 

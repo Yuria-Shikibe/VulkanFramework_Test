@@ -142,6 +142,20 @@ export namespace Core::Vulkan{
             VkPipelineStageFlags dstStageMask;
 	    };
 
+		template <std::size_t N>
+		void imageBarrier(
+			VkCommandBuffer commandBuffer,
+			const std::array<VkImageMemoryBarrier2, N>& barrier2
+		){
+			const VkDependencyInfo dependencyInfo{
+				.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+				.imageMemoryBarrierCount = static_cast<std::uint32_t>(barrier2.size()),
+				.pImageMemoryBarriers = barrier2.data()
+			};
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
 	    void transitionImageQueueOwnership(
 		    VkCommandBuffer commandBuffer,
 		    VkImage image, const TransitionInfo &info,

@@ -89,9 +89,18 @@ export namespace Core::Vulkan{
 
 		ExclusiveBuffer& operator=(ExclusiveBuffer&& other) noexcept = default;
 
-		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize size) const{
-			const VkBufferCopy copyRegion{.size = size};
-			vkCmdCopyBuffer(commandBuffer, handle, dstBuffer, 1, &copyRegion);
+		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, VkDeviceSize size, VkDeviceSize srcOffset = 0, VkDeviceSize dstOffset = 0) const{
+			const VkBufferCopy copyRegion{
+				.srcOffset = srcOffset,
+				.dstOffset = dstOffset,
+				.size = size
+			};
+
+			copyBuffer(commandBuffer, dstBuffer, copyRegion);
+		}
+
+		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer, const VkBufferCopy& copy) const{
+			vkCmdCopyBuffer(commandBuffer, handle, dstBuffer, 1, &copy);
 		}
 
 		void copyBuffer(VkCommandBuffer commandBuffer, VkBuffer dstBuffer) const{

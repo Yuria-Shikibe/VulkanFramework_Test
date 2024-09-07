@@ -15,7 +15,7 @@ layout(location = 2) in vec4 baseColor;
 layout(location = 3) in vec4 mixColor;
 layout(location = 4) in vec4 lightColor;
 
-layout(binding = 1) uniform sampler2DArray texSampler[MaximumAllowedSamplersSize];
+layout(set = 1, binding = 0) uniform sampler2DArray texSampler[MaximumAllowedSamplersSize];
 
 layout(location = 0) out vec4 outColor;
 layout(location = 1) out vec4 outLightColor;
@@ -36,9 +36,13 @@ void main() {
     }
 
 
-    outColor = texColor * baseColor;
-    outColor.a = step(Threshold, outColor.a);
+    vec4 base = texColor * baseColor;
+    vec4 light = texColor * lightColor;
+    float solid = step(Threshold, base.a);
 
-    outLightColor = texColor * lightColor;
+    outColor = base;
+    outColor.a = solid;
+
+    outLightColor = mix(vec4(0.f, 0.f, 0.f, solid), light, light.a);
 }
 

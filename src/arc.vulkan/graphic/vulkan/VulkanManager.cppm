@@ -24,6 +24,7 @@ import Core.Vulkan.Fence;
 import Core.Vulkan.Semaphore;
 
 import Core.Vulkan.Buffer.ExclusiveBuffer;
+import Core.Vulkan.DescriptorBuffer;
 import Core.Vulkan.Buffer.UniformBuffer;
 
 import Core.Vulkan.Preinstall;
@@ -41,7 +42,9 @@ import Core.Vulkan.Image;
 import Core.Vulkan.Comp;
 import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.Attachment;
+
 import Core.Vulkan.BatchData;
+import Core.Vulkan.Util;
 
 import Graphic.PostProcessor;
 
@@ -53,6 +56,9 @@ import Assets.Graphic.PostProcess;
 
 import ext.Event;
 
+//TEMP
+import Graphic.Renderer.World;
+
 export namespace Core::Vulkan{
 	struct ResizeEvent final : Geom::USize2, ext::EventType{
 
@@ -62,6 +68,8 @@ export namespace Core::Vulkan{
 	class VulkanManager{
 	public:
 		[[nodiscard]] VulkanManager() = default;
+
+		Graphic::RendererWorld* rendererWorld{};
 
 		ext::EventManager eventManager{
 			{ext::typeIndexOf<ResizeEvent>()}
@@ -76,28 +84,26 @@ export namespace Core::Vulkan{
 
 		SwapChain swapChain{};
 
-		RenderProcedure batchDrawPass{};
 		RenderProcedure flushPass{};
 
 		[[nodiscard]] TransientCommand obtainTransientCommand() const{
 			return transientCommandPool.obtainTransient(context.device.getGraphicsQueue());
 		}
 
-		FramebufferLocal batchFrameBuffer{};
-	    ImageView batchDepthImageView{};
+		// FramebufferLocal batchFrameBuffer{};
+	    // ImageView batchDepthImageView{};
 
 		// ColorAttachment blurResultAttachment{};
 		ColorAttachment gameMergeResultAttachment{};
-		CommandBuffer batchDrawCommand{};
 
 		// Graphic::GraphicPostProcessor processBlur{};
 		Graphic::GraphicPostProcessor processMerge{};
 		Graphic::GraphicPostProcessor gameUIMerge{};
 		Graphic::GraphicPostProcessor nfaaPostEffect{};
 
-		Graphic::ComputePostProcessor gussian{};
-
-	    UniformBuffer cameraScaleUniformBuffer{};
+		DescriptorSetLayout cameraPropertyDescriptorLayout_Compute{};
+		DescriptorBuffer cameraPropertyDescriptor{};
+	    UniformBuffer cameraPropertiesUniformBuffer{};
 
 		struct InFlightData{
 			Fence inFlightFence{};
@@ -121,17 +127,11 @@ export namespace Core::Vulkan{
 			eventManager.on<ResizeEvent>(std::move(callback));
 		}
 
-
-		void drawFrame(const Fence& batchFence) const{
-			context.commandSubmit_Graphics(batchDrawCommand, batchFence.get());
-		}
-
 		void blitToScreen(){
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
-			gussian.submitCommand();
-            // processBlur.submitCommand();
+			rendererWorld->post_gaussian();
             processMerge.submitCommand();
 
 			//TODO wait ui draw semaphore
@@ -191,7 +191,6 @@ export namespace Core::Vulkan{
 				VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 				};
 
-			batchDrawCommand = commandPool.obtain();
 			for (auto && commandBuffer : swapChain.getCommandFlushes()){
 				commandBuffer = commandPool.obtain();
 			}
@@ -199,12 +198,24 @@ export namespace Core::Vulkan{
 		}
 
 		void initPipeline(){
-		    cameraScaleUniformBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
+		    cameraPropertiesUniformBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
+
+			cameraPropertyDescriptorLayout_Compute = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
+				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
+			}};
+
+			cameraPropertyDescriptor = DescriptorBuffer{context.physicalDevice, context.device,
+				cameraPropertyDescriptorLayout_Compute,
+				cameraPropertyDescriptorLayout_Compute.size()
+			};
+
+			cameraPropertyDescriptor.load([this](const DescriptorBuffer& buffer){
+				buffer.loadUniform(0, cameraPropertiesUniformBuffer.getBufferAddress(), cameraPropertiesUniformBuffer.requestedSize());
+			});
 
 			setFlushGroup();
-			setBatchGroup();
 		    createFrameBuffers();
-		    createDepthView();
 		    createPostEffectPipeline();
 
 		    updateFlushInputDescriptorSet();
@@ -219,25 +230,7 @@ export namespace Core::Vulkan{
 			createFrameObjects();
 			createFlushCommands();
 
-			updateBatchDescriptorSet({}, nullptr);
-			createBatchDrawCommands();
-
 			std::cout.flush();
-		}
-
-		void updateBatchDescriptorSet(std::span<const VkImageView> imageViews, const Fence* batchFence){
-			DescriptorSetUpdator updator{context.device, batchDrawPass.front().descriptorSets.front()};
-
-			auto bufferInfo = batchDrawPass.front().uniformBuffers.front().getDescriptorInfo();
-		    auto imageInfo =
-                Util::getDescriptorInfoRange_ShaderRead(Assets::Sampler::textureNearestSampler, imageViews);
-
-			updator.push(bufferInfo);
-			if(!imageInfo.empty())updator.push(imageInfo);
-
-		    if(batchFence)batchFence->waitAndReset();
-
-			updator.update();
 		}
 
 	private:
@@ -252,27 +245,6 @@ export namespace Core::Vulkan{
 
 		void createFrameBuffers(){
 			auto cmd = obtainTransientCommand();
-			batchFrameBuffer = FramebufferLocal{context.device, swapChain.size2D(), batchDrawPass.renderPass};
-
-            for(std::uint32_t i = 0; i < 2; ++i) {
-                ColorAttachment baseColorAttachment{context.physicalDevice, context.device};
-                baseColorAttachment.create(
-                    swapChain.getTargetWindow()->getSize(), cmd,
-                    VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-                );
-
-                batchFrameBuffer.pushCapturedAttachments(std::move(baseColorAttachment));
-            }
-
-			DepthStencilAttachment depthAttachment{context.physicalDevice, context.device};
-			depthAttachment.create(
-				swapChain.getTargetWindow()->getSize(), cmd,
-				VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-				VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-			);
-
-			batchFrameBuffer.pushCapturedAttachments(std::move(depthAttachment));
 
 			gameMergeResultAttachment = ColorAttachment{context.physicalDevice, context.device};
 			gameMergeResultAttachment.create(
@@ -282,25 +254,17 @@ export namespace Core::Vulkan{
 				);
 
 			cmd = {};
-
-            batchFrameBuffer.loadCapturedAttachments(0);
-		    batchFrameBuffer.create();
         }
 
         void resize(SwapChain& swapChain){
 			eventManager.fire(ResizeEvent{swapChain.size2D()});
 
             flushPass.resize(swapChain.size2D());
-            batchDrawPass.resize(swapChain.size2D());
 
             auto cmd = obtainTransientCommand();
             gameMergeResultAttachment.resize(swapChain.size2D(), cmd);
-            batchFrameBuffer.resize(swapChain.size2D(), cmd);
             cmd = {};
 
-            createDepthView();
-
-			gussian.resize(swapChain.size2D());
 			processMerge.resize(swapChain.size2D());
 			nfaaPostEffect.resize(swapChain.size2D());
 			gameUIMerge.resize(swapChain.size2D());
@@ -308,7 +272,6 @@ export namespace Core::Vulkan{
 			updateFlushInputDescriptorSet();
 			bindSwapChainFrameBuffer();
 
-            createBatchDrawCommands();
             createFlushCommands();
         }
 
@@ -387,184 +350,14 @@ export namespace Core::Vulkan{
 			flushPass.resize(swapChain.size2D());
 		}
 
-		void setBatchGroup(){
-			batchDrawPass.init(context);
-
-			batchDrawPass.createRenderPass([](RenderPass& renderPass){
-			    const auto ColorAttachmentDesc = VkAttachmentDescription{
-                        .format = VK_FORMAT_R8G8B8A8_UNORM,
-                        .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-                        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                        .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                        .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-                    } | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare;
-				//Drawing attachment
-				renderPass.pushAttachment(ColorAttachmentDesc);
-
-			    //Light attachment
-			    renderPass.pushAttachment(ColorAttachmentDesc);
-			    //
-			    // //data blemt
-			    // renderPass.pushAttachment(ColorAttachmentDesc);
-
-				renderPass.pushAttachment(VkAttachmentDescription{
-						.format = VK_FORMAT_D24_UNORM_S8_UINT,
-						.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
-						.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-						.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-						.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
-
-				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
-					subpass.addDependency(VkSubpassDependency{
-							.dstSubpass = 0,
-							.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-							.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-						} | Subpass::Dependency::External);
-
-					subpass.addOutput(0);
-					subpass.addOutput(1);
-					subpass.addAttachment(
-						RenderPass::AttachmentReference::Category::depthStencil, 2, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-				});
-			});
-
-			batchDrawPass.pushAndInitPipeline([](PipelineData& pipeline){
-				pipeline.createDescriptorLayout([](DescriptorSetLayout& layout){
-					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT);
-					layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, (8));
-
-					// layout.bindingFlags = {
-					// 	VK_DESCRIPTOR_BINDING_UPDATE_UNUSED_WHILE_PENDING_BIT | VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT,
-					// 	VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT};
-					// layout.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-				});
-
-				pipeline.createPipelineLayout();
-
-				pipeline.createDescriptorSet(1);
-				pipeline.addUniformBuffer(sizeof(UniformBlock));
-
-				pipeline.builder = [](PipelineData& pipeline){
-					PipelineTemplate pipelineTemplate{};
-					pipelineTemplate
-						.useDefaultFixedStages()
-						.setDepthStencilState(Default::DefaultDepthStencilState)
-						.setColorBlend(&Default::ColorBlending<std::array{
-						    Blending::AlphaBlend,
-						    Blending::ScaledAlphaBlend,
-						    // Blending::AlphaBlend,
-						}>)
-						.setVertexInputInfo<WorldVertBindInfo>()
-						.setShaderChain({&Assets::Shader::Vert::batchShader, &Assets::Shader::Frag::batchShader})
-						.setStaticScissors({{}, std::bit_cast<VkExtent2D>(pipeline.size)})
-						.setStaticViewport(float(pipeline.size.x), float(pipeline.size.y));
-
-					pipeline.createPipeline(pipelineTemplate);
-				};
-			});
-
-			batchDrawPass.resize(swapChain.size2D());
-		}
-
 		void createPostEffectPipeline(){
-			{
-				gussian = Assets::PostProcess::Factory::gaussianFactory.generate(swapChain.size2D(), [this]{
-					Graphic::AttachmentPort port{};
-
-					port.in.insert_or_assign(0, batchFrameBuffer.atLocal(1).getView());
-					port.toTransferOwnership.insert_or_assign(0, batchFrameBuffer.atLocal(1).getImage());
-					return port;
-				});
-
-				gussian.descriptorSetUpdator = [this](Graphic::ComputePostProcessor& postProcessor){
-					const auto& horiUniformBuffer = postProcessor.pipelineData.uniformBuffers[0];
-					const auto& vertUniformBuffer = postProcessor.pipelineData.uniformBuffers[1];
-
-					VkDescriptorImageInfo imageinfo_input{
-							.sampler = Assets::Sampler::blitSampler,
-							.imageView = postProcessor.port.in.at(0),
-							.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-						};
-
-					VkDescriptorImageInfo imageinfo_output{
-							.sampler = nullptr,
-							.imageView = postProcessor.images.back().getView(),
-							.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-						};
-
-					const auto pingpong0 = postProcessor.images[0].getDescriptorInfo(
-						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
-					const auto pingpong1 = postProcessor.images[1].getDescriptorInfo(
-						Assets::Sampler::blitSampler, VK_IMAGE_LAYOUT_GENERAL);
-
-					postProcessor.pipelineData.descriptorBuffers[0].load([&](const DescriptorBuffer& buffer){
-							buffer.loadImage(0, imageinfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							buffer.loadImage(1, pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-							buffer.loadUniform(2, horiUniformBuffer.getBufferAddress(), horiUniformBuffer.requestedSize());
-							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
-						});
-
-					postProcessor.pipelineData.descriptorBuffers[1].load([&](const DescriptorBuffer& buffer){
-							buffer.loadImage(0, pingpong0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							buffer.loadImage(1, pingpong1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-							buffer.loadUniform(2, vertUniformBuffer.getBufferAddress(), vertUniformBuffer.requestedSize());
-							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
-						});
-
-					postProcessor.pipelineData.descriptorBuffers[2].load([&](const DescriptorBuffer& buffer){
-							buffer.loadImage(0, pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							buffer.loadImage(1, pingpong0, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-							buffer.loadUniform(2, horiUniformBuffer.getBufferAddress(), horiUniformBuffer.requestedSize());
-							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
-						});
-
-					postProcessor.pipelineData.descriptorBuffers[3].load([&](const DescriptorBuffer& buffer){
-							buffer.loadImage(0, pingpong1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-							buffer.loadImage(1, imageinfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-							buffer.loadUniform(2, vertUniformBuffer.getBufferAddress(), vertUniformBuffer.requestedSize());
-							buffer.loadUniform(3, cameraScaleUniformBuffer.getBufferAddress(), cameraScaleUniformBuffer.requestedSize());
-						});
-				};
-
-				gussian.updateDescriptors();
-				gussian.recordCommand();
-
-				{
-					using Off = Assets::PostProcess::Gaussian_KernalInfo::Off;
-
-					constexpr float Scl = 0.9f;
-
-					constexpr Assets::PostProcess::Gaussian_KernalInfo kernalVert{
-							.offs = {
-								Off{Geom::Vec2{0.f, 1.5846153846f}, 0.29362162162f * Scl},
-								Off{Geom::Vec2{0.f, 3.3307692308f}, 0.11227027030f * Scl},
-								Off{Geom::Vec2{0.f, 5.2307692308f}, 0.06227027030f * Scl}
-							},
-							.srcWeight = 0.24170270270f * Scl
-						};
-
-					constexpr Assets::PostProcess::Gaussian_KernalInfo kernalHori{
-							[]{
-								auto k = kernalVert;
-								for(auto&& off : k.offs){
-									off.off.swapXY();
-								}
-								return k;
-							}()
-						};
-
-					gussian.pipelineData.uniformBuffers[0].memory.loadData(kernalHori);
-					gussian.pipelineData.uniformBuffers[1].memory.loadData(kernalVert);
-				}
-			}
 
 		    {
 		        processMerge = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
                     Graphic::AttachmentPort port{};
-                    port.in.insert_or_assign(0u, batchFrameBuffer.atLocal(0).getView());
-                    port.in.insert_or_assign(1u, batchFrameBuffer.atLocal(1).getView());
-                    port.in.insert_or_assign(2u, gussian.images.back().getView());
+                    port.in.insert_or_assign(0u, rendererWorld->baseColor.getView());
+                    port.in.insert_or_assign(1u, rendererWorld->lightColor.getView());
+                    port.in.insert_or_assign(2u, rendererWorld->getGaussianResult().getView());
                     // port.in.insert_or_assign(3u, batchFrameBuffer.atLocal(2).getView());
 
                     port.out.insert_or_assign(4u, gameMergeResultAttachment.getView());
@@ -580,15 +373,15 @@ export namespace Core::Vulkan{
 
                         const auto& ubo = postProcessor.renderProcedure.atLocal(0).uniformBuffers[0];
 
-			            auto* data = static_cast<Assets::PostProcess::UniformBlock_SSAO *>(ubo.memory.map());
-			            new (data) Assets::PostProcess::UniformBlock_SSAO;
+			            auto* data = static_cast<Assets::PostProcess::UniformBlock_kernalSSAO *>(ubo.memory.map());
+			            new (data) Assets::PostProcess::UniformBlock_kernalSSAO;
 
 			            const auto scale = ~postProcessor.size().as<float>();
 
-			            for (std::size_t count{}; const auto & param : Assets::PostProcess::UniformBlock_SSAO::SSAO_Params) {
+			            for (std::size_t count{}; const auto & param : Assets::PostProcess::UniformBlock_kernalSSAO::SSAO_Params) {
                             for(std::size_t i = 0; i < param.count; ++i) {
-                                data->kernal[count].first.setPolar((Math::DEG_FULL / static_cast<float>(param.count)) * static_cast<float>(i), param.distance) *= scale;
-                                data->kernal[count].second.x = param.weight;
+                                data->kernal[count].off.setPolar((Math::DEG_FULL / static_cast<float>(param.count)) * static_cast<float>(i), param.distance) *= scale;
+                                data->kernal[count].weight = param.weight;
                                 count++;
                             }
 			            }
@@ -596,10 +389,10 @@ export namespace Core::Vulkan{
 			            ubo.memory.unmap();
 
 			            auto uniformInfo1 = ubo.getDescriptorInfo();
-			            auto uniformInfo2 = cameraScaleUniformBuffer.getDescriptorInfo();
+			            auto uniformInfo2 = cameraPropertiesUniformBuffer.getDescriptorInfo();
 			            auto depthInfo = VkDescriptorImageInfo{
 			                .sampler = Assets::Sampler::blitSampler,
-                            .imageView = batchDepthImageView,
+                            .imageView = rendererWorld->depthAttachmentView,
                             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
                         };
 
@@ -639,7 +432,7 @@ export namespace Core::Vulkan{
 			    processMerge.commandRecorder = [this](Graphic::GraphicPostProcessor& postProcessor){
 			        ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
-			        batchFrameBuffer.atLocal(2).getImage().transitionImageLayout(
+			        rendererWorld->depthStencilAttachment.getImage().transitionImageLayout(
                     scopedCommand, {
                         .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -722,40 +515,6 @@ export namespace Core::Vulkan{
 			}
 		}
 
-	    void createDepthView() {
-		    batchDepthImageView = ImageView{context.device, {
-                .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                .pNext = nullptr,
-                .flags = 0,
-                .image = batchFrameBuffer.atLocal(2).getImage(),
-                .viewType = VK_IMAGE_VIEW_TYPE_2D,
-                .format = VK_FORMAT_D24_UNORM_S8_UINT,
-                .components = {},
-                .subresourceRange = VkImageSubresourceRange{
-                    .aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT,
-                    .baseMipLevel = 0,
-                    .levelCount = 1,
-                    .baseArrayLayer = 0,
-                    .layerCount = 1
-                }
-		    }};
-		}
-
-		void createBatchDrawCommands(){
-			const ScopedCommand scopedCommand{batchDrawCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-
-			const auto renderPassInfo = batchDrawPass.getBeginInfo(batchFrameBuffer);
-			vkCmdBeginRenderPass(scopedCommand, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-
-			const auto pipelineContext = batchDrawPass.startCmdContext(scopedCommand);
-			pipelineContext.data().bindDescriptorTo(scopedCommand);
-			batchVertexData.bindTo(scopedCommand);
-
-
-			vkCmdEndRenderPass(scopedCommand);
-		}
-
 		void createFlushCommands(){
 			for(const auto& [i, commandBuffer] : swapChain.getCommandFlushes() | std::ranges::views::enumerate){
 				ScopedCommand scopedCommand{commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
@@ -778,18 +537,14 @@ export namespace Core::Vulkan{
 
 				vkCmdEndRenderPass(commandBuffer);
 
-				batchFrameBuffer.atLocal(0).cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				batchFrameBuffer.atLocal(1).cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				batchFrameBuffer.atLocal(2).cmdClearDepthStencil(scopedCommand, {1.f}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
+				rendererWorld->baseColor.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				rendererWorld->lightColor.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				rendererWorld->depthStencilAttachment.cmdClearDepthStencil(scopedCommand, {1.f}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 			}
 		}
 
-		void updateBatchUniformBuffer(const UniformBlock& data) const{
-			batchDrawPass.front().uniformBuffers[0].memory.loadData(data);
-		}
-
 		void updateCameraScale(const float scale) const{
-		    cameraScaleUniformBuffer.memory.loadData(scale);
+		    cameraPropertiesUniformBuffer.memory.loadData(scale);
 		}
 	};
 }

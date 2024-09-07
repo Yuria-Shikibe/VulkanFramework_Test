@@ -22,6 +22,8 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule blitWithUV{};
 
 		    Core::Vulkan::ShaderModule uiBatch{};
+
+		    Core::Vulkan::ShaderModule worldBatch{};
 		}
 
 		namespace Frag{
@@ -34,6 +36,8 @@ export namespace Assets{
 
 			Core::Vulkan::ShaderModule uiMerge{};
 			Core::Vulkan::ShaderModule uiBatch{};
+
+			Core::Vulkan::ShaderModule worldBatch{};
 
 
 			Core::Vulkan::ShaderModule game_ui_merge{};
@@ -68,6 +72,9 @@ export namespace Assets{
 			Frag::FXAA = {};
 			Frag::NFAA = {};
 			Frag::SSAO = {};
+
+			Vert::worldBatch = {};
+			Frag::worldBatch = {};
 
 
 			Comp::Gaussian = {};

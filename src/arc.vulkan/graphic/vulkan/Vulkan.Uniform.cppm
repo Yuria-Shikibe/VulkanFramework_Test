@@ -66,7 +66,7 @@ export namespace Core::Vulkan{
 
 	};
 
-	struct UniformBlock {
+	struct UniformProjectionBlock {
 		UniformMatrix3D mat3{};
 		float v{};
 	};

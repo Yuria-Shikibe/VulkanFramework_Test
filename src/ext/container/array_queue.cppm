@@ -11,10 +11,37 @@ export namespace ext {
 
         [[nodiscard]] constexpr array_queue(){}
 
-        constexpr void push(const T &item) /*noexcept(std::is_nothrow_copy_assignable_v<T>)*/ requires (std::is_copy_assignable_v<T>){
+        consteval void push_and_replace(const T& element) noexcept(!DEBUG_CHECK && std::is_nothrow_copy_assignable_v<T>){
+            if(is_full()){
+                pop();
+            }
+
+            this->push(element);
+        }
+
+        consteval void push_and_replace(T&& element) noexcept(!DEBUG_CHECK && std::is_nothrow_move_assignable_v<T>){
+            if(is_full()){
+                pop();
+            }
+
+            this->push(std::move(element));
+        }
+
+        template <typename... Args>
+        constexpr decltype(auto) emplace_and_replace(Args&& ...args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args) ...})){
+            if(is_full()){
+                pop();
+            }
+
+            return this->emplace(std::forward<Args>(args) ...);
+        }
+
+        constexpr void push(const T &item) noexcept(!DEBUG_CHECK && std::is_nothrow_copy_assignable_v<T>) requires (std::is_copy_assignable_v<T>){
+#if DEBUG_CHECK
             if(is_full()) {
                 throw std::overflow_error("Queue is full");
             }
+#endif
 
             data[backIndex] = item;
             backIndex = (backIndex + 1) % max_size;
@@ -37,16 +64,18 @@ export namespace ext {
             requires requires(Args&&... args){
                 T{std::forward<Args>(args)...};
             }
-        constexpr void emplace(Args&& ...args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args) ...})) requires (std::is_move_assignable_v<T>){
+        constexpr T& emplace(Args&& ...args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args) ...})) requires (std::is_move_assignable_v<T>){
 #if DEBUG_CHECK
             if(is_full()) {
                 throw std::overflow_error("Queue is full");
             }
 #endif
 
-            data[backIndex] = T{std::forward<Args>(args) ...};
+            T& rst = (data[backIndex] = T{std::forward<Args>(args) ...});
             backIndex = (backIndex + 1) % max_size;
             ++count;
+
+            return rst;
         }
 
         constexpr void pop() {
@@ -72,6 +101,22 @@ export namespace ext {
             }
 
             return data[frontIndex];
+        }
+
+        [[nodiscard]] constexpr decltype(auto) back() const {
+            if(empty()) {
+                throw std::underflow_error("Queue is empty");
+            }
+
+            return data[(backIndex - 1 + max_size) % max_size];
+        }
+
+        [[nodiscard]] constexpr decltype(auto) back() {
+            if(empty()) {
+                throw std::underflow_error("Queue is empty");
+            }
+
+            return data[(backIndex - 1 + max_size) % max_size];
         }
 
         [[nodiscard]] constexpr std::size_t front_index() const noexcept {

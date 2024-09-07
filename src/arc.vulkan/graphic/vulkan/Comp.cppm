@@ -72,7 +72,7 @@ namespace Core::Vulkan{
 		Component(T, Args...) -> Component<T, typename ext::GetMemberPtrInfo<Args>::ValueType...>;
 
 		export template <typename T>
-		auto defStructureType(VkStructureType sType){
+		constexpr auto defStructureType(const VkStructureType sType){
 			return Component{T{sType}, &T::sType};
 		}
 	}
@@ -216,6 +216,24 @@ namespace Core::Vulkan{
 					&VkSubpassDependency::srcAccessMask,
 					&VkSubpassDependency::dstAccessMask
 				};
+		}
+	}
+
+	export namespace MemoryBarrier2{
+		constexpr Util::Component Default = Util::defStructureType<VkMemoryBarrier2>(VK_STRUCTURE_TYPE_MEMORY_BARRIER_2);
+
+
+		namespace Buffer{
+			constexpr Util::Component Default = Util::defStructureType<VkBufferMemoryBarrier2>(VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2);
+
+			constexpr Util::Component QueueLocal{
+				VkBufferMemoryBarrier2{
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				},
+				&VkBufferMemoryBarrier2::srcQueueFamilyIndex,
+				&VkBufferMemoryBarrier2::dstQueueFamilyIndex,
+			};
 		}
 	}
 
