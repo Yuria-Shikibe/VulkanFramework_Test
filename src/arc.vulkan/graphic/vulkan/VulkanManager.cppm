@@ -60,9 +60,10 @@ import ext.Event;
 import Graphic.Renderer.World;
 
 export namespace Core::Vulkan{
+
 	struct ResizeEvent final : Geom::USize2, ext::EventType{
 
-		[[nodiscard]] ResizeEvent(Geom::USize2 size2) : Geom::USize2(size2){}
+		[[nodiscard]] explicit ResizeEvent(const Geom::USize2 size2) : Geom::USize2(size2){}
 	};
 
 	class VulkanManager{
@@ -81,40 +82,24 @@ export namespace Core::Vulkan{
 		CommandPool commandPool{};
 		CommandPool transientCommandPool{};
 
+		Graphic::ComputePostProcessor presentMerge{};
 
 		SwapChain swapChain{};
-
 		RenderProcedure flushPass{};
 
 		[[nodiscard]] TransientCommand obtainTransientCommand() const{
 			return transientCommandPool.obtainTransient(context.device.getGraphicsQueue());
 		}
 
-		// FramebufferLocal batchFrameBuffer{};
-	    // ImageView batchDepthImageView{};
-
-		// ColorAttachment blurResultAttachment{};
-		ColorAttachment gameMergeResultAttachment{};
-
-		// Graphic::GraphicPostProcessor processBlur{};
-		Graphic::GraphicPostProcessor processMerge{};
-		Graphic::GraphicPostProcessor gameUIMerge{};
-		Graphic::GraphicPostProcessor nfaaPostEffect{};
-
-		DescriptorSetLayout cameraPropertyDescriptorLayout_Compute{};
-		DescriptorBuffer cameraPropertyDescriptor{};
-	    UniformBuffer cameraPropertiesUniformBuffer{};
-
 		struct InFlightData{
 			Fence inFlightFence{};
+
 			Semaphore imageAvailableSemaphore{};
 			Semaphore renderFinishedSemaphore{};
 			Semaphore flushFinishedSemaphore{};
 		};
 
 		std::array<InFlightData, MAX_FRAMES_IN_FLIGHT> frameDataArr{};
-
-		Graphic::BatchData batchVertexData{};
 
 		template <std::regular_invocable<Geom::USize2> InitFunc>
 		void registerResizeCallback(std::function<void(const ResizeEvent&)>&& callback, InitFunc initFunc) {
@@ -131,44 +116,21 @@ export namespace Core::Vulkan{
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
-			rendererWorld->post_gaussian();
-            processMerge.submitCommand();
-
-			//TODO wait ui draw semaphore
-			nfaaPostEffect.submitCommand();
-			gameUIMerge.submitCommand();
+			rendererWorld->doPostProcess();
+			presentMerge.submitCommand();
 
 			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
-			const std::array toWait{currentFrameData.imageAvailableSemaphore.get()};
+			Util::submitCommand(
+				context.device.getGraphicsQueue(),
+				swapChain.getCommandFlushes()[imageIndex],
+				currentFrameData.inFlightFence,
+				currentFrameData.imageAvailableSemaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+				currentFrameData.flushFinishedSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+			);
 
-
-			const std::array cmds{swapChain.getCommandFlushes()[imageIndex].get()};
-
-			context.commandSubmit_Graphics(
-				VkSubmitInfo{
-					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-					.waitSemaphoreCount = static_cast<std::uint32_t>(toWait.size()),
-					.pWaitSemaphores = toWait.data(),
-					.pWaitDstStageMask = Seq::StageFlagBits<
-						VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-						VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT>,
-
-					.commandBufferCount = cmds.size(),
-					.pCommandBuffers = cmds.data(),
-
-					.signalSemaphoreCount = 1,
-					.pSignalSemaphores = currentFrameData.flushFinishedSemaphore.as_data(),
-				}, currentFrameData.inFlightFence);
-
-			VkPresentInfoKHR presentInfo{};
-
-			presentInfo.waitSemaphoreCount = 1;
-			presentInfo.pWaitSemaphores = currentFrameData.flushFinishedSemaphore.as_data();
-			presentInfo.pImageIndices = &imageIndex;
-
-			swapChain.postImage(presentInfo);
+			swapChain.postImage(imageIndex, currentFrameData.flushFinishedSemaphore);
 		}
 
 		void initContext(Window* window){
@@ -183,11 +145,12 @@ export namespace Core::Vulkan{
 			swapChain.presentQueue = context.device.getPresentQueue();
 
 			commandPool = CommandPool{
-					context.device, context.physicalDevice.queues.graphicsFamily,
+					context.device, context.graphicFamily(),
 					VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 				};
+
 			transientCommandPool = CommandPool{
-					context.device, context.physicalDevice.queues.graphicsFamily,
+					context.device, context.graphicFamily(),
 				VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 				};
 
@@ -195,39 +158,34 @@ export namespace Core::Vulkan{
 				commandBuffer = commandPool.obtain();
 			}
 
+			createFrameObjects();
 		}
 
 		void initPipeline(){
-		    cameraPropertiesUniformBuffer = UniformBuffer{context.physicalDevice, context.device, sizeof(float)};
-
-			cameraPropertyDescriptorLayout_Compute = DescriptorSetLayout{context.device, [](DescriptorSetLayout& layout){
-				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
-			}};
-
-			cameraPropertyDescriptor = DescriptorBuffer{context.physicalDevice, context.device,
-				cameraPropertyDescriptorLayout_Compute,
-				cameraPropertyDescriptorLayout_Compute.size()
-			};
-
-			cameraPropertyDescriptor.load([this](const DescriptorBuffer& buffer){
-				buffer.loadUniform(0, cameraPropertiesUniformBuffer.getBufferAddress(), cameraPropertiesUniformBuffer.requestedSize());
-			});
-
 			setFlushGroup();
-		    createFrameBuffers();
-		    createPostEffectPipeline();
+
+			{
+				presentMerge = Assets::PostProcess::Factory::presentMerge.generate(swapChain.size2D(), [this]{
+					Graphic::AttachmentPort port{};
+
+					auto [ui1, ui2] = uiImageViewProv();
+
+					port.in.insert_or_assign(0, rendererWorld->getResult_NFAA().getView());
+					port.in.insert_or_assign(1, ui1);
+					port.in.insert_or_assign(2, ui2);
+
+					return port;
+				});
+			}
+
 
 		    updateFlushInputDescriptorSet();
-
 			bindSwapChainFrameBuffer();
 
-			swapChain.recreateCallback = [this](SwapChain& swapChain){
+			swapChain.recreateCallback = [this](const SwapChain& swapChain){
 				resize(swapChain);
 			};
 
-
-			createFrameObjects();
 			createFlushCommands();
 
 			std::cout.flush();
@@ -243,34 +201,15 @@ export namespace Core::Vulkan{
 			}
 		}
 
-		void createFrameBuffers(){
-			auto cmd = obtainTransientCommand();
-
-			gameMergeResultAttachment = ColorAttachment{context.physicalDevice, context.device};
-			gameMergeResultAttachment.create(
-					swapChain.size2D(), cmd,
-					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-					VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT
-				);
-
-			cmd = {};
-        }
-
-        void resize(SwapChain& swapChain){
+        void resize(const SwapChain& swapChain){
 			eventManager.fire(ResizeEvent{swapChain.size2D()});
+
+			presentMerge.resize(swapChain.size2D());
 
             flushPass.resize(swapChain.size2D());
 
-            auto cmd = obtainTransientCommand();
-            gameMergeResultAttachment.resize(swapChain.size2D(), cmd);
-            cmd = {};
-
-			processMerge.resize(swapChain.size2D());
-			nfaaPostEffect.resize(swapChain.size2D());
-			gameUIMerge.resize(swapChain.size2D());
-
-			updateFlushInputDescriptorSet();
 			bindSwapChainFrameBuffer();
+			updateFlushInputDescriptorSet();
 
             createFlushCommands();
         }
@@ -281,13 +220,17 @@ export namespace Core::Vulkan{
 
 		        group.framebuffer.loadExternalImageView({
                     {0, group.imageView.get()},
-                    {1, gameUIMerge.framebuffer.atLocal(0).getView().get()}
+                    {1, presentMerge.images.back().getView().get()}
                 });
 		        group.framebuffer.create();
 		    }
 		}
 
     public:
+		auto& getFinalAttachment(){
+			return presentMerge.images.back();
+			// return rendererWorld->getResult_NFAA();
+		}
 
 		void setFlushGroup(){
 			flushPass.init(context);
@@ -307,23 +250,12 @@ export namespace Core::Vulkan{
 						.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
 						.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
 						.initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+						.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					} | AttachmentDesc::Default |= AttachmentDesc::Stencil_DontCare);
 
 				renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
-					subpass.addDependency(VkSubpassDependency{
-							.srcSubpass = subpass.index,
-							.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-							.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-							.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-							.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT,
-							.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT | VK_DEPENDENCY_VIEW_LOCAL_BIT
-						});
-
-					subpass.addAttachment(
-						RenderPass::AttachmentReference::Category::color, 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-					subpass.addAttachment(
-						RenderPass::AttachmentReference::Category::input, 1, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+					subpass.addOutput(0);
+					subpass.addInput(1);
 				});
 			});
 
@@ -340,6 +272,7 @@ export namespace Core::Vulkan{
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
+						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Assets::Shader::Vert::blitSingle, &Assets::Shader::Frag::blitSingle})
 						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
 
@@ -350,166 +283,11 @@ export namespace Core::Vulkan{
 			flushPass.resize(swapChain.size2D());
 		}
 
-		void createPostEffectPipeline(){
-
-		    {
-		        processMerge = Assets::PostProcess::Factory::mergeBloomFactory.generate(swapChain.size2D(), [this]{
-                    Graphic::AttachmentPort port{};
-                    port.in.insert_or_assign(0u, rendererWorld->baseColor.getView());
-                    port.in.insert_or_assign(1u, rendererWorld->lightColor.getView());
-                    port.in.insert_or_assign(2u, rendererWorld->getGaussianResult().getView());
-                    // port.in.insert_or_assign(3u, batchFrameBuffer.atLocal(2).getView());
-
-                    port.out.insert_or_assign(4u, gameMergeResultAttachment.getView());
-
-                    return port;
-                });
-
-			    processMerge.descriptorSetUpdator = [this](Graphic::GraphicPostProcessor& postProcessor){
-			        {
-			            auto& set = postProcessor.renderProcedure.atLocal(0).descriptorSets;
-
-			            DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
-
-                        const auto& ubo = postProcessor.renderProcedure.atLocal(0).uniformBuffers[0];
-
-			            auto* data = static_cast<Assets::PostProcess::UniformBlock_kernalSSAO *>(ubo.memory.map());
-			            new (data) Assets::PostProcess::UniformBlock_kernalSSAO;
-
-			            const auto scale = ~postProcessor.size().as<float>();
-
-			            for (std::size_t count{}; const auto & param : Assets::PostProcess::UniformBlock_kernalSSAO::SSAO_Params) {
-                            for(std::size_t i = 0; i < param.count; ++i) {
-                                data->kernal[count].off.setPolar((Math::DEG_FULL / static_cast<float>(param.count)) * static_cast<float>(i), param.distance) *= scale;
-                                data->kernal[count].weight = param.weight;
-                                count++;
-                            }
-			            }
-
-			            ubo.memory.unmap();
-
-			            auto uniformInfo1 = ubo.getDescriptorInfo();
-			            auto uniformInfo2 = cameraPropertiesUniformBuffer.getDescriptorInfo();
-			            auto depthInfo = VkDescriptorImageInfo{
-			                .sampler = Assets::Sampler::blitSampler,
-                            .imageView = rendererWorld->depthAttachmentView,
-                            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                        };
-
-			            updator.push(uniformInfo1);
-                        updator.pushSampledImage(depthInfo);
-                        updator.push(uniformInfo2);
-                        updator.update();
-			        }
-
-			        {
-			            auto& set = postProcessor.renderProcedure.atLocal(1).descriptorSets;
-
-			            DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
-
-			            std::array layouts{
-			                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        };
-
-			            std::array<VkDescriptorImageInfo, std::ssize(layouts)> infos{};
-
-			            for(const auto& [index, layout] : layouts | std::views::enumerate) {
-			                infos[index] = postProcessor.framebuffer.getInputInfo(index, layout);
-			            }
-
-			            for (auto && [index, inputAttachmentImageInfo] : infos | std::views::enumerate) {
-			                updator.pushAttachment(inputAttachmentImageInfo);
-			            }
-
-			            updator.update();
-			        }
-
-			    };
-
-			    processMerge.commandRecorder = [this](Graphic::GraphicPostProcessor& postProcessor){
-			        ScopedCommand scopedCommand{postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-
-			        rendererWorld->depthStencilAttachment.getImage().transitionImageLayout(
-                    scopedCommand, {
-                        .oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-                        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                        .srcAccessMask = 0,
-                        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-                        .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-                        .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                    }, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
-
-			        const auto info = postProcessor.renderProcedure.getBeginInfo(postProcessor.framebuffer);
-			        vkCmdBeginRenderPass(scopedCommand, &info, VK_SUBPASS_CONTENTS_INLINE);
-                    auto cmdContext = postProcessor.renderProcedure.startCmdContext(scopedCommand);
-
-                    cmdContext.data().bindDescriptorTo(scopedCommand);
-			        scopedCommand->blitDraw();
-
-			        cmdContext.next();
-
-			        cmdContext.data().bindDescriptorTo(scopedCommand);
-			        scopedCommand->blitDraw();
-
-			        vkCmdEndRenderPass(scopedCommand);
-
-                    processMerge.framebuffer.atLocal(0).getImage().transitionImageLayout(
-                        scopedCommand, {
-                            .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                            .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-                            .srcAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
-                            .dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-                            .srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                            .dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
-                        }, VK_IMAGE_ASPECT_COLOR_BIT);
-
-			    };
-
-			    processMerge.updateDescriptors();
-			    processMerge.recordCommand();
-		    }
-
-			{
-				nfaaPostEffect = Assets::PostProcess::Factory::nfaaFactory.generate(swapChain.size2D(), {});
-
-            	nfaaPostEffect.descriptorSetUpdator = [this](Graphic::GraphicPostProcessor &postProcessor) {
-            		auto &set = postProcessor.renderProcedure.front().descriptorSets;
-
-            		DescriptorSetUpdator updator{postProcessor.context->device, set.front()};
-
-            		auto info = Assets::Sampler::blitSampler.getDescriptorInfo_ShaderRead(
-						gameMergeResultAttachment.getView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-            		updator.pushSampledImage(info);
-            		updator.update();
-            	};
-
-            	nfaaPostEffect.updateDescriptors();
-            	nfaaPostEffect.recordCommand();
-			}
-
-
-			{
-            	gameUIMerge = Assets::PostProcess::Factory::game_uiMerge.generate(swapChain.size2D(), [this]{
-					auto [ui1, ui2] = uiImageViewProv();
-					Graphic::AttachmentPort port{};
-					port.in.insert_or_assign(0u, nfaaPostEffect.framebuffer.atLocal(0).getView());
-					port.in.insert_or_assign(1u, ui1);
-					port.in.insert_or_assign(2u, ui2);
-					// port.in.insert_or_assign(3u, batchFrameBuffer.atLocal(2).getView());
-
-					return port;
-				});
-			}
-        }
-
 		void updateFlushInputDescriptorSet(){
 			for(std::size_t i = 0; i < swapChain.size(); ++i){
-				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal[0].descriptorSets[i]};
+				DescriptorSetUpdator descriptorSetUpdator{context.device, flushPass.pipelinesLocal.front().descriptorSets[i]};
 
-				auto info = gameUIMerge.framebuffer.atLocal(0).getDescriptorInfo(nullptr);
+				auto info = getFinalAttachment().getDescriptorInfo(nullptr);
 				descriptorSetUpdator.pushAttachment(info);
 				descriptorSetUpdator.update();
 			}
@@ -536,15 +314,122 @@ export namespace Core::Vulkan{
 				commandBuffer.blitDraw();
 
 				vkCmdEndRenderPass(commandBuffer);
-
-				rendererWorld->baseColor.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				rendererWorld->lightColor.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-				rendererWorld->depthStencilAttachment.cmdClearDepthStencil(scopedCommand, {1.f}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT);
 			}
 		}
 
-		void updateCameraScale(const float scale) const{
-		    cameraPropertiesUniformBuffer.memory.loadData(scale);
-		}
+		// void createPresentMergeData(){
+		// 	presentPipelineData = SinglePipelineData{&context};
+		// 	presentPipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
+		// 		layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+		// 		layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+		// 		// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+		// 		// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+		// 		layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
+		// 	});
+		//
+		// 	presentPipelineData.createPipelineLayout();
+		// 	presentPipelineData.createComputePipeline(
+		// 		VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
+		// 		Assets::Shader::Comp::presentMerge);
+		//
+		// 	presentDescriptorBuffer = DescriptorBuffer{
+		// 			context.physicalDevice, context.device,
+		// 		presentPipelineData.descriptorSetLayout,
+		// 			presentPipelineData.descriptorSetLayout.size()
+		// 		};
+		//
+		// 	gameUIMergeCommand = {context.device, commandPool_compute};
+		//
+		// 	finalStagingAttachment = Attachment{context.physicalDevice, context.device};
+		// 	finalStagingAttachment.create(swapChain.size2D(), obtainTransientCommand(),
+		// 	                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
+		// 	                              VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+		// 	                              VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
+		// 	                              VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+		// 	);
+		//
+		// 	updatePresentData();
+		// }
+		//
+		// void updatePresentData(){
+		// 	auto [ui1, ui2] = uiImageViewProv();
+		//
+		// 	VkSampler sampler = Assets::Sampler::blitSampler;
+		// 	const VkDescriptorImageInfo worldInfo{
+		// 		.sampler = sampler,
+		// 		.imageView = rendererWorld->getResult_NFAA().getView(),
+		// 		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		// 	};
+		//
+		// 	// const VkDescriptorImageInfo ui1Info{
+		// 	// 	.sampler = sampler,
+		// 	// 	.imageView = ui1,
+		// 	// 	.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		// 	// };
+		// 	//
+		// 	// const VkDescriptorImageInfo ui2Info{
+		// 	// 	.sampler = sampler,
+		// 	// 	.imageView = ui2,
+		// 	// 	.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		// 	// };
+		//
+		// 	presentDescriptorBuffer.load([&, this](const DescriptorBuffer& buffer){
+		// 		buffer.loadImage(0, worldInfo);
+		// 		// buffer.loadImage(1, ui1Info);
+		// 		// buffer.loadImage(2, ui2Info);
+		//
+		// 		buffer.loadImage(
+		// 			1, {
+		// 				.sampler = nullptr,
+		// 				.imageView = finalStagingAttachment.getView(),
+		// 				.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		// 			}, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+		// 	});
+		//
+		// 	createPresentCommand();
+		// }
+		//
+		// void createPresentCommand(){
+		// 	const ScopedCommand scopedCommand{gameUIMergeCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+		//
+		// 	std::array barriers = {
+		// 		VkImageMemoryBarrier2{
+		// 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+		// 			.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+		// 			.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+		// 			.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+		// 			.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+		// 			.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+		// 			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+		// 			.srcQueueFamilyIndex = context.graphicFamily(),
+		// 			.dstQueueFamilyIndex = context.computeFamily(),
+		// 			.image = finalStagingAttachment.getImage(),
+		// 			.subresourceRange = ImageSubRange::Color
+		// 		},
+		// 	};
+		//
+		// 	Util::imageBarrier(scopedCommand, barriers);
+		//
+		// 	vkCmdBindPipeline(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE, presentPipelineData.pipeline);
+		//
+		// 	presentDescriptorBuffer.bindTo(
+		// 		scopedCommand,
+		// 		VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
+		// 		VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+		// 	);
+		//
+		// 	EXT::cmdSetDescriptorBufferOffsetsEXT(
+		// 		scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE,
+		// 		presentPipelineData.layout,
+		// 		0, 1, Seq::Indices<0>, Seq::Offset<0>);
+		//
+		// 	static constexpr Geom::USize2 UnitSize{16, 16};
+		// 	const auto [ux, uy] = swapChain.size2D().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
+		//
+		// 	vkCmdDispatch(scopedCommand, ux, uy, 1);
+		//
+		// 	Util::swapStage(barriers);
+		// 	Util::imageBarrier(scopedCommand, barriers);
+		// }
 	};
 }

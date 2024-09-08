@@ -2,7 +2,7 @@
 #pragma shader_stage(fragment)
 #extension GL_ARB_separate_shader_objects : enable
 
-#include "rect"
+#include "lib/rect"
 
 #ifndef MaximumAllowedSamplersSize
 #define MaximumAllowedSamplersSize 1

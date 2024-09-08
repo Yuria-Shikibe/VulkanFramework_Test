@@ -22,6 +22,10 @@ export namespace Graphic{
 		std::unordered_map<std::uint32_t, VkImageView> out{};
 		std::unordered_map<std::uint32_t, VkImage> toTransferOwnership{};
 
+		void addComputeInputAttachment(std::uint32_t index, const Core::Vulkan::Attachment& attachment){
+			in.insert_or_assign(index, attachment.getView());
+			toTransferOwnership.insert_or_assign(index, attachment.getImage());
+		}
 	};
 
 	using PortProv = std::move_only_function<AttachmentPort()>;
@@ -167,9 +171,9 @@ export namespace Graphic{
 			uniformBuffers.back().memory.loadData<T>(data, 0);
 		}
 
-		decltype(auto) getAppendedLayout(){
+		std::vector<VkDescriptorSetLayout> getAppendedLayout(){
 			if(layoutProv)return layoutProv();
-			return std::vector<VkDescriptorSetLayout>{};
+			return {};
 		}
 
 		[[nodiscard]] Geom::USize2 size() const{

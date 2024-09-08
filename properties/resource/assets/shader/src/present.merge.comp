@@ -1,0 +1,22 @@
+#version 460
+#pragma shader_stage(compute)
+
+#include "lib/blend"
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout (binding = 0) uniform sampler2D input_world;
+layout (binding = 1) uniform sampler2D input_ui;
+layout (binding = 2) uniform sampler2D input_ui_cap;
+
+layout (binding = 3) writeonly uniform image2D outputImage;
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    vec2 size = vec2(imageSize(outputImage));
+
+    vec4 src = texelFetch(input_ui, pos, 0);
+    vec4 dst = texelFetch(input_world, pos, 0);
+
+    imageStore(outputImage, pos, alphaBlend(src, dst));
+}

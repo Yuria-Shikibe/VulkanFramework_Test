@@ -156,6 +156,19 @@ export namespace Core::Vulkan{
 			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 		}
 
+		void imageBarrier(
+			VkCommandBuffer commandBuffer,
+			const std::span<VkImageMemoryBarrier2> barrier2
+		){
+			const VkDependencyInfo dependencyInfo{
+				.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+				.imageMemoryBarrierCount = static_cast<std::uint32_t>(barrier2.size()),
+				.pImageMemoryBarriers = barrier2.data()
+			};
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
 	    void transitionImageQueueOwnership(
 		    VkCommandBuffer commandBuffer,
 		    VkImage image, const TransitionInfo &info,
@@ -519,6 +532,14 @@ export namespace Core::Vulkan{
 						   src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
 						   handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 						   std::ranges::size(rng), std::ranges::data(rng), filter);
+		}
+
+		void cmdClearColor(VkCommandBuffer commandBuffer, const VkImageSubresourceRange& range, const VkClearColorValue& colorValue = {}) const{
+			vkCmdClearColorImage(commandBuffer, handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &colorValue, 1, &range);
+		}
+
+		void cmdClearDepthStencil(VkCommandBuffer commandBuffer, const VkImageSubresourceRange& range, const VkClearDepthStencilValue& value = {1.f}) const{
+			vkCmdClearDepthStencilImage(commandBuffer, handle, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &value, 1, &range);
 		}
 	};
 

@@ -235,6 +235,20 @@ namespace Core::Vulkan{
 				&VkBufferMemoryBarrier2::dstQueueFamilyIndex,
 			};
 		}
+
+
+		namespace Image{
+			constexpr Util::Component Default = Util::defStructureType<VkImageMemoryBarrier2>(VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2);
+
+			constexpr Util::Component QueueLocal{
+				VkImageMemoryBarrier2{
+					.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+					.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+				},
+				&VkImageMemoryBarrier2::srcQueueFamilyIndex,
+				&VkImageMemoryBarrier2::dstQueueFamilyIndex,
+			};
+		}
 	}
 
 }

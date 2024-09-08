@@ -1,0 +1,10 @@
+
+vec4 lerp_smooth(vec4 a){
+    a = a * a * (3.0f - 2.0f * a);
+    return a * a * (3.0f - 2.0f * a);
+}
+
+float lerp_smooth(float a){
+    a = a * a * (3.0f - 2.0f * a);
+    return a * a * (3.0f - 2.0f * a);
+}

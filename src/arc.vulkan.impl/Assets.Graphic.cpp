@@ -11,14 +11,6 @@ import Assets.Graphic.PostProcess;
 void Assets::Shader::load(const VkDevice device){
     const auto& dir = Dir::shader_spv;
 
-	Vert::batchShader = Core::Vulkan::ShaderModule{
-		device, dir / R"(test.vert.spv)"
-	};
-
-	Frag::batchShader = Core::Vulkan::ShaderModule{
-		device, dir / R"(test.frag.spv)"
-	};
-
 	Vert::blitSingle = Core::Vulkan::ShaderModule{
 		device, dir / R"(blit.vert.spv)"
 	};
@@ -39,28 +31,8 @@ void Assets::Shader::load(const VkDevice device){
 		device, dir / R"(blit_uv.vert.spv)"
 	};
 
-	Frag::blitMerge = Core::Vulkan::ShaderModule{
-		device, dir / R"(blit_merge.frag.spv)"
-	};
-
 	Frag::uiMerge = Core::Vulkan::ShaderModule{
 		device, dir / R"(ui.merge.frag.spv)"
-	};
-
-	Frag::game_ui_merge = Core::Vulkan::ShaderModule{
-		device, dir / R"(game_ui.merge.frag.spv)"
-	};
-
-	Frag::FXAA = Core::Vulkan::ShaderModule{
-		device, dir / R"(fxaa.frag.spv)"
-	};
-
-	Frag::NFAA = Core::Vulkan::ShaderModule{
-		device, dir / R"(nfaa.frag.spv)"
-	};
-
-	Frag::SSAO = Core::Vulkan::ShaderModule{
-		device, dir / R"(ssao.frag.spv)"
 	};
 
     Frag::uiBatch = Core::Vulkan::ShaderModule{
@@ -79,6 +51,22 @@ void Assets::Shader::load(const VkDevice device){
 
     Comp::Gaussian = Core::Vulkan::ShaderModule{
         device, dir / R"(gaussian.comp.spv)"
+    };
+
+    Comp::SSAO = Core::Vulkan::ShaderModule{
+        device, dir / R"(ssao.comp.spv)"
+    };
+
+    Comp::NFAA = Core::Vulkan::ShaderModule{
+        device, dir / R"(nfaa.comp.spv)"
+    };
+
+    Comp::worldMerge = Core::Vulkan::ShaderModule{
+        device, dir / R"(world.merge.comp.spv)"
+    };
+
+    Comp::presentMerge = Core::Vulkan::ShaderModule{
+        device, dir / R"(present.merge.comp.spv)"
     };
 }
 

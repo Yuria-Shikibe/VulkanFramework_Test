@@ -81,7 +81,6 @@ export namespace Core::Vulkan{
 
 			switch(descriptorType){
 				case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER :{
-					if(!imageInfo.sampler)throw std::invalid_argument("NULL Sampler");
 					rst.first.data.pCombinedImageSampler = &imageInfo;
 					rst.second = combinedImageSamplerDescriptorSize;
 					break;

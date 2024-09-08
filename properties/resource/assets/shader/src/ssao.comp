@@ -1,7 +1,7 @@
 #version 460
 #pragma shader_stage(compute)
 
-#include "camera_property"
+#include "lib/camera_property"
 
 
 #define MaxKernalSize 64
@@ -51,4 +51,5 @@ void main() {
     const vec4 outColor = vec4(vec3(smoothstep(0.25f, 1.f, drakness)), factor);
 
     imageStore(outTex, pos, outColor);
+//    imageStore(outTex, pos, vec4(depth));
 }

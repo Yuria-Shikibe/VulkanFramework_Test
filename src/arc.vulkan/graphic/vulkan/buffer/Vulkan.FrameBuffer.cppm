@@ -4,8 +4,8 @@ module;
 
 export module Core.Vulkan.Buffer.FrameBuffer;
 
+export import Core.Vulkan.Attachment;
 import ext.handle_wrapper;
-import Core.Vulkan.Attachment;
 import Core.Vulkan.Concepts;
 
 import std;

@@ -32,6 +32,10 @@ export namespace Core::Vulkan{
 			return physicalDevice.queues.graphicsFamily;
 		}
 
+		[[nodiscard]] auto presentFamily() const noexcept{
+			return physicalDevice.queues.presentFamily;
+		}
+
 		[[nodiscard]] auto computeFamily() const noexcept{
 			return physicalDevice.queues.computeFamily;
 		}

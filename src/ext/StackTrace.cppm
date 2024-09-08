@@ -32,7 +32,8 @@ export namespace ext{
 			std::string fileName = src.filename().string();
 
 			if(!std::filesystem::directory_entry{src}.exists() || fileName.find('.') == std::string::npos) {
-				fileName.insert(0, "<").append(">");
+				// fileName.insert(0, "<").append(">");
+				continue;
 			}
 
 			// std::string functionName = entry.description().substr(index, charIndex - index);

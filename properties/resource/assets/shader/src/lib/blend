@@ -1,0 +1,8 @@
+vec4 mulAlpha(vec4 color) {
+    return vec4(color.rgb * color.a, color.a);
+}
+
+vec4 alphaBlend(vec4 src, vec4 dst) {
+    vec4 result = mulAlpha(src) + mulAlpha(dst) * (1.0 - src.a);
+    return result;
+}

@@ -261,12 +261,19 @@ export namespace Core::Vulkan{
 			return currentRenderingFrame;
 		}
 
-		void postImage(VkPresentInfoKHR& presentInfo){
-			presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-			presentInfo.swapchainCount = 1;
-			presentInfo.pSwapchains = &swapChain;
+		void postImage(const std::uint32_t index, VkSemaphore semaphore){
+			const VkPresentInfoKHR info{
+				.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+				.pNext = nullptr,
+				.waitSemaphoreCount = 1,
+				.pWaitSemaphores = &semaphore,
+				.swapchainCount = 1,
+				.pSwapchains = &swapChain,
+				.pImageIndices = &index,
+				.pResults = nullptr,
+			};
 
-			auto result = vkQueuePresentKHR(presentQueue, &presentInfo);
+			auto result = vkQueuePresentKHR(presentQueue, &info);
 
 			if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || resized) {
 				recreate();

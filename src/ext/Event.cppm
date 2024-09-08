@@ -4,6 +4,8 @@ import std;
 import ext.Concepts;
 import ext.Heterogeneous;
 
+
+//TODO delayed event submitter
 export namespace ext {
 	struct EventType {};
 
@@ -13,7 +15,8 @@ export namespace ext {
 	}
 
 	struct EventProjection{
-		static decltype(auto) projection(const std::ranges::range auto& range){
+		template <std::ranges::range Rng>
+		static decltype(auto) projection(const Rng& range){
 			return range;
 		}
 	};

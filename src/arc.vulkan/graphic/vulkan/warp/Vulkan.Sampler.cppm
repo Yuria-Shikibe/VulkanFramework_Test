@@ -52,6 +52,7 @@ export namespace Core::Vulkan{
 				&VkSamplerCreateInfo::addressModeU, &VkSamplerCreateInfo::addressModeV, &VkSamplerCreateInfo::addressModeW
 			};
 
+
 		constexpr Util::Component LOD_Max{
 				VkSamplerCreateInfo{
 					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,

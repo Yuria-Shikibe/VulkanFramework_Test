@@ -156,7 +156,7 @@ int main(){
 
     vulkanManager->initPipeline();
 
-
+    // vulkanManager->updatePresentData();
 
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
@@ -218,8 +218,6 @@ int main(){
             rendererWorld->updateCameraProperties(Graphic::CameraProperties{
                 .scale = mainCamera->getScale()
             });
-
-            vulkanManager->updateCameraScale(mainCamera->getScale());
         }
 
 
