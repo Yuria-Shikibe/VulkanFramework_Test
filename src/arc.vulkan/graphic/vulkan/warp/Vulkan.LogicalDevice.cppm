@@ -118,9 +118,9 @@ export namespace Core::Vulkan{
 
 
 	class LogicalDevice : public ext::wrapper<VkDevice>{
-		VkQueue graphicsQueue{};
+		std::vector<VkQueue> graphicQueues{};
+		std::vector<VkQueue> computeQueues{};
 		VkQueue presentQueue{};
-		VkQueue computeQueue{};
 
 	public:
 
@@ -130,12 +130,19 @@ export namespace Core::Vulkan{
 			vkDestroyDevice(handle, nullptr);
 		}
 
+		[[nodiscard]] VkQueue graphicQueue(const std::uint32_t index) const{
+			return graphicQueues[std::min(static_cast<const std::uint32_t>(graphicQueues.size() - 1), index)];
+		}
 
-		[[nodiscard]] VkQueue getGraphicsQueue() const noexcept{ return graphicsQueue; }
+		[[nodiscard]] VkQueue computeQueue(const std::uint32_t index) const{
+			return computeQueues[std::min(static_cast<const std::uint32_t>(computeQueues.size() - 1), index)];
+		}
+
+		[[nodiscard]] VkQueue getPrimaryGraphicsQueue() const noexcept{ return graphicQueues.front(); }
 
 		[[nodiscard]] VkQueue getPresentQueue() const noexcept{ return presentQueue; }
 
-		[[nodiscard]] VkQueue getComputeQueue() const noexcept{ return computeQueue; }
+		[[nodiscard]] VkQueue getPrimaryComputeQueue() const noexcept{ return computeQueues.front(); }
 
 
 		LogicalDevice(const LogicalDevice& other) = delete;
@@ -149,15 +156,27 @@ export namespace Core::Vulkan{
 
 		LogicalDevice(VkPhysicalDevice physicalDevice, const QueueFamilyIndices& indices){
 			std::vector<VkDeviceQueueCreateInfo> queueCreateInfos{};
-			const std::unordered_set uniqueQueueFamilies{indices.graphicsFamily, indices.presentFamily, indices.computeFamily};
+			std::vector<std::vector<float>> queueCreatePriorityInfos{};
+
+
+			const std::unordered_set uniqueQueueFamilies{indices.graphic, indices.compute, indices.present};
 
 			constexpr float queuePriority = 1.0f;
-			for(const std::uint32_t queueFamily : uniqueQueueFamilies){
-				VkDeviceQueueCreateInfo queueCreateInfo{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-				queueCreateInfo.queueFamilyIndex = queueFamily;
-				queueCreateInfo.queueCount = 1;
-				queueCreateInfo.pQueuePriorities = &queuePriority;
-				queueCreateInfos.push_back(queueCreateInfo);
+			for(const auto [index, count] : uniqueQueueFamilies){
+				auto& info = queueCreateInfos.emplace_back();
+				auto& priority = queueCreatePriorityInfos.emplace_back();
+
+				priority = std::views::iota(0u, count) | std::views::reverse | std::views::transform([count](auto i) -> float{
+					return static_cast<float>(i + 1) / static_cast<float>(count);
+				}) | std::ranges::to<std::vector>();
+
+
+				info = VkDeviceQueueCreateInfo{
+					.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+					.queueFamilyIndex = index,
+					.queueCount = count,
+					.pQueuePriorities = priority.data()
+				};
 			}
 
 			VkPhysicalDeviceFeatures2 deviceFeatures2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
@@ -186,13 +205,11 @@ export namespace Core::Vulkan{
 				throw std::runtime_error("Failed to create logical device!");
 			}else{
 				std::println("[Vulkan] Device Created: {:#0X}", reinterpret_cast<std::uintptr_t>(handle));
-
 			}
 
-			//TODO support multiple queue
-			vkGetDeviceQueue(handle, indices.graphicsFamily, 0, &graphicsQueue);
-			vkGetDeviceQueue(handle, indices.presentFamily, 0, &presentQueue);
-			vkGetDeviceQueue(handle, indices.computeFamily, 0, &computeQueue);
+			indices.graphic.createQueues(handle, graphicQueues);
+			indices.compute.createQueues(handle, computeQueues);
+			vkGetDeviceQueue(handle, indices.present.index, 0, &presentQueue);
 		}
 	};
 }

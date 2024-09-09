@@ -110,6 +110,9 @@ export namespace Core::Vulkan{
 		}
 
 		void createShaderModule(const Core::File& file){
+			if(!file.exist()){
+				std::println(std::cerr, "[Assets] Shader: {} Not Found", file.absolutePath().string());
+			}
 			createShaderModule(file.readBytes<std::uint32_t>());
 		}
 	};

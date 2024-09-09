@@ -211,7 +211,7 @@ export namespace Graphic{
 		[[nodiscard]] explicit Batch2(const Core::Vulkan::Context& context, const std::size_t vertexSize, VkSampler sampler) :
 			context{&context}, transientCommandPool{
 				context.device,
-				context.physicalDevice.queues.graphicsFamily,
+				context.graphicFamily(),
 				VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 			},
 			unitOffset{static_cast<std::ptrdiff_t>(vertexSize * VerticesGroupCount)},
@@ -241,7 +241,7 @@ export namespace Graphic{
 
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
+			return transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue());
 		}
 
 		void consumeAll(){

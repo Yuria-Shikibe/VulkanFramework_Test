@@ -117,14 +117,13 @@ namespace Assets{
 		};
 
 		export namespace Factory{
-			Graphic::GraphicPostProcessorFactory game_uiMerge{};
-			Graphic::GraphicPostProcessorFactory nfaaFactory_Legacy{};
-
 			Graphic::ComputePostProcessorFactory gaussianFactory{};
 			Graphic::ComputePostProcessorFactory ssaoFactory{};
 			Graphic::ComputePostProcessorFactory worldMergeFactory{};
 			Graphic::ComputePostProcessorFactory nfaaFactory{};
 			Graphic::ComputePostProcessorFactory presentMerge{};
+
+			Graphic::ComputePostProcessorFactory uiMerge{};
 		}
 
 		export void load(const Core::Vulkan::Context& context);

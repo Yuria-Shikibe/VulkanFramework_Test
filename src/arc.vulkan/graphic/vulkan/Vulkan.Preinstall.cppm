@@ -85,8 +85,14 @@ namespace Core::Vulkan{
 
 		constexpr auto NoOffset = Offset<0>;
 
-		template <unsigned ...mask>
-		constexpr unsigned StageFlagBits[sizeof...(mask)]{mask...};
+		// template <unsigned ...mask>
+		// constexpr unsigned StageFlagBits[sizeof...(mask)]{mask...};
+
+		template <VkPipelineStageFlags2 ...mask>
+		constexpr VkPipelineStageFlags2 StageFlagBits[sizeof...(mask)]{mask...};
+
+		template <VkPipelineStageFlags2 ...mask>
+		constexpr std::array<VkPipelineStageFlags2, sizeof...(mask)> StageFlagBitsArr{mask...};
 	}
 
 	export namespace Default{

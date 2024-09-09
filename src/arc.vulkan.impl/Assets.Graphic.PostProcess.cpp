@@ -30,6 +30,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	Factory::worldMergeFactory = Graphic::ComputePostProcessorFactory{&context};
 	Factory::presentMerge = Graphic::ComputePostProcessorFactory{&context};
 
+	Factory::uiMerge = Graphic::ComputePostProcessorFactory{&context};
+
 	//TODO transfer blur result ownership to compute queue initially
 	Factory::gaussianFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
@@ -129,18 +131,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				static constexpr Geom::USize2 UnitSize{16, 16};
 				auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
-				std::array barriers = {VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-					.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-					.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					.srcQueueFamilyIndex = postProcessor.context->graphicFamily(),
-					.dstQueueFamilyIndex = postProcessor.context->computeFamily(),
-					.image = postProcessor.port.toTransferOwnership.at(0),
-					.subresourceRange = ImageSubRange::Color
-				} | MemoryBarrier2::Image::Default,
+				std::array barriers = {
 					VkImageMemoryBarrier2{
 					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
@@ -181,14 +172,12 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				Util::swapStage(barriers.back());
 				barriers.back().newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-				Util::imageBarrier(scopedCommand, std::span{barriers.begin() + 1, barriers.end()});
+				Util::imageBarrier(scopedCommand, barriers);
 			};
 
 			return processor;
 		};
 
-
-	//TODO transfer ssao result ownership to compute queue initially
 	Factory::ssaoFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
 		Graphic::PortProv&& portProv,
@@ -249,20 +238,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-				VkImageMemoryBarrier2 barrier_depthImage{
-						.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-						.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-						.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
-						.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-						.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-						.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-						.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-						.srcQueueFamilyIndex = postProcessor.context->graphicFamily(),
-						.dstQueueFamilyIndex = postProcessor.context->computeFamily(),
-						.image = postProcessor.port.toTransferOwnership.at(0),
-						.subresourceRange = ImageSubRange::DepthStencil
-					};
-
 				VkImageMemoryBarrier2 barrier_resultImage{
 						.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 						.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
@@ -277,7 +252,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.subresourceRange = ImageSubRange::Color
 					};
 
-				Util::imageBarrier(scopedCommand, std::array{barrier_depthImage, barrier_resultImage});
+				Util::imageBarrier(scopedCommand, std::array{barrier_resultImage});
 
 				postProcessor.descriptorBuffers.front().bindTo(
 					scopedCommand,
@@ -294,9 +269,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 				vkCmdDispatch(scopedCommand, ux, uy, 1);
 
-				Util::swapStage(barrier_depthImage);
 				Util::swapStage(barrier_resultImage);
-				Util::imageBarrier(scopedCommand, std::array{barrier_depthImage, barrier_resultImage});
+				Util::imageBarrier(scopedCommand, std::array{barrier_resultImage});
 			};
 
 			return processor;
@@ -362,43 +336,26 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
-					};
+					postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+				};
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
 				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
-				std::array<VkImageMemoryBarrier2, 2> barriers{};
-				for(std::size_t i = 0; i < 1; ++i){
-					barriers[i] = {
-							.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+				std::array barriers{
+						VkImageMemoryBarrier2{
+							.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+							.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
 							.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-							.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-							.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-							.srcQueueFamilyIndex = postProcessor.context->graphicFamily(),
-							.dstQueueFamilyIndex = postProcessor.context->computeFamily(),
-							.image = postProcessor.port.toTransferOwnership.at(i),
+							.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+							.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+							.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+							.image = postProcessor.images.back().getImage(),
 							.subresourceRange = ImageSubRange::Color
-						};
-				}
-
-				//base
-				barriers[0].srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-				barriers[0].srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-
-				barriers[1] = VkImageMemoryBarrier2{
-						.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-						.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-						.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-						.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-						.image = postProcessor.images.back().getImage(),
-						.subresourceRange = ImageSubRange::Color
-					} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::QueueLocal;
+						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::QueueLocal
+					};
 
 				Util::imageBarrier(scopedCommand, barriers);
 
@@ -416,7 +373,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				Util::swapStage(barriers.back());
 				barriers.back().newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				Util::imageBarrier(scopedCommand, std::span{barriers.begin() + 1, barriers.end()});
+				Util::imageBarrier(scopedCommand, barriers);
 			};
 
 			processor.updateDescriptors();
@@ -425,7 +382,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			return processor;
 		};
 
-	//TODO transfer ssao result ownership to compute queue initially
 	Factory::nfaaFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
 		Graphic::PortProv&& portProv,
@@ -523,8 +479,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			return processor;
 		};
 
-
-	//TODO transfer ssao result ownership to compute queue initially
 	Factory::presentMerge.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
 		Graphic::PortProv&& portProv,
@@ -596,6 +550,139 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.subresourceRange = ImageSubRange::Color
 					},
 				};
+
+				Util::imageBarrier(scopedCommand, barriers);
+
+				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
+
+				postProcessor.descriptorBuffers.front().bindTo(
+					scopedCommand,
+					VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
+					VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
+				);
+
+				EXT::cmdSetDescriptorBufferOffsetsEXT(
+					scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE,
+					postProcessor.pipelineData.layout,
+					0, 1, Seq::Indices<0>, Seq::Offset<0>);
+
+				static constexpr Geom::USize2 UnitSize{16, 16};
+				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
+
+				vkCmdDispatch(scopedCommand, ux, uy, 1);
+
+				Util::swapStage(barriers);
+				Util::imageBarrier(scopedCommand, barriers);
+			};
+
+			processor.updateDescriptors();
+			processor.recordCommand();
+
+			return processor;
+		};
+
+
+	Factory::uiMerge.creator = [](
+		const Graphic::ComputePostProcessorFactory& factory,
+		Graphic::PortProv&& portProv,
+		Graphic::DescriptorLayoutProv&& layoutProv,
+		const Geom::USize2 size){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+
+			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
+				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
+
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
+			});
+
+			processor.createDescriptorBuffers(1);
+
+			processor.pipelineData.createPipelineLayout();
+			processor.resizeCallback = [](Graphic::ComputePostProcessor& pipeline){
+				pipeline.pipelineData.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::uiMerge);
+			};
+
+			processor.resize(size);
+
+			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+				image.create(
+					p.size(), p.obtainTransientCommand(true),
+					VK_IMAGE_USAGE_STORAGE_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+					VK_IMAGE_USAGE_SAMPLED_BIT,
+					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			});
+
+			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+				image.create(
+					p.size(), p.obtainTransientCommand(true),
+					VK_IMAGE_USAGE_STORAGE_BIT |
+					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+					VK_IMAGE_USAGE_SAMPLED_BIT,
+					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+			});
+
+			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
+				postProcessor.descriptorBuffers.front().load([&](const DescriptorBuffer& buffer){
+					for(std::size_t i = 0; i < 3; ++i){
+						const VkDescriptorImageInfo imageInfo_input{
+								.sampler = Sampler::blitSampler,
+								.imageView = postProcessor.port.in.at(i),
+								.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+							};
+						buffer.loadImage(i, imageInfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+					}
+
+					for(std::size_t i = 0; i < 2; ++i){
+						const VkDescriptorImageInfo imageInfo_output{
+								.sampler = Sampler::blitSampler,
+								.imageView = postProcessor.images[i].getView(),
+								.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+							};
+
+						buffer.loadImage(i + 3, imageInfo_output, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+					}
+				});
+			};
+
+			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
+				const ScopedCommand scopedCommand{
+						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+					};
+
+				std::array<VkImageMemoryBarrier2, 5> barriers{};
+
+				for(std::size_t i = 0; i < 3; ++i){
+					barriers[i] = VkImageMemoryBarrier2{
+							.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+							.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+							.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+							.srcQueueFamilyIndex = postProcessor.context->graphicFamily(),
+							.dstQueueFamilyIndex = postProcessor.context->computeFamily(),
+							.image = postProcessor.port.toTransferOwnership.at(i),
+							.subresourceRange = ImageSubRange::Color
+						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeWrite;
+				}
+
+				for(std::size_t i = 0; i < 2; ++i){
+					barriers[i + 3] =
+						VkImageMemoryBarrier2{
+							.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+							.newLayout = VK_IMAGE_LAYOUT_GENERAL,
+							.image = postProcessor.images[i].getImage(),
+							.subresourceRange = ImageSubRange::Color
+						}
+					| MemoryBarrier2::Image::Default
+					| MemoryBarrier2::Image::QueueLocal
+					| MemoryBarrier2::Image::Src_ComputeRead
+					| MemoryBarrier2::Image::Dst_ComputeWrite;
+				}
+
 
 				Util::imageBarrier(scopedCommand, barriers);
 

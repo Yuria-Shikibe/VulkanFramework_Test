@@ -24,7 +24,7 @@ export namespace Graphic{
 
 		[[nodiscard]] explicit BasicRenderer(const Core::Vulkan::Context& context)
 		: commandPool{
-				context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+				context.device, context.graphicFamily(), VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 			}{}
 
 		[[nodiscard]] Geom::USize2 getSize() const noexcept{ return size; }

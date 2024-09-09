@@ -28,9 +28,6 @@ export namespace Assets{
 		namespace Frag{
 			Core::Vulkan::ShaderModule blitSingle{};
 
-			Core::Vulkan::ShaderModule blitBlur{};
-
-			Core::Vulkan::ShaderModule uiMerge{};
 			Core::Vulkan::ShaderModule uiBatch{};
 
 			Core::Vulkan::ShaderModule worldBatch{};
@@ -42,6 +39,7 @@ export namespace Assets{
 			Core::Vulkan::ShaderModule SSAO{};
 			Core::Vulkan::ShaderModule NFAA{};
 			Core::Vulkan::ShaderModule presentMerge{};
+			Core::Vulkan::ShaderModule uiMerge{};
 		}
 
 		void load(VkDevice device);
@@ -51,10 +49,8 @@ export namespace Assets{
 			Vert::blitWithUV = {};
 			Vert::uiBatch = {};
 
-			Frag::blitBlur = {};
 			Frag::blitSingle = {};
 
-			Frag::uiMerge = {};
 			Frag::uiBatch = {};
 
 			Vert::worldBatch = {};
@@ -64,6 +60,7 @@ export namespace Assets{
 			Comp::Gaussian = {};
 			Comp::SSAO = {};
 			Comp::NFAA = {};
+			Comp::uiMerge = {};
 			Comp::presentMerge = {};
 		}
 	}

@@ -21,15 +21,33 @@ export namespace Core::Vulkan{
 	};
 
 	struct QueueFamilyIndices{
-		static constexpr auto InvalidFamily = std::numeric_limits<std::uint32_t>::max();
+		struct FamilyData{
+			static constexpr auto InvalidFamily = std::numeric_limits<std::uint32_t>::max();
 
-		// 0 by default
-		std::uint32_t graphicsFamily{};
-		std::uint32_t presentFamily{};
-		std::uint32_t computeFamily{InvalidFamily};
+			std::uint32_t index{InvalidFamily};
+			std::uint32_t count{};
+
+			void createQueues(VkDevice device, std::vector<VkQueue>& queues) const{
+				queues.resize(count);
+
+				for (auto && [i, vkQueue] : queues | std::views::enumerate){
+					vkGetDeviceQueue(device, index, i, queues.data() + i);
+				}
+			}
+
+			[[nodiscard]] constexpr explicit operator bool() const noexcept{
+				return index != InvalidFamily;
+			}
+
+			constexpr friend bool operator==(const FamilyData& lhs, const FamilyData& rhs){ return lhs.index == rhs.index; }
+		};
+
+		FamilyData graphic{};
+		FamilyData present{};
+		FamilyData compute{};
 
 		[[nodiscard]] constexpr bool isComplete() const noexcept{
-			return graphicsFamily != InvalidFamily && presentFamily != InvalidFamily && computeFamily != InvalidFamily;
+			return graphic && present && compute;
 		}
 
 		[[nodiscard]] explicit operator bool() const noexcept{
@@ -38,25 +56,25 @@ export namespace Core::Vulkan{
 
 		[[nodiscard]] QueueFamilyIndices() = default;
 
-		[[nodiscard]] QueueFamilyIndices(VkPhysicalDevice device, VkSurfaceKHR surface) : graphicsFamily{InvalidFamily}, presentFamily{InvalidFamily}{
+		[[nodiscard]] QueueFamilyIndices(VkPhysicalDevice device, VkSurfaceKHR surface){
 			std::vector<VkQueueFamilyProperties> queueFamilies = Util::enumerate(vkGetPhysicalDeviceQueueFamilyProperties, device);
 
 			for(const auto& [index, queueFamily] : queueFamilies | std::ranges::views::enumerate){
 				if(!queueFamily.queueCount) continue;
 
 				if(queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT){
-					graphicsFamily = index;
+					graphic = {static_cast<std::uint32_t>(index), queueFamily.queueCount};
 				}
 
 				if(queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT){
-					computeFamily = index;
+					compute = {static_cast<std::uint32_t>(index), queueFamily.queueCount};
 				}
 
 				//Obtain present queue
 				VkBool32 presentSupport = false;
 				vkGetPhysicalDeviceSurfaceSupportKHR(device, index, surface, &presentSupport);
 				if(presentSupport){
-					presentFamily = index;
+					present = {static_cast<std::uint32_t>(index), 1};
 				}
 
 				if(isComplete()){
@@ -177,3 +195,11 @@ export namespace Core::Vulkan{
 		}
 	};
 }
+
+export
+template <>
+struct std::hash<Core::Vulkan::QueueFamilyIndices::FamilyData>{
+	constexpr std::size_t operator()(const Core::Vulkan::QueueFamilyIndices::FamilyData& index) const noexcept{
+		return index.index;
+	}
+};

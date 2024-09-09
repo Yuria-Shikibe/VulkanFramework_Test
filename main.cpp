@@ -151,7 +151,7 @@ int main(){
     });
 
     vulkanManager->uiImageViewProv = [&]{
-        return std::make_pair(rendererUi->mergeFrameBuffer.at(3), rendererUi->mergeFrameBuffer.at(4));
+        return std::make_pair(rendererUi->mergeProcessor.images[0].getView().get(), rendererUi->mergeProcessor.images[1].getView().get());
     };
 
     vulkanManager->initPipeline();
@@ -278,33 +278,29 @@ int main(){
                 };
         }
 
-
-
-        // rendererUi->pushScissor({100, 100, 500, 500});
-        // rendererUi->batch.consumeAll();
+        rendererWorld->batch.consumeAll();
+        rendererWorld->doPostProcess();
 
         Font::TypeSettings::draw(rendererUi->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 
-        // rendererUi->pushScissor({200, 200, 1200, 1200}, false);
-        Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
-		// rendererUi->batch.consumeAll();
-
-        // rendererUi->batch.consumeAll();
-        // rendererUi->pushScissor({250, 200, 1200, 1200}, false);
-
-        // rendererUi->resetScissors();
-        Font::TypeSettings::draw(rendererUi->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
-        rendererUi->batch.consumeAll();
-        rendererWorld->batch.consumeAll();
-
+        rendererUi->pushScissor({200, 200, 1200, 1200}, false);
         rendererUi->blit();
-        rendererUi->endBlit();
 
-        // gcm.submitCommand();
+        Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
+
+        rendererUi->resetScissors();
+        rendererUi->blit();
+
+        Font::TypeSettings::draw(rendererUi->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
+
+        rendererUi->batch.consumeAll();
+        rendererUi->blit();
+
+        rendererWorld->doMerge();
 
         vulkanManager->blitToScreen();
 
-        rendererUi->clear();
+        rendererUi->clearAll();
     }
 
 

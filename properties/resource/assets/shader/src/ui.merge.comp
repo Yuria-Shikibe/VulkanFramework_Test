@@ -1,0 +1,24 @@
+#version 460
+#pragma shader_stage(compute)
+
+#include "lib/blend"
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+layout (binding = 0) uniform sampler2D input1;
+layout (binding = 1) uniform sampler2D input2;
+layout (binding = 2) uniform sampler2D input3;
+
+layout (binding = 3, rgba32f) uniform image2D outputImageBase;
+layout (binding = 4, rgba32f) uniform image2D outputImageMask;
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
+    vec2 uv = (vec2(pos) + vec2(0.5f, 0.5f)) / vec2(imageSize(outputImageBase));
+
+    vec4 baseSrcColor = texelFetch(input1, pos, 0);
+    vec4 baseDstColor = imageLoad(outputImageBase, pos);
+    //TODO
+    imageStore(outputImageBase, pos, blend2(baseSrcColor, baseDstColor));
+//    imageStore(outputImageBase, pos, baseSrcColor);
+}

@@ -101,6 +101,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     vulkan-1.lib
     shaderc_util.lib
     freetype.lib
+    shaderc_shared.lib
 )
 
 
@@ -112,9 +113,6 @@ target_sources(${PROJECT_NAME}
 
 
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        shaderc_shared.lib
-    )
 
 #    set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
 #    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
@@ -123,10 +121,6 @@ if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 #    )
 elseif(${CMAKE_BUILD_TYPE} STREQUAL "Release")
     message(STATUS "Copy Properties Setup")
-
-    target_link_libraries(${PROJECT_NAME} PRIVATE
-        shaderc_shared.lib
-    )
 
     add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/${RES_DIR}/ ${EXE_DIR}

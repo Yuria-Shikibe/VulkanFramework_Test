@@ -8,6 +8,8 @@ import Assets.Directories;
 import Core.Vulkan.Context;
 import Assets.Graphic.PostProcess;
 
+import std;
+
 void Assets::Shader::load(const VkDevice device){
     const auto& dir = Dir::shader_spv;
 
@@ -23,16 +25,8 @@ void Assets::Shader::load(const VkDevice device){
 		device, dir / R"(blit.frag.spv)"
 	};
 
-	Frag::blitBlur = Core::Vulkan::ShaderModule{
-		device, dir / R"(blit_blur.frag.spv)"
-	};
-
 	Vert::blitWithUV = Core::Vulkan::ShaderModule{
 		device, dir / R"(blit_uv.vert.spv)"
-	};
-
-	Frag::uiMerge = Core::Vulkan::ShaderModule{
-		device, dir / R"(ui.merge.frag.spv)"
 	};
 
     Frag::uiBatch = Core::Vulkan::ShaderModule{
@@ -67,6 +61,10 @@ void Assets::Shader::load(const VkDevice device){
 
     Comp::presentMerge = Core::Vulkan::ShaderModule{
         device, dir / R"(present.merge.comp.spv)"
+    };
+
+    Comp::uiMerge = Core::Vulkan::ShaderModule{
+        device, dir / R"(ui.merge.comp.spv)"
     };
 }
 
@@ -113,9 +111,13 @@ void Assets::Sampler::load(const VkDevice device){
 }
 
 void Assets::load(const Core::Vulkan::Context& context){
+	std::println("[Assets] Graphic: Begin Assets Loading");
 	Shader::load(context.device);
+	std::println("[Assets] Graphic: Shader Complete");
+
 	Sampler::load(context.device);
 	PostProcess::load(context);
+	std::println("[Assets] Graphic: Assets Loaded");
 }
 
 void Assets::dispose(){

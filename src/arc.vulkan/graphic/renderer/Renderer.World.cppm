@@ -43,6 +43,7 @@ export namespace Graphic{
 		//Commands Region
 		std::array<Core::Vulkan::CommandBuffer, Batch::UnitSize> drawCommands{};
 		Core::Vulkan::CommandBuffer cleanCommand{};
+		Core::Vulkan::CommandBuffer endBatchCommand{};
 
 
 		//Descriptor Region
@@ -62,8 +63,10 @@ export namespace Graphic{
 
 
 		//Post Processors
-		ComputePostProcessor gussian{};
+		//parallel
+		ComputePostProcessor gaussian{};
 		ComputePostProcessor ssao{};
+		//sync
 		ComputePostProcessor merge{};
 		ComputePostProcessor nfaa{};
 
@@ -75,6 +78,7 @@ export namespace Graphic{
 			  batch(context, sizeof(Core::Vulkan::Vertex_World), Assets::Sampler::textureNearestSampler),
 			  pipelineData{&context},
 			  cleanCommand{context.device, commandPool},
+			  endBatchCommand{context.device, commandPool},
 			  worldUniformBuffer{context.physicalDevice, context.device, sizeof(Core::Vulkan::UniformProjectionBlock)},
 			  cameraPropertiesUniformBuffer{context.physicalDevice, context.device, sizeof(CameraProperties)},
 			  cameraPropertyDescriptorLayout{
@@ -149,7 +153,7 @@ export namespace Graphic{
 
 			createPipeline();
 			createDrawCommands();
-			createCleanCommand();
+			createWrapCommand();
 		}
 
 		decltype(auto) context() const {
@@ -165,7 +169,7 @@ export namespace Graphic{
 
 		void resize(const Geom::USize2 size2){
 			this->size = size2;
-			vkQueueWaitIdle(context().device.getGraphicsQueue());
+			vkQueueWaitIdle(context().device.getPrimaryGraphicsQueue());
 
 			{
 				const auto cmd = batch.obtainTransientCommand();
@@ -176,18 +180,18 @@ export namespace Graphic{
 			}
 			createDepthView();
 
-			gussian.resize(size);
+			gaussian.resize(size);
 			ssao.resize(size);
 			merge.resize(size);
 			nfaa.resize(size);
 
 			createPipeline();
 			createDrawCommands();
-			createCleanCommand();
+			createWrapCommand();
 		}
 
 		Core::Vulkan::Attachment& getResult_gaussian(){
-			return gussian.images.back();
+			return gaussian.images.back();
 		}
 
 		Core::Vulkan::Attachment& getResult_NFAA(){
@@ -203,18 +207,26 @@ export namespace Graphic{
 		}
 
 		void doPostProcess() const{
-			gussian.submitCommand();
-			ssao.submitCommand();
-			merge.submitCommand();
+			using namespace Core::Vulkan;
 
-			Core::Vulkan::Util::submitCommand(context().device.getGraphicsQueue(), cleanCommand);
+			Util::submitCommand(context().device.getPrimaryGraphicsQueue(), endBatchCommand);
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), gaussian.commandBuffer);
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), ssao.commandBuffer);
+		}
+
+		void doMerge() const{
+			using namespace Core::Vulkan;
+
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), merge.commandBuffer);
+			Util::submitCommand(context().device.getPrimaryGraphicsQueue(), cleanCommand);
 
 			nfaa.submitCommand();
 		}
+
 	private:
 		void createPostProcessors(){
 			{
-				gussian = Assets::PostProcess::Factory::gaussianFactory.generate(size, [this]{
+				gaussian = Assets::PostProcess::Factory::gaussianFactory.generate(size, [this]{
 					AttachmentPort port{};
 
 					port.in.insert_or_assign(0, lightColor.getView());
@@ -224,17 +236,17 @@ export namespace Graphic{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
 				});
 
-				gussian.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
+				gaussian.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
 					cameraPropertiesDescriptor.bindTo(scopedCommand,
 						VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR|VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
 					);
 
-					Core::Vulkan::EXT::cmdSetDescriptorBufferOffsetsEXT(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE, gussian.pipelineData.layout,
+					Core::Vulkan::EXT::cmdSetDescriptorBufferOffsetsEXT(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE, gaussian.pipelineData.layout,
 						1, 1, Core::Vulkan::Seq::Indices<0>, Core::Vulkan::Seq::Offset<0>);
 				};
 
-				gussian.updateDescriptors();
-				gussian.recordCommand();
+				gaussian.updateDescriptors();
+				gaussian.recordCommand();
 			}
 
 			{
@@ -356,67 +368,100 @@ export namespace Graphic{
 			}
 		}
 
-		void createCleanCommand(){
+		void createWrapCommand(){
 			using namespace Core::Vulkan;
-			const ScopedCommand scopedCommand{cleanCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+			{
+				const ScopedCommand scopedCommand{endBatchCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
-			std::array barriers{
-				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					.image = baseColor.getImage(),
-					.subresourceRange = ImageSubRange::Color
-				} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::QueueLocal,
+				std::array barriers{
+						VkImageMemoryBarrier2{
+							.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+							.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+							.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+							.srcQueueFamilyIndex = context().graphicFamily(),
+							.dstQueueFamilyIndex = context().computeFamily(),
+							.image = baseColor.getImage(),
+							.subresourceRange = ImageSubRange::Color
+						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead,
+						VkImageMemoryBarrier2{
+							.srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+							.srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+							.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+							.srcQueueFamilyIndex = context().graphicFamily(),
+							.dstQueueFamilyIndex = context().computeFamily(),
+							.image = lightColor.getImage(),
+							.subresourceRange = ImageSubRange::Color
+						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead,
+						VkImageMemoryBarrier2{
+							.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
+							VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+							.srcAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+							.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+							.srcQueueFamilyIndex = context().graphicFamily(),
+							.dstQueueFamilyIndex = context().computeFamily(),
+							.image = depthStencilAttachment.getImage(),
+							.subresourceRange = ImageSubRange::DepthStencil
+						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead
+					};
 
-				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					.image = lightColor.getImage(),
-					.subresourceRange = ImageSubRange::Color
-				} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::QueueLocal,
+				Util::imageBarrier(scopedCommand, barriers);
+			}
 
-				VkImageMemoryBarrier2{
-					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
-					.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-					.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-					.image = depthStencilAttachment.getImage(),
-					.subresourceRange = ImageSubRange::DepthStencil
-				} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::QueueLocal,
-			};
 
-			Util::imageBarrier(cleanCommand, barriers);
+			{
+				const ScopedCommand scopedCommand{cleanCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
-			baseColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
-			lightColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
-			depthStencilAttachment.getImage().cmdClearDepthStencil(scopedCommand, ImageSubRange::DepthStencil);
+				std::array barriers{
+					VkImageMemoryBarrier2{
+						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						.srcQueueFamilyIndex = context().computeFamily(),
+						.dstQueueFamilyIndex = context().graphicFamily(),
+						.image = baseColor.getImage(),
+						.subresourceRange = ImageSubRange::Color
+					} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead | MemoryBarrier2::Image::Dst_TransferWrite,
 
-			std::ranges::for_each(barriers, Util::swapStage<VkImageMemoryBarrier2>);
+					VkImageMemoryBarrier2{
+						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						.image = lightColor.getImage(),
+						.subresourceRange = ImageSubRange::Color
+					} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead | MemoryBarrier2::Image::Dst_TransferWrite,
 
-			barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			barriers[1].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			barriers[2].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+					VkImageMemoryBarrier2{
+						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						.image = depthStencilAttachment.getImage(),
+						.subresourceRange = ImageSubRange::DepthStencil
+					} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead | MemoryBarrier2::Image::Dst_TransferWrite,
+				};
 
-			barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-			barriers[0].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+				Util::imageBarrier(cleanCommand, barriers);
 
-			barriers[1].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-			barriers[1].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+				baseColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
+				lightColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
+				depthStencilAttachment.getImage().cmdClearDepthStencil(scopedCommand, ImageSubRange::DepthStencil);
 
-			barriers[2].dstStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-			barriers[2].dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				std::ranges::for_each(barriers, Util::swapStage<VkImageMemoryBarrier2>);
 
-			Util::imageBarrier(cleanCommand, barriers);
+				barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barriers[1].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				barriers[2].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+				barriers[0].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+				barriers[0].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+
+				barriers[1].dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+				barriers[1].dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+
+				barriers[2].dstStageMask = VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+				barriers[2].dstAccessMask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+				Util::imageBarrier(cleanCommand, barriers);
+			}
 
 		}
 

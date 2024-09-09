@@ -88,14 +88,13 @@ export namespace Core::Vulkan{
 		RenderProcedure flushPass{};
 
 		[[nodiscard]] TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context.device.getGraphicsQueue());
+			return transientCommandPool.obtainTransient(context.device.getPrimaryGraphicsQueue());
 		}
 
 		struct InFlightData{
 			Fence inFlightFence{};
 
 			Semaphore imageAvailableSemaphore{};
-			Semaphore renderFinishedSemaphore{};
 			Semaphore flushFinishedSemaphore{};
 		};
 
@@ -116,14 +115,13 @@ export namespace Core::Vulkan{
 			const auto currentFrame = swapChain.getCurrentInFlightImage();
 			const auto& currentFrameData = frameDataArr[currentFrame];
 
-			rendererWorld->doPostProcess();
 			presentMerge.submitCommand();
 
 			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			Util::submitCommand(
-				context.device.getGraphicsQueue(),
+				context.device.getPrimaryGraphicsQueue(),
 				swapChain.getCommandFlushes()[imageIndex],
 				currentFrameData.inFlightFence,
 				currentFrameData.imageAvailableSemaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
@@ -196,7 +194,6 @@ export namespace Core::Vulkan{
 			for(auto& frameData : frameDataArr){
 				frameData.inFlightFence = Fence{context.device, Fence::CreateFlags::signal};
 				frameData.imageAvailableSemaphore = Semaphore{context.device};
-				frameData.renderFinishedSemaphore = Semaphore{context.device};
 				frameData.flushFinishedSemaphore = Semaphore{context.device};
 			}
 		}

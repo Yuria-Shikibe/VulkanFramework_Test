@@ -109,6 +109,63 @@ namespace Core::Vulkan::Util{
 	}
 
 	export
+	template <std::size_t W, std::size_t S = 0>
+	void submitCommand(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence = nullptr,
+		const std::array<VkSemaphore, W> toWait = {}, const std::array<VkPipelineStageFlags2, W> waitStage = {},
+		const std::array<VkSemaphore, S> toSignal = {}, const std::array<VkPipelineStageFlags2, S> signalStage = {}
+		){
+
+
+		VkCommandBufferSubmitInfo cmdSubmitInfo{
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+			.commandBuffer = commandBuffer,
+			.deviceMask = 0
+		};
+
+		VkSubmitInfo2 submitInfo{
+			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2,
+			.commandBufferInfoCount = 1,
+			.pCommandBufferInfos = &cmdSubmitInfo,
+		};
+
+
+		std::array<VkSemaphoreSubmitInfo, W> waits{};
+		std::array<VkSemaphoreSubmitInfo, S> signals{};
+
+		if constexpr (W){
+			for (const auto & [i, semaphore] : toWait | std::views::enumerate){
+				waits[i] = VkSemaphoreSubmitInfo{
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+					.semaphore = semaphore,
+					.value = 0,
+					.stageMask = waitStage[i],
+					.deviceIndex = 0
+				};
+			}
+
+			submitInfo.waitSemaphoreInfoCount = W;
+			submitInfo.pWaitSemaphoreInfos = waits.data();
+		}
+
+		if constexpr (S){
+			for (const auto & [i, semaphore] : toSignal | std::views::enumerate){
+				signals[i] = VkSemaphoreSubmitInfo{
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO,
+					.semaphore = semaphore,
+					.value = 0,
+					.stageMask = signalStage[i],
+					.deviceIndex = 0
+				};
+			}
+
+			submitInfo.signalSemaphoreInfoCount = S;
+			submitInfo.pSignalSemaphoreInfos = signals.data();
+		}
+
+		vkQueueSubmit2(queue, 1, &submitInfo, fence);
+	}
+
+	export
 	template <std::ranges::range Range, std::ranges::range ValidRange, typename Proj = std::identity>
 		requires requires(
 			std::unordered_set<std::string>& set,

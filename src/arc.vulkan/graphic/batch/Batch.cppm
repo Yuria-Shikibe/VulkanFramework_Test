@@ -192,7 +192,7 @@ export namespace Graphic{
 	    }
 
 	    [[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const {
-            return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
+            return transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue());
         }
 
 		[[nodiscard]] DrawArgs acquire(VkImageView imageView){
@@ -495,7 +495,7 @@ export namespace Graphic{
 
 		    transientCommandPool = CommandPool{
 		        context->device,
-                context->physicalDevice.queues.graphicsFamily,
+                context->graphicFamily(),
                 VK_COMMAND_POOL_CREATE_TRANSIENT_BIT | VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
             };
 

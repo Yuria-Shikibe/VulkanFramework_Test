@@ -23,6 +23,7 @@ import Core.Vulkan.Preinstall;
 import Core.Vulkan.EXT;
 
 import Graphic.Batch2;
+import Graphic.PostProcessor;
 
 import Geom.Rect_Orthogonal;
 
@@ -32,6 +33,7 @@ import ext.circular_array;
 
 //TODO move this to other place
 import Assets.Graphic;
+import Assets.Graphic.PostProcess;
 
 export namespace Graphic{
 	struct UniformUI_Vertex{
@@ -82,13 +84,17 @@ export namespace Graphic{
 		Core::Vulkan::CommandBuffer blitEndCommand{};
 		Core::Vulkan::CommandBuffer clearCommand{};
 
+
 		Core::Vulkan::RenderProcedure batchDrawPass{};
-		Core::Vulkan::RenderProcedure mergeDrawPass{};
+		// Core::Vulkan::RenderProcedure mergeDrawPass{};
 
 		Core::Vulkan::FramebufferLocal batchFramebuffer{};
-		Core::Vulkan::FramebufferLocal mergeFrameBuffer{};
+		// Core::Vulkan::FramebufferLocal mergeFrameBuffer{};
 
 		std::vector<Geom::OrthoRectUInt> scissors{};
+
+		ComputePostProcessor mergeProcessor{};
+		Core::Vulkan::CommandBuffer blittedClearCommand{};
 
 		[[nodiscard]] const Core::Vulkan::Context& context() const noexcept{ return *batch.context; }
 
@@ -119,33 +125,29 @@ export namespace Graphic{
 		void resize(const Geom::USize2 size2){
 			if(this->size == size2) return;
 
-			vkQueueWaitIdle(context().device.getGraphicsQueue());
+			vkQueueWaitIdle(context().device.getPrimaryGraphicsQueue());
 
 			this->size = size2;
 			batchDrawPass.resize(size2);
-			mergeDrawPass.resize(size2);
+			// mergeDrawPass.resize(size2);
 
 			auto cmd = batch.obtainTransientCommand();
 			batchFramebuffer.resize(size2, cmd);
 
-			for(std::size_t i = 0; i < AttachmentCount; ++i){
-				mergeFrameBuffer.loadExternalImageView({{i, batchFramebuffer.atLocal(i).getView()}});
-			}
+			// for(std::size_t i = 0; i < AttachmentCount; ++i){
+			// 	mergeFrameBuffer.loadExternalImageView({{i, batchFramebuffer.atLocal(i).getView()}});
+			// }
 
 			scissors.front() = {size.x, size.y};
-			mergeFrameBuffer.resize(size2, cmd);
+			// mergeFrameBuffer.resize(size2, cmd);
 			cmd = {};
 
-			setMergeDescriptorSet();
-			createFlushCommands();
+			mergeProcessor.resize(size);
+
 			createCommands();
 			createDrawCommands();
 
 			updateUniformBuffer();
-		}
-
-		Core::Vulkan::Attachment& mergedAttachment(){
-			return mergeFrameBuffer.localAttachments.back();
 		}
 
 		void initRenderPass(const Geom::USize2 size2){
@@ -154,8 +156,20 @@ export namespace Graphic{
 			initPipeline();
 			createFrameBuffers();
 
-			setMergeDescriptorSet();
-			createFlushCommands();
+			{
+				mergeProcessor = Assets::PostProcess::Factory::uiMerge.generate(size, [this]{
+					AttachmentPort port{};
+
+					for(const auto& [i, localAttachment] : batchFramebuffer.localAttachments | std::views::enumerate){
+						port.addComputeInputAttachment(i, localAttachment);
+					}
+
+					return port;
+				});
+			}
+
+			blittedClearCommand = mergeProcessor.commandPool.obtain();
+
 			createCommands();
 
 			updateUniformBuffer();
@@ -217,7 +231,7 @@ export namespace Graphic{
 						pipelineTemplate
 							.useDefaultFixedStages()
 							.setColorBlend(&Default::ColorBlending<std::array{
-									Blending::AlphaBlend,
+									Blending::ScaledAlphaBlend,
 									Blending::AlphaBlend,
 									Blending::AlphaBlend,
 								}>)
@@ -232,90 +246,19 @@ export namespace Graphic{
 
 				batchDrawPass.resize(size);
 			}
-
-
-			/*mergePass:*/
-			{
-				mergeDrawPass.init(context());
-
-				mergeDrawPass.createRenderPass([](RenderPass& renderPass){
-					const auto ColorAttachmentDesc = VkAttachmentDescription{}
-						| AttachmentDesc::Default
-						| AttachmentDesc::Stencil_DontCare
-						| AttachmentDesc::ReusedColorAttachment
-						| AttachmentDesc::ReadAndWrite;
-
-					for(std::size_t i = 0; i < AttachmentCount; ++i){
-						renderPass.pushAttachment(ColorAttachmentDesc);
-					}
-
-					//out[base, light]
-					renderPass.pushAttachment(ColorAttachmentDesc);
-					renderPass.pushAttachment(ColorAttachmentDesc);
-
-					renderPass.pushSubpass([](RenderPass::SubpassData& subpass){
-						subpass.addDependency(VkSubpassDependency{
-								.dstSubpass = 0,
-								.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-								.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-							} | Subpass::Dependency::External);
-
-						for(std::size_t i = 0; i < AttachmentCount; ++i){
-							subpass.addInput(i);
-						}
-
-						// subpass.addInput(AttachmentCount + 0);
-						// subpass.addInput(AttachmentCount + 1);
-
-						subpass.addOutput(AttachmentCount + 0);
-						subpass.addOutput(AttachmentCount + 1);
-					});
-				});
-
-				mergeDrawPass.pushAndInitPipeline([](PipelineData& pipeline){
-					pipeline.createDescriptorLayout([](DescriptorSetLayout& layout){
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-						layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-						// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-						// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT);
-					});
-
-					pipeline.createPipelineLayout();
-					pipeline.createDescriptorSet(1);
-
-					pipeline.builder = [](PipelineData& pipeline){
-						PipelineTemplate pipelineTemplate{};
-						pipelineTemplate
-							.useDefaultFixedStages()
-							.setColorBlend(&Default::ColorBlending<std::array{
-									Blending::ScaledAlphaBlend,
-									Blending::AlphaBlend,
-								}>)
-							.setVertexInputInfo<Util::EmptyVertexBind>()
-							.setShaderChain({&Assets::Shader::Vert::blitSingle, &Assets::Shader::Frag::uiMerge})
-							.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
-
-						pipeline.createPipeline(pipelineTemplate);
-					};
-				});
-
-				mergeDrawPass.resize(size);
-			}
 		}
 
 		void createFrameBuffers(){
 			using namespace Core::Vulkan;
 
 			batchFramebuffer = FramebufferLocal{context().device, size, batchDrawPass.renderPass};
-			mergeFrameBuffer = FramebufferLocal{context().device, size, mergeDrawPass.renderPass};
 
 			//TODO no sample
 			for(std::size_t i = 0; i < AttachmentCount; ++i){
 				ColorAttachment colorAttachment{context().physicalDevice, context().device};
 				colorAttachment.create(size, batch.obtainTransientCommand(),
-				                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-				                       VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
+									   VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
+									   VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 				);
 				batchFramebuffer.pushCapturedAttachments(std::move(colorAttachment));
 			}
@@ -323,71 +266,8 @@ export namespace Graphic{
 			batchFramebuffer.loadCapturedAttachments(AttachmentCount);
 			batchFramebuffer.create();
 
-			for(std::size_t i = 0; i < 2; ++i){
-				ColorAttachment colorAttachment{context().physicalDevice, context().device};
-				colorAttachment.create(size, batch.obtainTransientCommand(),
-				                       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
-				                       VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL
-				);
-				mergeFrameBuffer.addCapturedAttachments(AttachmentCount + i, std::move(colorAttachment));
-			}
-
-			mergeFrameBuffer.loadCapturedAttachments(0);
-			for(std::size_t i = 0; i < AttachmentCount; ++i){
-				mergeFrameBuffer.loadExternalImageView({{i, batchFramebuffer.atLocal(i).getView()}});
-			}
-			mergeFrameBuffer.create();
 		}
 
-		void setMergeDescriptorSet(){
-			using namespace Core::Vulkan;
-
-			DescriptorSetUpdator updator{context().device, mergeDrawPass.atLocal(0).descriptorSets.front()};
-
-			std::array layouts{
-					VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-					VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-					VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-					// VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-					// VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
-				};
-
-			std::array<VkDescriptorImageInfo, std::ssize(layouts)> infos{};
-
-			for(const auto& [index, attachment] : batchFramebuffer.localAttachments | std::views::enumerate){
-				infos[index] = attachment.getDescriptorInfo(nullptr, layouts[index]);
-			}
-
-			// infos[AttachmentCount + 0] = mergeFrameBuffer.localAttachments.back().getDescriptorInfo(nullptr, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-			// infos[AttachmentCount + 1] = mergeFrameBuffer.localAttachments.back().getDescriptorInfo(nullptr, VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL);
-
-			for(auto&& [index, inputAttachmentImageInfo] : infos | std::views::enumerate){
-				updator.pushAttachment(inputAttachmentImageInfo);
-			}
-
-			updator.update();
-		}
-
-		void createFlushCommands(){
-			using namespace Core::Vulkan;
-
-			const ScopedCommand scopedCommand{mergeCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-
-
-			const auto renderPassInfo = mergeDrawPass.getBeginInfo(mergeFrameBuffer);
-			vkCmdBeginRenderPass(scopedCommand, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-			const auto pipelineContext = mergeDrawPass.startCmdContext(scopedCommand);
-
-			pipelineContext.data().bindDescriptorTo(scopedCommand);
-			scopedCommand->blitDraw();
-
-			vkCmdEndRenderPass(scopedCommand);
-
-			for(const auto& localAttachment : batchFramebuffer.localAttachments){
-				localAttachment.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_READ_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
-			}
-		}
 
 		void draw(const std::size_t index) const{
 			const auto& unit = drawCommands[index];
@@ -395,15 +275,21 @@ export namespace Graphic{
 		}
 
 		void blit() const{
-			context().commandSubmit_Graphics(mergeCommand, nullptr, nullptr);
+			mergeProcessor.submitCommand();
+			clearBatch();
 		}
 
 		void endBlit() const{
 			context().commandSubmit_Graphics(blitEndCommand, nullptr, nullptr);
 		}
 
-		void clear() const{
-			context().commandSubmit_Graphics(clearCommand, nullptr, nullptr);
+		void clearAll() const{
+			clearBatch();
+
+			Core::Vulkan::Util::submitCommand(context().device.getPrimaryComputeQueue(), blittedClearCommand);
+		}
+		void clearBatch() const{
+			Core::Vulkan::Util::submitCommand(context().device.getPrimaryGraphicsQueue(), clearCommand);
 		}
 
 		void createCommands(){
@@ -412,27 +298,40 @@ export namespace Graphic{
 			{
 				ScopedCommand scopedCommand{clearCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
-				for(const auto& localAttachment : mergeFrameBuffer.localAttachments){
-					localAttachment.cmdClearColor(scopedCommand, {}, VK_ACCESS_SHADER_WRITE_BIT, VK_IMAGE_ASPECT_COLOR_BIT);
+				for (auto && localAttachment : batchFramebuffer.localAttachments){
+					localAttachment.cmdClearColor(scopedCommand, {});
 				}
+
 			}
+
 
 			{
-				ScopedCommand scopedCommand{blitEndCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+				ScopedCommand scopedCommand{blittedClearCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
 
-				for(const auto& attachment : mergeFrameBuffer.localAttachments){
-					Util::transitionImageLayout(
-						scopedCommand, attachment.getImage(), {
-							.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-							.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT,
-							.dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-							.srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-							.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-						}, VK_IMAGE_ASPECT_COLOR_BIT);
+				std::array<VkImageMemoryBarrier2, 2> barriers{};
+
+				for (auto && [i, barrier] : barriers | std::views::enumerate){
+					barrier = VkImageMemoryBarrier2{
+						.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+						.image = mergeProcessor.images[i].getImage(),
+						.subresourceRange = ImageSubRange::Color
+					}
+					| MemoryBarrier2::Image::Default
+					| MemoryBarrier2::Image::QueueLocal
+					| MemoryBarrier2::Image::Src_ComputeRead
+					| MemoryBarrier2::Image::Dst_TransferWrite;
 				}
-			}
 
+				Util::imageBarrier(scopedCommand, barriers);
+
+				for (auto& image : mergeProcessor.images){
+					image.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
+				}
+
+				Util::swapStage(barriers);
+				Util::imageBarrier(scopedCommand, barriers);
+			}
 
 			for (auto& scissorUnit : scissorUnits){
 				const ScopedCommand scopedCommand{scissorUnit.transferCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};

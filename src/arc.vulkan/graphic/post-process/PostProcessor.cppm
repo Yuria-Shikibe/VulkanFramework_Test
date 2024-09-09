@@ -44,7 +44,7 @@ export namespace Graphic{
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand(const bool compute) const{
 			return transientCommandPool.obtainTransient(
-				compute ? context->device.getComputeQueue() : context->device.getGraphicsQueue());
+				compute ? context->device.getPrimaryComputeQueue() : context->device.getPrimaryGraphicsQueue());
 		}
 
 		/**
@@ -61,11 +61,11 @@ export namespace Graphic{
 			  portProv{std::move(portProv)},
 			  transientCommandPool{
 				  context.device,
-				  isCompute ? context.physicalDevice.queues.computeFamily : context.physicalDevice.queues.graphicsFamily,
+				  isCompute ? context.computeFamily() : context.graphicFamily(),
 				  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 			  }, commandPool{
 				  context.device,
-				  isCompute ? context.physicalDevice.queues.computeFamily : context.physicalDevice.queues.graphicsFamily,
+				  isCompute ? context.computeFamily() : context.graphicFamily(),
 				  VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 			  }, commandBuffer{context.device, commandPool}{
 			if(this->portProv){
@@ -90,7 +90,7 @@ export namespace Graphic{
 				.pSignalSemaphores = nullptr//processCompleteSemaphore.asData()
 			};
 
-			vkQueueSubmit(isCompute ? context->device.getComputeQueue() : context->device.getGraphicsQueue(), 1, &info, nullptr);
+			vkQueueSubmit(isCompute ? context->device.getPrimaryComputeQueue() : context->device.getPrimaryGraphicsQueue(), 1, &info, nullptr);
 		}
 
 		void submitCommand(bool isCompute) const{
@@ -267,7 +267,7 @@ export namespace Graphic{
 
 			framebuffer.resize(
 				size,
-				transientCommandPool.obtainTransient(context->device.getGraphicsQueue()),
+				transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue()),
 				port.in, port.out);
 
 			updateDescriptors();

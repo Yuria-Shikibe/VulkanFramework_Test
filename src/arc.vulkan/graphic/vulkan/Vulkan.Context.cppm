@@ -29,15 +29,15 @@ export namespace Core::Vulkan{
 		//TODO globalCommandPool?
 
 		[[nodiscard]] auto graphicFamily() const noexcept{
-			return physicalDevice.queues.graphicsFamily;
+			return physicalDevice.queues.graphic.index;
 		}
 
 		[[nodiscard]] auto presentFamily() const noexcept{
-			return physicalDevice.queues.presentFamily;
+			return physicalDevice.queues.present.index;
 		}
 
 		[[nodiscard]] auto computeFamily() const noexcept{
-			return physicalDevice.queues.computeFamily;
+			return physicalDevice.queues.compute.index;
 		}
 
 		void init(){
@@ -92,7 +92,7 @@ export namespace Core::Vulkan{
 		}
 
 		VkResult commandSubmit_Graphics(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
-			VkResult result = vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, fence);
+			VkResult result = vkQueueSubmit(device.getPrimaryGraphicsQueue(), 1, &submitInfo, fence);
 			if(result)std::println(
 				std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!",
 				static_cast<int>(result));
@@ -135,7 +135,7 @@ export namespace Core::Vulkan{
 		}
 
 		VkResult commandSubmit_Compute(const VkSubmitInfo& submitInfo, VkFence fence = nullptr) const{
-			VkResult result = vkQueueSubmit(device.getComputeQueue(), 1, &submitInfo, fence);
+			VkResult result = vkQueueSubmit(device.getPrimaryComputeQueue(), 1, &submitInfo, fence);
 			if(result) std::println(std::cerr, "[Vulkan] [{}] Failed to submit the command buffer!", static_cast<int>(result));
 			return result;
 		}
@@ -157,7 +157,7 @@ export namespace Core::Vulkan{
 			submitInfo.pSignalSemaphores = std::ranges::data(semaphores);
 
 			(void)commandSubmit_Graphics(submitInfo, nullptr);
-			vkQueueWaitIdle(device.getGraphicsQueue());
+			vkQueueWaitIdle(device.getPrimaryGraphicsQueue());
 		}
 	};
 }

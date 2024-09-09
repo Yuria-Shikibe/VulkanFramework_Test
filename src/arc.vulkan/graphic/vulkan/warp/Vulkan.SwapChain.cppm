@@ -173,9 +173,9 @@ export namespace Core::Vulkan{
 				};
 
 			const QueueFamilyIndices indices(physicalDevice, surface);
-			const std::array queueFamilyIndices{indices.graphicsFamily, indices.presentFamily};
+			const std::array queueFamilyIndices{indices.graphic.index, indices.present.index};
 
-			if(indices.graphicsFamily != indices.presentFamily){
+			if(indices.graphic.index != indices.present.index){
 				createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 				createInfo.queueFamilyIndexCount = 2;
 				createInfo.pQueueFamilyIndices = queueFamilyIndices.data();

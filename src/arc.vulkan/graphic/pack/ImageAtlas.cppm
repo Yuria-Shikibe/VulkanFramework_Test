@@ -208,7 +208,7 @@ namespace Graphic{
 		[[nodiscard]] explicit ImageAtlas(const Core::Vulkan::Context& context) :
 			context{&context},
 			transientCommandPool{
-				context.device, context.physicalDevice.queues.graphicsFamily, VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
+				context.device, context.graphicFamily(), VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
 			}{}
 
 		[[nodiscard]] ImagePage* findPage(const std::string_view name){
@@ -257,11 +257,11 @@ namespace Graphic{
 		}
 
 		decltype(auto) exportImages(const ImagePage& page) const{
-			return page.exportImages(transientCommandPool, context->device.getGraphicsQueue());
+			return page.exportImages(transientCommandPool, context->device.getPrimaryGraphicsQueue());
 		}
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context->device.getGraphicsQueue());
+			return transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue());
 		}
 
 		/**

@@ -248,6 +248,52 @@ namespace Core::Vulkan{
 				&VkImageMemoryBarrier2::srcQueueFamilyIndex,
 				&VkImageMemoryBarrier2::dstQueueFamilyIndex,
 			};
+
+
+			constexpr Util::Component Src_ComputeRead{
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				},
+				&VkImageMemoryBarrier2::srcStageMask,
+				&VkImageMemoryBarrier2::srcAccessMask,
+			};
+
+			constexpr Util::Component Src_ComputeWrite{
+				VkImageMemoryBarrier2{
+					.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.srcAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				},
+				&VkImageMemoryBarrier2::srcStageMask,
+				&VkImageMemoryBarrier2::srcAccessMask,
+			};
+
+			constexpr Util::Component Dst_ComputeRead{
+				VkImageMemoryBarrier2{
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
+				},
+				&VkImageMemoryBarrier2::dstStageMask,
+				&VkImageMemoryBarrier2::dstAccessMask,
+			};
+
+			constexpr Util::Component Dst_TransferWrite{
+				VkImageMemoryBarrier2{
+					.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+					.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT,
+				},
+				&VkImageMemoryBarrier2::dstStageMask,
+				&VkImageMemoryBarrier2::dstAccessMask,
+			};
+
+			constexpr Util::Component Dst_ComputeWrite{
+				VkImageMemoryBarrier2{
+					.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+					.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
+				},
+				&VkImageMemoryBarrier2::dstStageMask,
+				&VkImageMemoryBarrier2::dstAccessMask,
+			};
 		}
 	}
 

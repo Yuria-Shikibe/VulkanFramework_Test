@@ -19,4 +19,13 @@ void main() {
     vec4 dst = texelFetch(input_world, pos, 0);
 
     imageStore(outputImage, pos, alphaBlend(src, dst));
+
+    //    if(pos.x < 600){
+//        imageStore(outputImage, pos, alphaBlend(src, dst));
+//    }else if(pos.x < 1200){
+//    }else{
+//        imageStore(outputImage, pos, src);
+//    }
+
+
 }
