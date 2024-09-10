@@ -42,11 +42,11 @@ export namespace Core::Vulkan{
 			return {device, handle, level};
 		}
 
-		[[nodiscard]] TransientCommand obtainTransient(VkQueue targetQueue) const{
+		[[nodiscard]] TransientCommand getTransient(VkQueue targetQueue) const{
 			return TransientCommand{device, handle, targetQueue};
 		}
 
-		void resetAll(const VkCommandPoolResetFlags resetFlags) const{
+		void resetAll(const VkCommandPoolResetFlags resetFlags = 0) const{
 			vkResetCommandPool(device, handle, resetFlags);
 		}
 

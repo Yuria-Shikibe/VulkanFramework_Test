@@ -156,6 +156,20 @@ export namespace Core::Vulkan{
 			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
 		}
 
+		template <std::size_t N>
+		void bufferBarrier(
+			VkCommandBuffer commandBuffer,
+			const std::array<VkBufferMemoryBarrier2, N>& barrier2
+		){
+			const VkDependencyInfo dependencyInfo{
+				.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+				.bufferMemoryBarrierCount = static_cast<std::uint32_t>(barrier2.size()),
+				.pBufferMemoryBarriers = barrier2.data()
+			};
+
+			vkCmdPipelineBarrier2(commandBuffer, &dependencyInfo);
+		}
+
 		void imageBarrier(
 			VkCommandBuffer commandBuffer,
 			const std::span<VkImageMemoryBarrier2> barrier2

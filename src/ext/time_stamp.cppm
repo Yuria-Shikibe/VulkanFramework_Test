@@ -42,7 +42,7 @@ export namespace ext {
 		}
 	};
 
-	template <std::size_t maxSize = 1, ext::SpecDeriveOf<std::chrono::duration> Duration = std::chrono::milliseconds>
+	template <std::size_t maxSize = 1, spec_of<std::chrono::duration> Duration = std::chrono::milliseconds>
 	class array_time_stamper {
 		std::array<std::chrono::time_point<std::chrono::system_clock>, maxSize> stamps{};
 

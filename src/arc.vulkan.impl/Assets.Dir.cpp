@@ -1,12 +1,11 @@
 module Assets.Directories;
 
-import Core.FileTree;
 
 void Assets::loadDir(){
     using namespace Dir;
-    Core::FileTree& mainTree = Core::rootFileTree;
 
-    assets = mainTree.findDir("assets");
+
+    assets = files.findDir("assets");
     patch(assets);
 
     shader = assets.subFile("shader");
@@ -34,7 +33,7 @@ void Assets::loadDir(){
     patch(bundle);
 
 
-    cache = mainTree.findDir("resource").subFile("cache");
+    cache = files.findDir("resource").subFile("cache");
     patch(cache);
 
     texCache = cache.subFile("tex");
@@ -43,7 +42,7 @@ void Assets::loadDir(){
     game = assets.subFile("game");
     patch(game);
 
-    data = mainTree.findDir("resource").subFile("data");
+    data = files.findDir("resource").subFile("data");
     patch(data);
 
     settings = data.subFile("settings");

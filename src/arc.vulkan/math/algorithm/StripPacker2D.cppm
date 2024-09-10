@@ -29,7 +29,7 @@ export namespace Math {
      * @brief
      * @tparam T Should Avoid Copy When Tgt Type is provided
      */
-    template <ext::SpecDeriveOf<Packable> T>
+    template <ext::spec_of<Packable> T>
 		requires requires(T& t){
     		requires std::derived_from<T, Packable<typename T::PackValueType>>;
             { t.getBound() } -> std::same_as<Geom::Rect_Orthogonal<typename T::PackValueType>&>;

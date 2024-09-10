@@ -124,7 +124,7 @@ namespace ext {
 	concept InvokeNoexcept = noexcept(Callable()) || noexcept(std::declval<Callable>()());
 
 	export template <typename T, typename NumberType = float>
-	concept Pos = requires(T t){
+	concept pos = requires(T t){
 		std::is_base_of_v<decltype(t.getX()), NumberType>;
 		std::is_base_of_v<decltype(t.getY()), NumberType>;
 	};
@@ -136,12 +136,12 @@ namespace ext {
 
 	export
 	template <class T, template <class...> class Template>
-	concept SpecDeriveOf = requires(const T& obj) {
+	concept spec_of = requires(const T& obj) {
 		ext::derived_from_specialization_impl<Template>(obj);
 	};
 
     template <typename T>
-    concept Complete = requires{
+    concept complete_type = requires{
         sizeof(T);
     };
 

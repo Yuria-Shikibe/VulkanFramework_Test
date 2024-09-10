@@ -187,7 +187,7 @@ namespace Graphic{
 			pixmaps.reserve(subpages.size());
 
 			for (const auto & subpage : subpages){
-				pixmaps.push_back(subpage.texture.exportToPixmap(commandPool.obtainTransient(queue)));
+				pixmaps.push_back(subpage.texture.exportToPixmap(commandPool.getTransient(queue)));
 			}
 
 			return pixmaps;
@@ -261,7 +261,7 @@ namespace Graphic{
 		}
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue());
+			return transientCommandPool.getTransient(context->device.getPrimaryGraphicsQueue());
 		}
 
 		/**

@@ -13,7 +13,6 @@ import Core.Vulkan.Texture;
 import Core.Vulkan.Attachment;
 import Core.Vulkan.EXT;
 
-
 import Core.File;
 import Graphic.Color;
 import Graphic.Batch;
@@ -22,7 +21,6 @@ import Graphic.Pixmap;
 import Core.Input;
 import Graphic.Camera2D;
 import Core.InitAndTerminate;
-import Core.Global;
 
 import Geom.Matrix4D;
 import Geom.Rect_Orthogonal;
@@ -32,11 +30,6 @@ import Core.Vulkan.Shader.Compile;
 import Assets.Graphic;
 import Assets.Directories;
 
-Core::Vulkan::Texture texturePester{};
-Core::Vulkan::Texture texturePesterLight{};
-
-import Graphic.Renderer.UI;
-import Graphic.Renderer.World;
 import Graphic.PostProcessor;
 import Graphic.ImageAtlas;
 import Graphic.Draw.Func;
@@ -65,6 +58,16 @@ import MainTest;
 import ext.stack_trace;
 import ext.algo.string_parse;
 import ext.Event;
+
+import Core.Vulkan.Vertex;
+
+import Graphic.Renderer.UI;
+import Graphic.Renderer.World;
+import Core.Global;
+
+
+Core::Vulkan::Texture texturePester{};
+Core::Vulkan::Texture texturePesterLight{};
 
 Graphic::ImageAtlas loadTex(){
     using namespace Core;
@@ -133,6 +136,7 @@ void foo(){
 
     submitter_pmr.submit<T1>(&t);
 }
+
 int main_(){
     foo();
 
@@ -148,66 +152,11 @@ int main(){
 
 	Assets::load(vulkanManager->context);
 
-
-    Graphic::RendererUI* rendererUi = new Graphic::RendererUI{vulkanManager->context};
-    Graphic::RendererWorld* rendererWorld = new Graphic::RendererWorld{vulkanManager->context};
-
-    vulkanManager->registerResizeCallback(
-        [rendererUi](auto& e){
-            if(e.area()) rendererUi->resize(static_cast<Geom::USize2>(e));
-        }, [&rendererUi](auto e){
-            rendererUi->initRenderPass(e);
-        });
-
-
-    vulkanManager->registerResizeCallback(
-    [rendererWorld](auto& e){
-        if(e.area()){
-            rendererWorld->resize(static_cast<Geom::USize2>(e));
-        }
-    }, [&rendererWorld](auto e){
-        rendererWorld->initPipeline(e);
-    });
-
-    vulkanManager->uiImageViewProv = [&]{
-        return std::make_pair(rendererUi->mergeProcessor.images[0].getView().get(), rendererUi->mergeProcessor.images[1].getView().get());
-    };
-
-    vulkanManager->worldImageViewProv = [rendererWorld]{
-        return rendererWorld->getResult_NFAA().getView().get();
-    };
-
-    vulkanManager->initPipeline();
-
-    // vulkanManager->updatePresentData();
+    ::Core::postInit();
 
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
     auto imageAtlas = loadTex();
-
-    {
-        Vulkan::DescriptorSetLayout layout{vulkanManager->context.device, [](Vulkan::DescriptorSetLayout& l){
-            l.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-            l.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-            l.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT);
-            l.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT);
-            l.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_FRAGMENT_BIT);
-        }};
-
-        Vulkan::UniformBuffer uniformBuffer{vulkanManager->context.physicalDevice,
-            vulkanManager->context.device, 36};
-
-        Vulkan::DescriptorBuffer descriptorBuffer{
-            vulkanManager->context.physicalDevice,
-            vulkanManager->context.device, layout, layout.size()};
-
-        descriptorBuffer.map();
-        descriptorBuffer.loadUniform(0, uniformBuffer.getBufferAddress(), uniformBuffer.requestedSize());
-        descriptorBuffer.loadImage(2, imageAtlas.at("main.white").imageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, Assets::Sampler::blitSampler);
-        descriptorBuffer.unmap();
-
-        descriptorBuffer = Vulkan::DescriptorBuffer{};
-    }
 
     Font::FontManager fontManager = initFontManager(imageAtlas);
 
@@ -257,7 +206,7 @@ int main(){
             fps_count = 0;
         }
         fps_count++;
-        // Font::TypeSettings::draw(rendererUi->batch, fps, {300, 300});
+        // Font::TypeSettings::draw(rendererUI->batch, fps, {300, 300});
 
 
 
@@ -304,26 +253,26 @@ int main(){
         rendererWorld->batch.consumeAll();
         rendererWorld->doPostProcess();
 
-        Font::TypeSettings::draw(rendererUi->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
+        Font::TypeSettings::draw(rendererUI->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 
-        rendererUi->pushScissor({200, 200, 1200, 1200}, false);
-        rendererUi->blit();
+        rendererUI->pushScissor({200, 200, 1200, 1200}, false);
+        rendererUI->blit();
 
-        Font::TypeSettings::draw(rendererUi->batch, layout, {100, 100});
+        Font::TypeSettings::draw(rendererUI->batch, layout, {100, 100});
 
-        rendererUi->resetScissors();
-        rendererUi->blit();
+        rendererUI->resetScissors();
+        rendererUI->blit();
 
-        Font::TypeSettings::draw(rendererUi->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
+        Font::TypeSettings::draw(rendererUI->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
 
-        rendererUi->batch.consumeAll();
-        rendererUi->blit();
+        rendererUI->batch.consumeAll();
+        rendererUI->blit();
 
         rendererWorld->doMerge();
 
         vulkanManager->blitToScreen();
 
-        rendererUi->clearAll();
+        rendererUI->clearAll();
     }
 
 
@@ -332,9 +281,6 @@ int main(){
 
 
     imageAtlas = {};
-    delete rendererUi;
-    delete rendererWorld;
-
     fontManager = {};
     texturePester = {};
 	texturePesterLight = {};

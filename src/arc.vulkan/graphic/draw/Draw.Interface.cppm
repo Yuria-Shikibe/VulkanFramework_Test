@@ -116,7 +116,7 @@ export namespace Graphic::Draw{
 
 	template <typename M>
 	concept AutoParam = requires(M& m){
-		requires ext::SpecDeriveOf<M, DrawParam>;
+		requires ext::spec_of<M, DrawParam>;
 		{ ++m } -> std::same_as<M&>;
 	};
 }

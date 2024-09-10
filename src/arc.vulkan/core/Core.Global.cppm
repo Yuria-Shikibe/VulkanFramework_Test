@@ -3,6 +3,8 @@ export module Core.Global;
 export import Core.ApplicationTimer;
 
 export namespace Graphic {
+    struct RendererUI;
+    struct RendererWorld;
     class Camera2D;
 }
 
@@ -27,4 +29,7 @@ export namespace Core {
     Window* window{};
     Graphic::Camera2D* mainCamera{};
 	Vulkan::VulkanManager* vulkanManager{};
+
+    Graphic::RendererWorld* rendererWorld{};
+    Graphic::RendererUI* rendererUI{};
 }

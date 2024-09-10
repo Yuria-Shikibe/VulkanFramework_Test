@@ -6,58 +6,31 @@ export module Core.Vulkan.Manager;
 
 import std;
 
-import ext.meta_programming;
-
 import Core.Window;
-import Core.Vulkan.Uniform;
-import Core.Vulkan.Vertex;
 
 import Core.Vulkan.Context;
-import Core.Vulkan.Validation;
 import Core.Vulkan.SwapChain;
-import Core.Vulkan.PhysicalDevice;
-import Core.Vulkan.LogicalDevice;
-import Core.Vulkan.DescriptorSet;
-import Core.Vulkan.PipelineLayout;
 
-import Core.Vulkan.Fence;
 import Core.Vulkan.Semaphore;
-
-import Core.Vulkan.Buffer.ExclusiveBuffer;
-import Core.Vulkan.DescriptorBuffer;
-import Core.Vulkan.Buffer.UniformBuffer;
-
-import Core.Vulkan.Preinstall;
-
-import Core.Vulkan.Pipeline;
-import Core.Vulkan.RenderPass;
 
 import Core.Vulkan.CommandPool;
 import Core.Vulkan.Buffer.CommandBuffer;
-import Core.Vulkan.Buffer.IndexBuffer;
-import Core.Vulkan.Buffer.VertexBuffer;
 import Core.Vulkan.Buffer.FrameBuffer;
-import Core.Vulkan.Sampler;
-import Core.Vulkan.Image;
 import Core.Vulkan.Comp;
 import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.Attachment;
 
-import Core.Vulkan.BatchData;
 import Core.Vulkan.Util;
 
 import Graphic.PostProcessor;
 
-import Math;
-import Core.File;
+import Geom.Vector2D;
 
+//TEMP
 import Assets.Graphic;
 import Assets.Graphic.PostProcess;
 
 import ext.Event;
-
-//TEMP
-import Graphic.Renderer.World;
 
 export namespace Core::Vulkan{
 
@@ -74,21 +47,21 @@ export namespace Core::Vulkan{
 			{ext::index_of<ResizeEvent>()}
 		};
 
-		std::function<std::pair<VkImageView, VkImageView>()> uiImageViewProv{};
-		std::function<VkImageView()> worldImageViewProv{};
+		Graphic::AttachmentPort worldPort{};
+		Graphic::AttachmentPort uiPort{};
 
 		Context context{};
+
+	private:
 		CommandPool commandPool{};
 		CommandPool transientCommandPool{};
+		CommandPool commandPool_Compute{};
 
 		Graphic::ComputePostProcessor presentMerge{};
 
 		SwapChain swapChain{};
 		RenderProcedure flushPass{};
 
-		[[nodiscard]] TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context.device.getPrimaryGraphicsQueue());
-		}
 
 		struct InFlightData{
 			Semaphore imageAvailableSemaphore{};
@@ -97,6 +70,7 @@ export namespace Core::Vulkan{
 
 		std::array<InFlightData, MAX_FRAMES_IN_FLIGHT> frameDataArr{};
 
+	public:
 		template <std::regular_invocable<Geom::USize2> InitFunc>
 		void registerResizeCallback(std::function<void(const ResizeEvent&)>&& callback, InitFunc initFunc) {
 			initFunc(swapChain.size2D());
@@ -143,6 +117,11 @@ export namespace Core::Vulkan{
 					VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 				};
 
+			commandPool_Compute = CommandPool{
+					context.device, context.computeFamily(),
+					VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
+				};
+
 			transientCommandPool = CommandPool{
 					context.device, context.graphicFamily(),
 				VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
@@ -159,17 +138,15 @@ export namespace Core::Vulkan{
 			setFlushGroup();
 
 			{
-				presentMerge = Assets::PostProcess::Factory::presentMerge.generate(swapChain.size2D(), [this]{
+				presentMerge = Assets::PostProcess::Factory::presentMerge.generate({swapChain.size2D(), [this]{
 					Graphic::AttachmentPort port{};
 
-					auto [ui1, ui2] = uiImageViewProv();
-
-					port.in.insert_or_assign(0, worldImageViewProv());
-					port.in.insert_or_assign(1, ui1);
-					port.in.insert_or_assign(2, ui2);
+					port.views.insert_or_assign(0, worldPort.views.at(0));
+					port.views.insert_or_assign(1, uiPort.views.at(0));
+					port.views.insert_or_assign(2, uiPort.views.at(1));
 
 					return port;
-				});
+				}, {}, commandPool_Compute.getTransient(context.device.getPrimaryComputeQueue()), commandPool_Compute.obtain()});
 			}
 
 
@@ -185,6 +162,10 @@ export namespace Core::Vulkan{
 			std::cout.flush();
 		}
 
+		[[nodiscard]] TransientCommand obtainTransientCommand() const{
+			return transientCommandPool.getTransient(context.device.getPrimaryGraphicsQueue());
+		}
+
 	private:
 		void createFrameObjects(){
 			for(auto& frameData : frameDataArr){
@@ -196,7 +177,7 @@ export namespace Core::Vulkan{
         void resize(const SwapChain& swapChain){
 			eventManager.fire(ResizeEvent{swapChain.size2D()});
 
-			presentMerge.resize(swapChain.size2D());
+			presentMerge.resize(swapChain.size2D(), commandPool_Compute.getTransient(context.device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
 
             flushPass.resize(swapChain.size2D());
 
@@ -218,7 +199,6 @@ export namespace Core::Vulkan{
 		    }
 		}
 
-    public:
 		auto& getFinalAttachment(){
 			return presentMerge.images.back();
 		}

@@ -35,10 +35,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	//TODO transfer blur result ownership to compute queue initially
 	Factory::gaussianFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 			static constexpr std::uint32_t Passes = 2;
 
 			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
@@ -61,7 +59,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				                                            Shader::Comp::Gaussian);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 
 			{
 				std::array usages{
@@ -70,14 +68,14 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
 					};
 
-				const auto command = processor.obtainTransientCommand(true);
-
 				for(auto usage : usages){
 					Attachment image{processor.context->physicalDevice, processor.context->device};
-					image.create(processor.size(), command, usage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
+					image.create(processor.size(), property.createInitCommandBuffer, usage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_GENERAL);
 					processor.images.push_back(std::move(image));
 				}
 			}
+
+			property.createInitCommandBuffer = {};
 
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const auto& horiUniformBuffer = postProcessor.uniformBuffers[0];
@@ -85,7 +83,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				const VkDescriptorImageInfo imageinfo_input{
 						.sampler = Sampler::blitSampler,
-						.imageView = postProcessor.port.in.at(0),
+						.imageView = postProcessor.port.views.at(0),
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					};
 
@@ -123,7 +121,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+						postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 					};
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -180,10 +178,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 	Factory::ssaoFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 
 			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
 				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -200,24 +196,26 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				pipeline.pipelineData.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::SSAO);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 			processor.addUniformBuffer<UniformBlock_kernalSSAO>(UniformBlock_kernalSSAO{processor.size()});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
 
+			property.createInitCommandBuffer = {};
+
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const auto& ubo = postProcessor.uniformBuffers[0];
 
 				const VkDescriptorImageInfo imageInfo_input{
 						.sampler = Sampler::blitSampler,
-						.imageView = postProcessor.port.in.at(0),
+						.imageView = postProcessor.port.views.at(0),
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					};
 
@@ -233,7 +231,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+						postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 					};
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -278,10 +276,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 	Factory::worldMergeFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 
 			static constexpr std::size_t InputAttachmentsCount = 4;
 
@@ -305,16 +301,18 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				                                            Shader::Comp::worldMerge);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
+
+			property.createInitCommandBuffer = {};
 
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const auto imageInfo_output =
@@ -325,7 +323,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						buffer.loadImage(
 							i, {
 								.sampler = Sampler::blitSampler,
-								.imageView = postProcessor.port.in.at(i),
+								.imageView = postProcessor.port.views.at(i),
 								.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 							}, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 					}
@@ -336,7 +334,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-					postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+					postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 				};
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -377,17 +375,15 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			};
 
 			processor.updateDescriptors();
-			processor.recordCommand();
+			processor.recordCommand(std::move(property.mainCommandBuffer));
 
 			return processor;
 		};
 
 	Factory::nfaaFactory.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 
 			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
 				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -403,21 +399,23 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				pipeline.pipelineData.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::NFAA);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
 
+			property.createInitCommandBuffer = {};
+
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const VkDescriptorImageInfo imageInfo_input{
 						.sampler = Sampler::blitSampler,
-						.imageView = postProcessor.port.in.at(0),
+						.imageView = postProcessor.port.views.at(0),
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					};
 
@@ -432,7 +430,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+						postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 					};
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -474,17 +472,15 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			};
 
 			processor.updateDescriptors();
-			processor.recordCommand();
+			processor.recordCommand(std::move(property.mainCommandBuffer));
 
 			return processor;
 		};
 
 	Factory::presentMerge.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 
 			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
 				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -502,16 +498,18 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				pipeline.pipelineData.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::presentMerge);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
+
+			property.createInitCommandBuffer = {};
 
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const auto imageInfo_output =
@@ -521,7 +519,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					for(std::size_t i = 0; i < 3; ++i){
 						const VkDescriptorImageInfo imageInfo_input{
 								.sampler = Sampler::blitSampler,
-								.imageView = postProcessor.port.in.at(i),
+								.imageView = postProcessor.port.views.at(i),
 								.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 							};
 						buffer.loadImage(i, imageInfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -532,7 +530,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+						postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 					};
 
 				std::array barriers = {
@@ -576,7 +574,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			};
 
 			processor.updateDescriptors();
-			processor.recordCommand();
+			processor.recordCommand(std::move(property.mainCommandBuffer));
 
 			return processor;
 		};
@@ -584,10 +582,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 	Factory::uiMerge.creator = [](
 		const Graphic::ComputePostProcessorFactory& factory,
-		Graphic::PortProv&& portProv,
-		Graphic::DescriptorLayoutProv&& layoutProv,
-		const Geom::USize2 size){
-			Graphic::ComputePostProcessor processor{*factory.context, std::move(portProv), std::move(layoutProv)};
+		Graphic::PostProcessorCreateProperty&& property){
+			Graphic::ComputePostProcessor processor{*factory.context, std::move(property.portProv), std::move(property.layoutProv)};
 
 			processor.pipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
 				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
@@ -606,32 +602,34 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				pipeline.pipelineData.createComputePipeline(VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT, Shader::Comp::uiMerge);
 			};
 
-			processor.resize(size);
+			processor.resize(property.size, nullptr, {});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
 
-			processor.addImage([](const Graphic::ComputePostProcessor& p, Attachment& image){
+			processor.addImage([&](const Graphic::ComputePostProcessor& p, Attachment& image){
 				image.create(
-					p.size(), p.obtainTransientCommand(true),
+					p.size(), property.createInitCommandBuffer,
 					VK_IMAGE_USAGE_STORAGE_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT,
 					VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 			});
+
+			property.createInitCommandBuffer = {};
 
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				postProcessor.descriptorBuffers.front().load([&](const DescriptorBuffer& buffer){
 					for(std::size_t i = 0; i < 3; ++i){
 						const VkDescriptorImageInfo imageInfo_input{
 								.sampler = Sampler::blitSampler,
-								.imageView = postProcessor.port.in.at(i),
+								.imageView = postProcessor.port.views.at(i),
 								.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 							};
 						buffer.loadImage(i, imageInfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
@@ -651,7 +649,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 			processor.commandRecorder = [](Graphic::ComputePostProcessor& postProcessor){
 				const ScopedCommand scopedCommand{
-						postProcessor.commandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
+						postProcessor.mainCommandBuffer, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT
 					};
 
 				std::array<VkImageMemoryBarrier2, 5> barriers{};
@@ -664,7 +662,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 							.srcQueueFamilyIndex = postProcessor.context->graphicFamily(),
 							.dstQueueFamilyIndex = postProcessor.context->computeFamily(),
-							.image = postProcessor.port.toTransferOwnership.at(i),
+							.image = postProcessor.port.images.at(i),
 							.subresourceRange = ImageSubRange::Color
 						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeWrite;
 				}
@@ -709,7 +707,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			};
 
 			processor.updateDescriptors();
-			processor.recordCommand();
+			processor.recordCommand(std::move(property.mainCommandBuffer));
 
 			return processor;
 		};

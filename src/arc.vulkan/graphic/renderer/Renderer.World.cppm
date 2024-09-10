@@ -40,14 +40,14 @@ export namespace Graphic{
 
 
 		//Commands Region
-		std::array<Core::Vulkan::CommandBuffer, Batch::UnitSize> drawCommands{};
+		Batch::DrawCommandSeq drawCommands{};
 		Core::Vulkan::CommandBuffer cleanCommand{};
 		Core::Vulkan::CommandBuffer endBatchCommand{};
 
 
 		//Descriptor Region
 		Core::Vulkan::UniformBuffer worldUniformBuffer{};
-		Core::Vulkan::DescriptorBuffer worldBatchDescriptorBuffer{};
+		Core::Vulkan::DescriptorBuffer descriptorBuffer{};
 
 		Core::Vulkan::UniformBuffer cameraPropertiesUniformBuffer{};
 		Core::Vulkan::DescriptorSetLayout cameraPropertyDescriptorLayout{};
@@ -104,8 +104,8 @@ export namespace Graphic{
 
 			pipelineData.createPipelineLayout(0, {batch.layout});
 
-			worldBatchDescriptorBuffer = DescriptorBuffer{this->context().physicalDevice, this->context().device, pipelineData.descriptorSetLayout, pipelineData.descriptorSetLayout.size()};
-			worldBatchDescriptorBuffer.load([this](const DescriptorBuffer& descriptorBuffer){
+			descriptorBuffer = DescriptorBuffer{this->context().physicalDevice, this->context().device, pipelineData.descriptorSetLayout, pipelineData.descriptorSetLayout.size()};
+			descriptorBuffer.load([this](const DescriptorBuffer& descriptorBuffer){
 				descriptorBuffer.loadUniform(0, worldUniformBuffer.getBufferAddress(), worldUniformBuffer.requestedSize());
 			});
 
@@ -114,7 +114,7 @@ export namespace Graphic{
 			});
 		}
 
-		void initPipeline(const Geom::USize2 size2){
+		void init(const Geom::USize2 size2){
 			this->size = size2;
 
 			baseColor = {context().physicalDevice, context().device};
@@ -151,6 +151,7 @@ export namespace Graphic{
 			createPipeline();
 			createDrawCommands();
 			createWrapCommand();
+			setPort();
 		}
 
 		decltype(auto) context() const {
@@ -168,6 +169,7 @@ export namespace Graphic{
 		void resize(const Geom::USize2 size2){
 			this->size = size2;
 			vkQueueWaitIdle(context().device.getPrimaryGraphicsQueue());
+			resetCommandPool();
 
 			{
 				const auto cmd = batch.obtainTransientCommand();
@@ -178,14 +180,15 @@ export namespace Graphic{
 			}
 			createDepthView();
 
-			gaussian.resize(size);
-			ssao.resize(size);
-			merge.resize(size);
-			nfaa.resize(size);
+			gaussian.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
+			ssao.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
+			merge.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
+			nfaa.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
 
 			createPipeline();
 			createDrawCommands();
 			createWrapCommand();
+			setPort();
 		}
 
 		Core::Vulkan::Attachment& getResult_gaussian(){
@@ -208,14 +211,14 @@ export namespace Graphic{
 			using namespace Core::Vulkan;
 
 			Util::submitCommand(context().device.getPrimaryGraphicsQueue(), endBatchCommand);
-			Util::submitCommand(context().device.getPrimaryComputeQueue(), gaussian.commandBuffer);
-			Util::submitCommand(context().device.getPrimaryComputeQueue(), ssao.commandBuffer);
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), gaussian.mainCommandBuffer);
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), ssao.mainCommandBuffer);
 		}
 
 		void doMerge() const{
 			using namespace Core::Vulkan;
 
-			Util::submitCommand(context().device.getPrimaryComputeQueue(), merge.commandBuffer);
+			Util::submitCommand(context().device.getPrimaryComputeQueue(), merge.mainCommandBuffer);
 			Util::submitCommand(context().device.getPrimaryGraphicsQueue(), cleanCommand);
 
 			nfaa.submitCommand();
@@ -224,15 +227,15 @@ export namespace Graphic{
 	private:
 		void createPostProcessors(){
 			{
-				gaussian = Assets::PostProcess::Factory::gaussianFactory.generate(size, [this]{
+				gaussian = Assets::PostProcess::Factory::gaussianFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.in.insert_or_assign(0, lightColor.getView());
-					port.toTransferOwnership.insert_or_assign(0, lightColor.getImage());
+					port.views.insert_or_assign(0, lightColor.getView());
+					port.images.insert_or_assign(0, lightColor.getImage());
 					return port;
 				}, [this]{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
-				});
+				}, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue())});
 
 				gaussian.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
 					cameraPropertiesDescriptor.bindTo(scopedCommand,
@@ -244,19 +247,19 @@ export namespace Graphic{
 				};
 
 				gaussian.updateDescriptors();
-				gaussian.recordCommand();
+				gaussian.recordCommand(commandPool_Compute.obtain());
 			}
 
 			{
-				ssao = Assets::PostProcess::Factory::ssaoFactory.generate(size, [this]{
+				ssao = Assets::PostProcess::Factory::ssaoFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.in.insert_or_assign(0, depthAttachmentView);
-					port.toTransferOwnership.insert_or_assign(0, depthStencilAttachment.getImage());
+					port.views.insert_or_assign(0, depthAttachmentView);
+					port.images.insert_or_assign(0, depthStencilAttachment.getImage());
 					return port;
 				}, [this]{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
-				});
+				}, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue())});
 
 				ssao.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
 					cameraPropertiesDescriptor.bindTo(scopedCommand,
@@ -270,29 +273,33 @@ export namespace Graphic{
 				};
 
 				ssao.updateDescriptors();
-				ssao.recordCommand();
+				ssao.recordCommand(commandPool_Compute.obtain());
 			}
 
 			{
-				merge = Assets::PostProcess::Factory::worldMergeFactory.generate(size, [this]{
+				merge = Assets::PostProcess::Factory::worldMergeFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.addComputeInputAttachment(0, baseColor);
-					port.addComputeInputAttachment(1, lightColor);
-					port.in.insert_or_assign(2, getResult_gaussian().getView());
-					port.in.insert_or_assign(3, getResult_SSAO().getView());
+					port.addAttachment(0, baseColor);
+					port.addAttachment(1, lightColor);
+					port.views.insert_or_assign(2, getResult_gaussian().getView());
+					port.views.insert_or_assign(3, getResult_SSAO().getView());
 
 					return port;
-				});
+				}, {},
+					commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()),
+					commandPool_Compute.obtain()});
 			}
 
 			{
-				nfaa = Assets::PostProcess::Factory::nfaaFactory.generate(size, [this]{
+				nfaa = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.addComputeInputAttachment(0, getResult_merge());
+					port.addAttachment(0, getResult_merge());
 					return port;
-				});
+				}, {},
+					commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()),
+					commandPool_Compute.obtain()});
 			}
 		}
 
@@ -320,50 +327,46 @@ export namespace Graphic{
 			dynamicRendering.setDepthAttachment(depthStencilAttachment.getView(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 			dynamicRendering.pushColorAttachment(baseColor.getView(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 			dynamicRendering.pushColorAttachment(lightColor.getView(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
 			for(auto&& [i, unit] : drawCommands | std::views::enumerate){
 				using namespace Core::Vulkan;
 				auto& commandUnit = batch.units[i];
 
 				auto barriers = commandUnit.getBarriers();
 
-				VkDependencyInfo dependencyInfo{
-					.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-					.bufferMemoryBarrierCount = static_cast<std::uint32_t>(barriers.size()),
-					.pBufferMemoryBarriers = barriers.data(),
-				};
 
 				ScopedCommand scopedCommand{unit, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
+				Util::bufferBarrier(scopedCommand, barriers);
 
-				vkCmdPipelineBarrier2(scopedCommand, &dependencyInfo);
 
-				dynamicRendering.beginRendering(scopedCommand, {{}, {size.x, size.y}});
+				{
+					dynamicRendering.beginRendering(scopedCommand, {{}, {size.x, size.y}});
+					pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_GRAPHICS);
 
-				vkCmdBindPipeline(scopedCommand, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineData.pipeline);
+					const std::array infos{
+						descriptorBuffer.getBindInfo(
+							VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT),
+						commandUnit.getDescriptorBufferBindInfo()
+					};
 
-				const std::array infos{
-					worldBatchDescriptorBuffer.getBindInfo(
-						VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR | VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT),
-					commandUnit.getDescriptorBufferBindInfo()
-				};
+					EXT::cmdBindDescriptorBuffersEXT(scopedCommand, infos.size(), infos.data());
+					EXT::cmdSetDescriptorBufferOffsetsEXT(
+						scopedCommand,
+						VK_PIPELINE_BIND_POINT_GRAPHICS,
+						pipelineData.layout,
+						0, infos.size(), Seq::Indices<0, 1>, Seq::Offset<0, 0>);
 
-				EXT::cmdBindDescriptorBuffersEXT(scopedCommand, infos.size(), infos.data());
-				EXT::cmdSetDescriptorBufferOffsetsEXT(
-					scopedCommand,
-					VK_PIPELINE_BIND_POINT_GRAPHICS,
-					pipelineData.layout,
-					0, infos.size(), Seq::Indices<0, 1>, Seq::Offset<0, 0>);
+					batch.bindBuffersTo(scopedCommand, i);
 
-				batch.bindBuffersTo(scopedCommand, i);
-
-				vkCmdEndRendering(scopedCommand);
+					vkCmdEndRendering(scopedCommand);
+				}
 
 				for (auto && barrier : barriers){
 					Util::swapStage(barrier);
 				}
 
-				vkCmdPipelineBarrier2(scopedCommand, &dependencyInfo);
+				Util::bufferBarrier(scopedCommand, barriers);
 			}
+
 		}
 
 		void createWrapCommand(){
@@ -486,6 +489,10 @@ export namespace Graphic{
 			pipelineTemplate.applyDynamicRendering();
 
 			pipelineData.createPipeline(pipelineTemplate);
+		}
+
+		void setPort(){
+			port.addAttachment(0, getResult_NFAA());
 		}
 	};
 }

@@ -62,6 +62,14 @@ namespace Core::Vulkan::Util{
 	}
 
 	export
+	template <std::size_t size>
+	void swapStage(std::array<VkBufferMemoryBarrier2, size>& arr){
+		for (VkBufferMemoryBarrier2& t : arr){
+			swapStage<VkBufferMemoryBarrier2>(t);
+		}
+	}
+
+	export
 	void submitCommand(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence = nullptr,
 		VkSemaphore toWait = nullptr, VkPipelineStageFlags2 waitStage = VK_PIPELINE_STAGE_2_NONE,
 		VkSemaphore toSignal = nullptr, VkPipelineStageFlags2 signalStage = VK_PIPELINE_STAGE_2_NONE

@@ -1,10 +1,15 @@
 export module Assets.Directories;
 
 export import Core.File;
+export import Core.FilePlain;
+export import Core.FilePlain;
+
 
 namespace Assets{
 	namespace Dir{
 	    export {
+	    	inline Core::FilePlane files;
+
 	        inline Core::File assets;
 
 	        inline Core::File shader;

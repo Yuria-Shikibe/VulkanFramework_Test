@@ -8,23 +8,32 @@ export import Core.Vulkan.Context;
 export import Core.Vulkan.Buffer.FrameBuffer;
 export import Core.Vulkan.RenderProcedure;
 export import Core.Vulkan.Buffer.CommandBuffer;
-export import Core.Vulkan.CommandPool;
 export import Core.Vulkan.Semaphore;
 export import Core.Vulkan.Preinstall;
+export import Core.Vulkan.Util;
 
 import Geom.Vector2D;
 import std;
 
 export namespace Graphic{
-	struct AttachmentPort{
-	    //OPTM merge these?
-		std::unordered_map<std::uint32_t, VkImageView> in{};
-		std::unordered_map<std::uint32_t, VkImageView> out{};
-		std::unordered_map<std::uint32_t, VkImage> toTransferOwnership{};
 
-		void addComputeInputAttachment(std::uint32_t index, const Core::Vulkan::Attachment& attachment){
-			in.insert_or_assign(index, attachment.getView());
-			toTransferOwnership.insert_or_assign(index, attachment.getImage());
+	//OPTM considering the small use of these fields, maybe vector is better?
+	struct AttachmentPort{
+		std::unordered_map<std::uint32_t, VkImageView> views{};
+		std::unordered_map<std::uint32_t, VkImage> images{};
+
+		void addAttachment(const std::uint32_t index, const Core::Vulkan::Attachment& attachment){
+			views.insert_or_assign(index, attachment.getView());
+			images.insert_or_assign(index, attachment.getImage());
+		}
+
+		template <std::ranges::range Rng>
+			requires std::convertible_to<std::ranges::range_reference_t<Rng>, const Core::Vulkan::Attachment&>
+		void addAttachment(Rng&& attachments){
+			for(auto [index, attachment] : std::as_const(attachments) | std::views::enumerate){
+				views.insert_or_assign(index, attachment.getView());
+				images.insert_or_assign(index, attachment.getImage());
+			}
 		}
 	};
 
@@ -37,37 +46,15 @@ export namespace Graphic{
 		AttachmentPort port{};
 		PortProv portProv{};
 
-		Core::Vulkan::CommandPool transientCommandPool{};
-		Core::Vulkan::CommandPool commandPool{};
-
-		Core::Vulkan::CommandBuffer commandBuffer{};
-
-		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand(const bool compute) const{
-			return transientCommandPool.obtainTransient(
-				compute ? context->device.getPrimaryComputeQueue() : context->device.getPrimaryGraphicsQueue());
-		}
-
-		/**
-		 * @brief [Negative: before DrawCall, 0: DrawCall, positive: after DrawCall]
-		 */
-		std::map<int, Core::Vulkan::CommandBuffer> appendCommandBuffers{};
+		Core::Vulkan::CommandBuffer mainCommandBuffer{};
 
 		[[nodiscard]] PostProcessor() = default;
 
 		[[nodiscard]] explicit PostProcessor(
-			const Core::Vulkan::Context& context, const bool isCompute,
+			const Core::Vulkan::Context& context,
 			PortProv&& portProv = {})
 			: context{&context},
-			  portProv{std::move(portProv)},
-			  transientCommandPool{
-				  context.device,
-				  isCompute ? context.computeFamily() : context.graphicFamily(),
-				  VK_COMMAND_POOL_CREATE_TRANSIENT_BIT
-			  }, commandPool{
-				  context.device,
-				  isCompute ? context.computeFamily() : context.graphicFamily(),
-				  VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
-			  }, commandBuffer{context.device, commandPool}{
+			  portProv{std::move(portProv)}{
 			if(this->portProv){
 				port = this->portProv();
 			}
@@ -77,43 +64,11 @@ export namespace Graphic{
 
 		[[nodiscard]] Geom::USize2 size() const = delete;
 
-	protected:
-		void submitToQueue(const std::vector<VkCommandBuffer>& commandBuffers, const bool isCompute) const{
-			VkSubmitInfo info{
-				.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-				.waitSemaphoreCount = 0,
-				.pWaitSemaphores = nullptr,
-				.pWaitDstStageMask = nullptr,
-				.commandBufferCount = static_cast<std::uint32_t>(commandBuffers.size()),
-				.pCommandBuffers = commandBuffers.data(),
-				.signalSemaphoreCount = 0,//1,
-				.pSignalSemaphores = nullptr//processCompleteSemaphore.asData()
-			};
-
-			vkQueueSubmit(isCompute ? context->device.getPrimaryComputeQueue() : context->device.getPrimaryGraphicsQueue(), 1, &info, nullptr);
-		}
-
-		void submitCommand(bool isCompute) const{
-			std::vector<VkCommandBuffer> commandBuffers{};
-			commandBuffers.reserve(appendCommandBuffers.size() + 1);
-
-			if(appendCommandBuffers.empty()){
-				commandBuffers.push_back(commandBuffer.get());
-			}else{
-				auto lowerBound = appendCommandBuffers.lower_bound(0);
-
-				std::ranges::transform(
-					std::ranges::subrange{appendCommandBuffers.begin(), lowerBound} | std::views::values,
-					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
-
-				commandBuffers.push_back(commandBuffer);
-
-				std::ranges::transform(
-					std::ranges::subrange{lowerBound, appendCommandBuffers.end()} | std::views::values,
-					std::back_inserter(commandBuffers), &Core::Vulkan::CommandBuffer::get);
-			}
-
-			submitToQueue(commandBuffers, isCompute);
+		void submitCommand() const{
+			Core::Vulkan::Util::submitCommand(
+				context->device.getPrimaryComputeQueue(),
+				mainCommandBuffer
+				);
 		}
 	};
 
@@ -126,16 +81,16 @@ export namespace Graphic{
 
 		DescriptorLayoutProv layoutProv{};
 
-		std::move_only_function<void(ComputePostProcessor&)> commandRecorder{};
 		std::move_only_function<void(VkCommandBuffer)> commandRecorderAdditional{};
+
+		std::move_only_function<void(ComputePostProcessor&)> commandRecorder{};
 		std::move_only_function<void(ComputePostProcessor&)> descriptorSetUpdator{};
-		std::move_only_function<void(ComputePostProcessor&)> appendCommandRecorder{};
 		std::move_only_function<void(ComputePostProcessor&)> resizeCallback{};
 
 		[[nodiscard]] ComputePostProcessor() = default;
 
 		[[nodiscard]] explicit ComputePostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv, DescriptorLayoutProv&& layoutProv = {})
-		: PostProcessor{context, true, std::move(portProv)}, pipelineData{&context}, layoutProv{std::move(layoutProv)}{
+		: PostProcessor{context, std::move(portProv)}, pipelineData{&context}, layoutProv{std::move(layoutProv)}{
 
 		}
 
@@ -184,124 +139,46 @@ export namespace Graphic{
 			if(descriptorSetUpdator)descriptorSetUpdator(*this);
 		}
 
-		void recordCommand(){
+		void recordCommand(Core::Vulkan::CommandBuffer&& mainCommandBuffer){
+			this->mainCommandBuffer = std::move(mainCommandBuffer);
 			if(commandRecorder)commandRecorder(*this);
 		}
 
-		void resize(Geom::USize2 size){
+		void resize(Geom::USize2 size, VkCommandBuffer commandBuffer, Core::Vulkan::CommandBuffer&& mainCommandBuffer){
 			if(size == this->size())return;
 			pipelineData.size = size;
 			if(resizeCallback)resizeCallback(*this);
 
-			auto command = obtainTransientCommand(true);
+			if(portProv){
+				port = portProv();
+			}
+
+			if(!commandBuffer)return;
+
 			for (auto && localAttachment : images){
-				localAttachment.resize(size, command);
-			}
-			command = {};
-
-			if(portProv){
-				port = portProv();
+				localAttachment.resize(size, commandBuffer);
 			}
 
 			updateDescriptors();
-			recordCommand();
+			recordCommand(std::move(mainCommandBuffer));
 		}
 
-		void submitCommand() const{
-			PostProcessor::submitCommand(true);
-		}
 	};
 
-	struct GraphicPostProcessor : PostProcessor{
-		//Static
-		Core::Vulkan::FramebufferLocal framebuffer{};
-		Core::Vulkan::RenderProcedure renderProcedure{};
-
-
-		/**
-		 * @brief [Negative: before DrawCall, 0: DrawCall, positive: after DrawCall]
-		 */
-		std::function<void(GraphicPostProcessor&)> commandRecorder{};
-		std::function<void(GraphicPostProcessor&)> descriptorSetUpdator{};
-		std::function<void(GraphicPostProcessor&)> appendCommandRecorder{};
-		std::function<void(GraphicPostProcessor&)> resizeCallback{};
-
-
-		[[nodiscard]] GraphicPostProcessor() = default;
-
-		[[nodiscard]] explicit GraphicPostProcessor(const Core::Vulkan::Context& context, PortProv&& portProv)
-		: PostProcessor{context, false, std::move(portProv)}{
-			renderProcedure.init(context);
-		}
-
-		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return PostProcessor::obtainTransientCommand(false);
-		}
-
-		/**
-		 * @param initFunc Used To set local attachments
-		 */
-		void createFramebuffer(std::regular_invocable<Core::Vulkan::FramebufferLocal&> auto&& initFunc){
-			framebuffer = Core::Vulkan::FramebufferLocal{context->device, renderProcedure.size, renderProcedure.renderPass};
-
-			initFunc(framebuffer);
-
-			framebuffer.loadCapturedAttachments(0);
-			framebuffer.loadExternalImageView(port.in);
-			framebuffer.loadExternalImageView(port.out);
-			framebuffer.create();
-		}
-
-		[[nodiscard]] Geom::USize2 size() const{
-			return renderProcedure.size;
-		}
-
-		void resize(Geom::USize2 size){
-			if(resizeCallback)resizeCallback(*this);
-			renderProcedure.resize(size);
-			framebuffer.setRenderPass(renderProcedure.renderPass);
-
-			if(portProv){
-				port = portProv();
-			}
-
-			framebuffer.resize(
-				size,
-				transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue()),
-				port.in, port.out);
-
-			updateDescriptors();
-			recordCommand();
-		}
-
-		void updateDescriptors(){
-			descriptorSetUpdator(*this);
-		}
-
-		void recordCommand(){
-			commandRecorder(*this);
-		}
-
-		void submitCommand() const{
-			PostProcessor::submitCommand(false);
-		}
-	};
-
-	struct GraphicPostProcessorFactory{
-		const Core::Vulkan::Context* context{};
-		std::function<GraphicPostProcessor(const GraphicPostProcessorFactory&, PortProv&&, Geom::USize2)> creator{};
-
-		GraphicPostProcessor generate(const Geom::USize2 size, PortProv&& portProv) const{
-			return creator(*this, std::move(portProv), size);
-		}
+	struct PostProcessorCreateProperty{
+		Geom::USize2 size{};
+		PortProv portProv{};
+		DescriptorLayoutProv layoutProv{};
+		Core::Vulkan::TransientCommand createInitCommandBuffer{};
+		Core::Vulkan::CommandBuffer mainCommandBuffer{};
 	};
 
 	struct ComputePostProcessorFactory{
 		const Core::Vulkan::Context* context{};
-		std::function<ComputePostProcessor(const ComputePostProcessorFactory&, PortProv&&, DescriptorLayoutProv&&, Geom::USize2)> creator{};
+		std::function<ComputePostProcessor(const ComputePostProcessorFactory&, PostProcessorCreateProperty&&)> creator{};
 
-		ComputePostProcessor generate(const Geom::USize2 size, PortProv&& portProv, DescriptorLayoutProv&& layoutProv = {}) const{
-			return creator(*this, std::move(portProv), std::move(layoutProv), size);
+		ComputePostProcessor generate(PostProcessorCreateProperty&& property = {}) const{
+			return creator(*this, std::move(property));
 		}
 	};
 }

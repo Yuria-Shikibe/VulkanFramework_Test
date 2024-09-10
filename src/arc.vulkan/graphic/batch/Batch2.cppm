@@ -27,6 +27,7 @@ import ext.circular_array;
 export namespace Graphic{
 
 	//TODO support move assignment
+	//OPTM use shared index buffer instead of exclusive one
 	struct Batch{
 		static constexpr std::size_t MaxGroupCount{2048 * 4};
 		static constexpr std::size_t BufferSize{3};
@@ -41,6 +42,8 @@ export namespace Graphic{
 		Core::Vulkan::CommandPool transientCommandPool{};
 		std::ptrdiff_t unitOffset{};
 		using ImageSet = std::array<VkImageView, MaximumAllowedSamplersSize>;
+
+		using DrawCommandSeq = std::array<Core::Vulkan::CommandBuffer, UnitSize>;
 
 		static constexpr ImageIndex InvalidImageIndex{static_cast<ImageIndex>(~0U)};
 
@@ -241,7 +244,7 @@ export namespace Graphic{
 
 
 		[[nodiscard]] Core::Vulkan::TransientCommand obtainTransientCommand() const{
-			return transientCommandPool.obtainTransient(context->device.getPrimaryGraphicsQueue());
+			return transientCommandPool.getTransient(context->device.getPrimaryGraphicsQueue());
 		}
 
 		void consumeAll(){
