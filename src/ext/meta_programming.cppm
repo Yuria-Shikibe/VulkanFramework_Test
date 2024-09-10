@@ -89,18 +89,19 @@ namespace ext{
 
 	template <bool Test, auto val1, decltype(val1) val2>
 	struct conditional_constexpr_val{
-		static constexpr auto val = val1;
+		static constexpr auto value = val1;
 	};
 
 	template <auto val1, decltype(val1) val2>
 	struct conditional_constexpr_val<false, val1, val2> {
-		static constexpr auto val = val1;
+		static constexpr auto value = val1;
 	};
 
 	export
 	template <bool Test, auto val1, decltype(val1) val2>
-	constexpr auto conditionalVal = conditional_constexpr_val<Test, val1, val2>::val;
+	constexpr auto conditional_v = conditional_constexpr_val<Test, val1, val2>::value;
 
+	export
 	template <typename T, typename = void>
 	struct is_complete_type : std::false_type {};
 
@@ -109,7 +110,7 @@ namespace ext{
 
 	export
 	template <typename T>
-	constexpr bool isTypeComplteted = is_complete_type<T>::value;
+	constexpr bool is_complete = is_complete_type<T>::value;
 }
 
 
@@ -134,7 +135,7 @@ export namespace ext{
 	 * @return Whether given param types are the subseq of the SuperTuple
 	 */
 	template <bool strict, typename SuperTuple, typename...Args>
-	constexpr bool isArgsSubOf(){
+	constexpr bool is_types_sub_of(){
 		constexpr std::size_t fromSize = sizeof...(Args);
 		constexpr std::size_t toSize = std::tuple_size_v<SuperTuple>;
 		if constexpr(std::tuple_size_v<SuperTuple> < fromSize)return false;
@@ -147,17 +148,17 @@ export namespace ext{
 	}
 
 	template <typename T, typename ArgsTuple>
-	constexpr bool containedIn = requires{
+	constexpr bool contained_in = requires{
 		requires ext::tupleContains<ArgsTuple, T>(std::make_index_sequence<std::tuple_size_v<ArgsTuple>>());
 	};
 
 	template <typename T, typename...Args>
-	constexpr bool containedWith = requires{
+	constexpr bool contained_within = requires{
 		requires ext::tupleContains<std::tuple<Args...>, T>(std::make_index_sequence<std::tuple_size_v<std::tuple<Args...>>>());
 	};
 
 	template <typename SuperTuple, typename FromTuple>
-	constexpr bool isTupleSubOf(){
+	constexpr bool is_tuple_sub_of(){
 		constexpr std::size_t fromSize = std::tuple_size_v<FromTuple>;
 		constexpr std::size_t toSize = std::tuple_size_v<SuperTuple>;
 		if constexpr(toSize < fromSize)return false;
@@ -196,9 +197,11 @@ export namespace ext{
 
 
 	template <typename T>
-	concept HasDefHasher = requires(const T& t){
+	concept default_hashable = requires(const T& t){
 		requires std::is_default_constructible_v<std::hash<T>>;
-		{ std::hash<T>{}.operator()(t) } noexcept -> std::same_as<std::size_t>;
+		requires requires(const std::hash<T>& hasher){
+			{ hasher.operator()(t) } noexcept -> std::same_as<std::size_t>;
+		};
 	};
 
 

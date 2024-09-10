@@ -11,7 +11,7 @@ import Geom.Vector2D;
 
 export import Font;
 import std;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 export namespace Font{
 
@@ -79,7 +79,7 @@ export namespace Font{
 		std::string fontPageName{"font"};
 		Graphic::ImagePage* fontPage{};
 
-		ext::StringHashMap<IndexedFontFace> fontFaces{};
+		ext::string_hash_map<IndexedFontFace> fontFaces{};
 		std::vector<IndexedFontFace*> fontFaces_fastAccess{};
 
 		[[nodiscard]] FontManager() = default;
@@ -107,7 +107,7 @@ export namespace Font{
 		}
 
 		[[nodiscard]] Glyph& getGlyph(const std::string_view name, const GlyphKey key){
-			if(const auto face = fontFaces.tryFind(name)){
+			if(const auto face = fontFaces.try_find(name)){
 				return face->obtainGlyph(key, atlas, fontPage);
 			}
 

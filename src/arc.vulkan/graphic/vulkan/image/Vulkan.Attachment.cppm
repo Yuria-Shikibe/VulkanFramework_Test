@@ -10,7 +10,7 @@ import Core.Vulkan.Buffer.CommandBuffer;
 import Core.Vulkan.Buffer.ExclusiveBuffer;
 
 import Geom.Vector2D;
-import ext.Concepts;
+import ext.concepts;
 import std;
 
 export namespace Core::Vulkan{

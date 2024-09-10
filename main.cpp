@@ -45,7 +45,7 @@ import Font;
 import Font.GlyphToRegion;
 import Font.TypeSettings;
 import Font.TypeSettings.Renderer;
-import ext.Encoding;
+import ext.encode;
 
 import std;
 
@@ -133,13 +133,13 @@ void foo(){
 
     submitter_pmr.submit<T1>(&t);
 }
-int main(){
+int main_(){
     foo();
 
     return 0;
 }
 
-int main_(){
+int main(){
     using namespace Core;
 
 	::Core::init();

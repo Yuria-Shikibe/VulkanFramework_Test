@@ -2,7 +2,7 @@ export module Math.Interpolation;
 
 import std;
 import Math;
-import ext.Concepts;
+import ext.concepts;
 
 //TODO wrap in a struct and expose friend apply operator |
 //TODO uses constexpr program to enhance the effiency

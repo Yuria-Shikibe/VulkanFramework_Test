@@ -6,7 +6,7 @@ export module Core.Vulkan.Preinstall;
 
 import std;
 import Core.Vulkan.Concepts;
-import ext.Concepts;
+import ext.concepts;
 
 namespace Core::Vulkan{
 	export namespace ImageSubRange{

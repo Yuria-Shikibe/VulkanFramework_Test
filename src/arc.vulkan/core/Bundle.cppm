@@ -4,7 +4,7 @@ export import ext.json;
 export import Core.File;
 
 import std;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 namespace Core{
 

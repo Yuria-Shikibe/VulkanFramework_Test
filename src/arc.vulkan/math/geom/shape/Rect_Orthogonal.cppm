@@ -2,7 +2,7 @@ export module Geom.Rect_Orthogonal;
 
 import std;
 
-import ext.Concepts;
+import ext.concepts;
 import Math;
 import Geom.Vector2D;
 

@@ -3,7 +3,7 @@ export module Math;
 import std;
 
 import SinTable;
-import ext.Concepts;
+import ext.concepts;
 
 export namespace Math {
 	constexpr int SIGNS[2]     = { -1, 1 };

@@ -2,8 +2,8 @@
 // Created by Matrix on 2024/4/20.
 //
 
-export module ext.algorithm;
-import ext.Concepts;
+export module ext.algo;
+import ext.concepts;
 import std;
 
 namespace ext::algo{

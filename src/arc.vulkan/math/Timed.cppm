@@ -6,7 +6,7 @@ export module Math.Timed;
 
 export import Math;
 export import Math.Interpolation;
-import ext.Concepts;
+import ext.concepts;
 
 //TODO is this namespace appropriate?
 export namespace Math{

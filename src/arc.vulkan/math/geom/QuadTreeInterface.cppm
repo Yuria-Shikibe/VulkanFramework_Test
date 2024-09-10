@@ -6,7 +6,7 @@ export module Geom.QuadTree.Interface;
 
 export import Geom.Vector2D;
 export import Geom.Rect_Orthogonal;
-import ext.Concepts;
+import ext.concepts;
 
 export namespace Geom{
 	template <typename T, ext::Number N = float>

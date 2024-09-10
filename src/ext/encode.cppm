@@ -7,7 +7,7 @@ module;
 
 #endif
 
-export module ext.Encoding;
+export module ext.encode;
 
 import std;
 
@@ -17,7 +17,7 @@ export namespace ext::encode{
 
 	using CharBuffer = std::array<char, 4>;
 
-	char32_t convertTo(const char* charCodes, const int size = 4){
+	char32_t utf_8_to_32(const char* charCodes, const int size = 4){
 		const unsigned char c = charCodes[0];
 		switch(size){
 			case 2 : return (c & 0x1F) <<  6 | (charCodes[1] & 0x3F);
@@ -185,7 +185,7 @@ export namespace ext::encode{
 			const int charCodeLength = ext::encode::getUnicodeLength<int>(cur);
 
 			if(charCodeLength > 1 && index + charCodeLength <= totalSize){
-				charCode = ext::encode::convertTo(std::ranges::data(src) + index, charCodeLength);
+				charCode = ext::encode::utf_8_to_32(std::ranges::data(src) + index, charCodeLength);
 			}
 
 			dest.push_back(charCode);

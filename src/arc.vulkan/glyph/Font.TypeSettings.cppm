@@ -12,7 +12,7 @@ import Align;
 import Graphic.ImageRegion;
 import Graphic.Color;
 import ext.snap_shot;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 import ext.TaskQueue;
 
 import Geom.Rect_Orthogonal;
@@ -20,18 +20,18 @@ import Geom.Vector2D;
 import Math;
 
 import std;
-import ext.Encoding;
-import ext.Concepts;
+import ext.encode;
+import ext.concepts;
 
 namespace Font{
 	export using TextLayoutPos = Geom::Point2US;
 
 	export inline FontManager* GlobalFontManager{nullptr};
 
-	export inline ext::StringHashMap<FontFaceID> namedFonts{};
+	export inline ext::string_hash_map<FontFaceID> namedFonts{};
 
 	//TODO builtin fontsizes
-	export inline ext::StringHashMap<GlyphSizeType> fontSize{};
+	export inline ext::string_hash_map<GlyphSizeType> fontSize{};
 
 	export namespace TypeSettings{
 		constexpr GlyphSizeType DefaultSize{0, 48};
@@ -337,7 +337,7 @@ namespace Font{
 
 			ext::TaskQueue<void()> taskQueue{};
 
-			ext::StringHashMap<TokenModifier> modifiers{};
+			ext::string_hash_map<TokenModifier> modifiers{};
 
 			void parse(Context& context, const std::shared_ptr<Layout>& target) const;
 
@@ -494,7 +494,7 @@ namespace Font{
 				lastTokenItr = tokens.end();
 
 				for(const auto& token : tokens){
-					if(const auto tokenParser = parser.modifiers.tryFind(token.getName())){
+					if(const auto tokenParser = parser.modifiers.try_find(token.getName())){
 						tokenParser->operator()(token.getRestArgs() | std::ranges::to<std::vector>(), context, target);
 					} else{
 						std::println(std::cerr, "[Parser] Failed To Find Token: {}", token.data);
@@ -740,7 +740,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 
 		if(!escapingNext){
 			if(codeSize > 1 && off + codeSize <= size){
-				charCode = ext::encode::convertTo(string.data() + off, codeSize);
+				charCode = ext::encode::utf_8_to_32(string.data() + off, codeSize);
 			}
 
 			codes.push_back(charCode);

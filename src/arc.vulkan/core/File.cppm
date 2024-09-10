@@ -1,8 +1,8 @@
 export module Core.File;
 
-import ext.Concepts;
+import ext.concepts;
 import ext.RuntimeException;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 import std;
 
@@ -379,8 +379,8 @@ namespace Core{
 		using Filter = std::pair<std::string, std::function<bool(const File&)>>;
 
 		template <bool careDirs = false>
-		[[nodiscard]] ext::StringHashMap<std::vector<File>> sortSubs() const{
-			ext::StringHashMap<std::vector<File>> map;
+		[[nodiscard]] ext::string_hash_map<std::vector<File>> sortSubs() const{
+			ext::string_hash_map<std::vector<File>> map;
 			this->forAllSubs<careDirs>([&map](File&& file){
 				const std::string& extension = file.extension();
 				map[extension.empty() ? static_cast<std::string>(EMPTY_EXTENSION) : extension].push_back(file);
@@ -390,8 +390,8 @@ namespace Core{
 		}
 
 		template <bool careDirs = false>
-		[[nodiscard]] ext::StringHashMap<std::vector<File>> sortSubsBy(const std::span<Filter>& standards) const{
-			ext::StringHashMap<std::vector<File>> map;
+		[[nodiscard]] ext::string_hash_map<std::vector<File>> sortSubsBy(const std::span<Filter>& standards) const{
+			ext::string_hash_map<std::vector<File>> map;
 
 			this->forAllSubs<careDirs>([&standards, &map](File&& file){
 				if(const auto it = std::ranges::find_if(standards, [&file](const Filter& pair){
@@ -404,9 +404,9 @@ namespace Core{
 			return map;
 		}
 
-		static ext::StringHashMap<std::vector<File>> sortBy(
+		static ext::string_hash_map<std::vector<File>> sortBy(
 			const std::span<File>& files, const std::span<Filter>& standards){
-			ext::StringHashMap<std::vector<File>> map;
+			ext::string_hash_map<std::vector<File>> map;
 
 			for(const File& file : files){
 				if(

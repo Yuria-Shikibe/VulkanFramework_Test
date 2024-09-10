@@ -2,14 +2,14 @@
 // Created by Matrix on 2024/3/23.
 //
 
-export module ext.Heterogeneous;
+export module ext.heterogeneous;
 
 import std;
 import ext.meta_programming;
 
 export namespace ext::transparent{
 
-	struct StringEqualComparator{
+	struct string_equal_to{
 		using is_transparent = void;
 		bool operator()(const std::string_view a, const std::string_view b) const noexcept {
 			return a == b;
@@ -30,7 +30,7 @@ export namespace ext::transparent{
 
 	template <template <typename > typename Comp>
 		requires std::regular_invocable<Comp<std::string_view>, std::string_view, std::string_view>
-	struct StringComparator{
+	struct string_comparator_of{
 		static constexpr Comp<std::string_view> comp{};
 		using is_transparent = void;
 		auto operator()(const std::string_view a, const std::string_view b) const noexcept {
@@ -50,39 +50,41 @@ export namespace ext::transparent{
 		}
 	};
 
-	struct StringHasher{
+	struct string_hasher{
 		using is_transparent = void;
+		static constexpr std::hash<std::string_view> hasher{};
 
 		std::size_t operator()(const std::string_view val) const noexcept {
-			static constexpr std::hash<std::string_view> hasher{};
 			return hasher(val);
 		}
 
 		std::size_t operator()(const std::string& val) const noexcept {
-			static constexpr std::hash<std::string_view> hasher{};
 			return hasher(val);
 		}
 	};
 
-	template <typename T, typename Deleter = std::default_delete<T>>
-	struct UniquePtrEqualer{
+	template <typename T/*, typename Deleter = std::default_delete<T>*/>
+	struct unique_ptr_equal_to{
 		using is_transparent = void;
 
+		template <typename Deleter>
 		bool operator()(const T* a, const std::unique_ptr<T, Deleter>& b) const noexcept {
 			return a == b.get();
 		}
 
+		template <typename Deleter>
 		bool operator()(const std::unique_ptr<T, Deleter>& b, const T* a) const noexcept {
 			return a == b.get();
 		}
 
+		template <typename Deleter>
 		bool operator()(const std::unique_ptr<T, Deleter>& a, const std::unique_ptr<T, Deleter>& b) const noexcept {
 			return a == b;
 		}
 	};
 
-	template <typename T, typename Deleter = std::default_delete<T>>
-	struct UniqueHasher{
+	template <typename T/*, typename Deleter = std::default_delete<T>*/>
+	struct unique_ptr_hasher{
 		using is_transparent = void;
 		static constexpr std::hash<const T*> hasher{};
 
@@ -90,16 +92,17 @@ export namespace ext::transparent{
 			return hasher(a);
 		}
 
+		template <typename Deleter>
 		std::size_t operator()(const std::unique_ptr<T, Deleter>& a) const noexcept {
 			return hasher(a.get());
 		}
 	};
 }
 
-export namespace ext{
-	template <typename T, auto T::* ptr>
+namespace ext{
+	/*template <typename T, auto T::* ptr>
 		requires requires(T& t){
-			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename mptr_info<decltype(ptr)>::value_type>;
+			requires ext::default_hashable<T> && ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>;
 		}
 	struct MemberHasher{
 		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
@@ -116,11 +119,9 @@ export namespace ext{
 		}
 	};
 
-	template <typename T, auto T::* ptr>
-		requires requires(T& t){
-			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename mptr_info<decltype(ptr)>::value_type>;
-		}
-	struct MemberEqualTo{
+	template <typename T, typename V, V T::* ptr>
+		requires (ext::default_hashable<T> && ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>)
+	[[deprecated]] struct MemberEqualTo{
 		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
 		using is_transparent = void;
 
@@ -133,16 +134,17 @@ export namespace ext{
 			static constexpr std::equal_to<MemberType> equal{};
 			return equal(a, b.*ptr);
 		}
-	};
+	};*/
 
+	export
 	template <typename Alloc = std::allocator<std::string>>
-	struct StringHashSet : std::unordered_set<std::string, transparent::StringHasher, transparent::StringEqualComparator, Alloc>{
+	struct string_hash_set : std::unordered_set<std::string, transparent::string_hasher, transparent::string_equal_to, Alloc>{
 	private:
-		using SelfType = std::unordered_set<std::string, transparent::StringHasher, transparent::StringEqualComparator, Alloc>;
+		using self_type = std::unordered_set<std::string, transparent::string_hasher, transparent::string_equal_to, Alloc>;
 
 	public:
-		using SelfType::unordered_set;
-		using SelfType::insert;
+		using self_type::unordered_set;
+		using self_type::insert;
 
 		decltype(auto) insert(const std::string_view string){
 			return this->insert(std::string(string));
@@ -153,18 +155,22 @@ export namespace ext{
 		}
 	};
 
+	export
 	template <template<typename > typename Comp = std::less, typename Alloc = std::allocator<std::string>>
-	using StringSet = std::set<std::string, transparent::StringComparator<Comp>, Alloc>;
+	using StringSet = std::set<std::string, transparent::string_comparator_of<Comp>, Alloc>;
 
+	export
 	template <typename V, template<typename > typename Comp = std::less, typename Alloc = std::allocator<std::pair<const std::string, V>>>
-	using StringMap = std::map<std::string, V, transparent::StringComparator<Comp>, Alloc>;
+	using StringMap = std::map<std::string, V, transparent::string_comparator_of<Comp>, Alloc>;
 
+	export
 	template <typename V>
-	class StringHashMap : public std::unordered_map<std::string, V, transparent::StringHasher, transparent::StringEqualComparator>{
+	class string_hash_map : public std::unordered_map<std::string, V, transparent::string_hasher, transparent::string_equal_to>{
 	private:
-		using SelfType = std::unordered_map<std::string, V, transparent::StringHasher, transparent::StringEqualComparator>;
+		using self_type = std::unordered_map<std::string, V, transparent::string_hasher, transparent::string_equal_to>;
+
 	public:
-		using SelfType::unordered_map;
+		using self_type::unordered_map;
 
 		V& at(const std::string_view key){
 			return this->find(key)->second;
@@ -181,28 +187,28 @@ export namespace ext{
 			return def;
 		}
 
-		V* tryFind(const std::string_view key){
+		V* try_find(const std::string_view key){
 			if(const auto itr = this->find(key); itr != this->end()){
 				return &itr->second;
 			}
 			return nullptr;
 		}
 
-		const V* tryFind(const std::string_view key) const {
+		const V* try_find(const std::string_view key) const {
 			if(const auto itr = this->find(key); itr != this->end()){
 				return &itr->second;
 			}
 			return nullptr;
 		}
 
-		using SelfType::insert_or_assign;
+		using self_type::insert_or_assign;
 
 		template <class Arg>
-		std::pair<typename SelfType::iterator, bool> insert_or_assign(const std::string_view key, Arg&& val) {
+		std::pair<typename self_type::iterator, bool> insert_or_assign(const std::string_view key, Arg&& val) {
 			return this->insert_or_assign(static_cast<std::string>(key), std::forward<Arg>(val));
 		}
 
-		using SelfType::operator[];
+		using self_type::operator[];
 
 		V& operator[](const std::string_view key) {
 			if(auto itr = this->find(key); itr != this->end()){
@@ -219,14 +225,14 @@ export namespace ext{
 
 
 	template <typename T, typename Deleter = std::default_delete<T>>
-	using UniquePtrHashMap = std::unordered_map<std::unique_ptr<T, Deleter>, transparent::UniqueHasher<T, Deleter>, transparent::UniquePtrEqualer<T, Deleter>>;
+	using UniquePtrHashMap = std::unordered_map<std::unique_ptr<T, Deleter>, transparent::unique_ptr_hasher<T>, transparent::unique_ptr_equal_to<T>>;
 
 	template <typename T, typename Deleter = std::default_delete<T>>
-	using UniquePtrSet = std::unordered_set<std::unique_ptr<T, Deleter>, transparent::UniqueHasher<T, Deleter>, transparent::UniquePtrEqualer<T, Deleter>>;
+	using UniquePtrSet = std::unordered_set<std::unique_ptr<T, Deleter>, transparent::unique_ptr_hasher<T>, transparent::unique_ptr_equal_to<T>>;
 
 	template <typename V>
-	using StringMultiMap = std::unordered_multimap<std::string, V, transparent::StringHasher, transparent::StringEqualComparator>;
-
-	template <typename T, auto T::* ptr>
-	using HashSet_ByMember = std::unordered_set<T, MemberHasher<T, ptr>, MemberEqualTo<T, ptr>>;
+	using StringMultiMap = std::unordered_multimap<std::string, V, transparent::string_hasher, transparent::string_equal_to>;
+	//
+	// template <typename T, auto T::* ptr>
+	// using HashSet_ByMember = std::unordered_set<T, MemberHasher<T, ptr>, MemberEqualTo<T, ptr>>;
 }

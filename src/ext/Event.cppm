@@ -1,8 +1,8 @@
 export module ext.Event;
 
 import std;
-import ext.Concepts;
-import ext.Heterogeneous;
+import ext.concepts;
+import ext.heterogeneous;
 
 
 //TODO delayed event submitter
@@ -104,7 +104,7 @@ namespace ext {
 	};
 
 	export
-	struct NamedEventManager : BasicEventManager<StringHashMap, NamedEventManager>{
+	struct NamedEventManager : BasicEventManager<string_hash_map, NamedEventManager>{
 		// using BasicEventManager<StringHashMap, NamedEventManager>::BasicEventManager;
 
 		template <std::derived_from<EventType> T, std::invocable<const T&> Func>

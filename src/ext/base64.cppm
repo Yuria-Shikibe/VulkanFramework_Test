@@ -2,12 +2,9 @@ export module ext.Base64;
 
 import std;
 
-using uint8 = unsigned char;
-using uint32 = unsigned long;
-
-export namespace ext::base64{
-	constexpr uint8 alphabet_map[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	constexpr uint8 reverse_map[] = {
+export namespace ext::encode{
+	constexpr std::uint8_t alphabet_map[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	constexpr std::uint8_t reverse_map[] = {
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
 			255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 62, 255, 255, 255, 63,
@@ -21,21 +18,21 @@ export namespace ext::base64{
 	struct bad_code final : std::exception{
 		bad_code() = default;
 
-		explicit bad_code(char const* _Message)
-			: exception{_Message}{}
+		explicit bad_code(char const* msg)
+			: exception{msg}{}
 
-		bad_code(char const* _Message, const int i)
-			: exception{_Message, i}{}
+		bad_code(char const* msg, const int i)
+			: exception{msg, i}{}
 
-		explicit bad_code(exception const& _Other)
-			: exception{_Other}{}
+		explicit bad_code(exception const& o)
+			: exception{o}{}
 	};
 
 	template<typename RetContainer, std::ranges::sized_range Range>
 		requires requires(Range range, RetContainer cont){
 			range.operator[](0);
 			requires sizeof(std::ranges::range_value_t<Range>) == 1;
-			cont.push_back(uint8{});
+			cont.push_back(std::uint8_t{});
 		}
 	[[nodiscard]] constexpr RetContainer encode(Range&& toEncode){
 		RetContainer encoded{};
@@ -75,7 +72,7 @@ export namespace ext::base64{
 	requires requires(Range range, RetContainer cont){
 		range.operator[](0);
 		requires sizeof(std::ranges::range_value_t<Range>) == 1;
-		cont.push_back(uint8{});
+		cont.push_back(std::uint8_t{});
 	}
 	[[nodiscard]] constexpr RetContainer decode(Range&& toDecode){
 		if(std::ranges::size(toDecode) & 0x03 != 0){
@@ -89,9 +86,9 @@ export namespace ext::base64{
 			plain.reserve(std::ranges::size(toDecode) / 4);
 		}
 
-		uint8 quad[4];
-		for(uint32 i = 0; i < std::ranges::size(toDecode); i += 4){
-			for(uint32 k = 0; k < 4; k++){
+		std::uint8_t quad[4];
+		for(std::uint32_t i = 0; i < std::ranges::size(toDecode); i += 4){
+			for(std::uint32_t k = 0; k < 4; k++){
 				quad[k] = reverse_map[toDecode[i + k]];
 			}
 

@@ -14,7 +14,7 @@ export import Core.Input;
 export import Core.Global.Focus;
 import std;
 
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 namespace Assets::Ctrl{
 	float baseCameraMoveSpeed = 60;
@@ -98,12 +98,12 @@ namespace Assets::Ctrl{
 
 		CC::OperationGroup gameGroup{"game-group"};
 
-		ext::StringHashMap<CC::OperationGroup*> allGroups{
+		ext::string_hash_map<CC::OperationGroup*> allGroups{
 			{basicGroup.getName(), &basicGroup},
 			{gameGroup.getName(), &gameGroup}
 		};
 
-		ext::StringHashMap<CC::InputBindGroup*> relatives{};
+		ext::string_hash_map<CC::InputBindGroup*> relatives{};
 
 		void apply(){
 			mainControlGroup.clearAllBinds();

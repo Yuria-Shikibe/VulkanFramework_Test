@@ -7,7 +7,7 @@ export module OS.Ctrl.Operation;
 import std;
 export import Core.Ctrl.Bind;
 export import Core.Ctrl.Bind.Constants;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 import Assets.Bundle;
 
 import ext.json.io;
@@ -105,7 +105,7 @@ export namespace Core::Ctrl{
 	class OperationGroup{
 		std::string name{};
 
-		ext::StringHashMap<Operation> binds{};
+		ext::string_hash_map<Operation> binds{};
 
 		std::unordered_map<int, unsigned> groupOccupiedKeys{};
 
@@ -167,8 +167,8 @@ export namespace Core::Ctrl{
 			hideRelatived<false>();
 		}
 
-		[[nodiscard]] ext::StringHashMap<Operation>& getBinds(){ return binds; }
-		[[nodiscard]] const ext::StringHashMap<Operation>& getBinds() const{ return binds; }
+		[[nodiscard]] ext::string_hash_map<Operation>& getBinds(){ return binds; }
+		[[nodiscard]] const ext::string_hash_map<Operation>& getBinds() const{ return binds; }
 
 		OperationGroup(const OperationGroup& other)
 			: name(other.name),
@@ -275,7 +275,7 @@ export namespace Core::Ctrl{
 			return true;
 		}
 
-		bool isEquivalentTo(const Ctrl::OperationGroup& other) const{
+		bool isEquivalentTo(const OperationGroup& other) const{
 			return binds == other.binds;
 			// using PairTy = decltype(binds)::value_type;
 			// using ValTy = PairTy::second_type;
@@ -290,7 +290,7 @@ export namespace Core::Ctrl{
 		group->eraseCount(customeBind.getFullKey());
 		customeBind.setKey(key);
 		customeBind.setMode(mode);
-		customeBind.setIgnoreMode(defaultBind.isIgnoreMode() && mode == Ctrl::Mode::None);
+		customeBind.setIgnoreMode(defaultBind.isIgnoreMode() && mode == Mode::None);
 		group->addCount(customeBind.getFullKey());
 
 		updateRelativeBinds();
@@ -299,7 +299,7 @@ export namespace Core::Ctrl{
 	void Operation::updateRelativeBinds() const{
 		if(!group)return;
 
-		ext::StringHashMap<Operation>& bind = group->getBinds();
+		ext::string_hash_map<Operation>& bind = group->getBinds();
 
 		for (const auto& relativeOperation : relativeOperations){
 			if(auto itr = bind.find(relativeOperation); itr != bind.end()){
@@ -311,7 +311,7 @@ export namespace Core::Ctrl{
 
 export
 template<>
-struct ::std::equal_to<Core::Ctrl::Operation>{
+struct std::equal_to<Core::Ctrl::Operation>{
 	bool operator()(const Core::Ctrl::Operation& l, const Core::Ctrl::Operation& r) const noexcept{
 		return l.name == r.name;
 	}
@@ -319,7 +319,7 @@ struct ::std::equal_to<Core::Ctrl::Operation>{
 
 export
 template<>
-struct ::std::equal_to<Core::Ctrl::OperationGroup>{
+struct std::equal_to<Core::Ctrl::OperationGroup>{
 	bool operator()(const Core::Ctrl::OperationGroup& l, const Core::Ctrl::OperationGroup& r) const noexcept{
 		return l.getName() == r.getName();
 	}
@@ -328,21 +328,21 @@ struct ::std::equal_to<Core::Ctrl::OperationGroup>{
 export
 template <>
 	struct ext::json::JsonSerializator<Core::Ctrl::Operation>{
-	static void write(ext::json::JsonValue& jsonValue, const Core::Ctrl::Operation& data){
+	static void write(JsonValue& jsonValue, const Core::Ctrl::Operation& data){
 		jsonValue.asObject();
-		jsonValue.append("full", static_cast<ext::json::Integer>(data.customeBind.getFullKey()));
+		jsonValue.append("full", static_cast<Integer>(data.customeBind.getFullKey()));
 		jsonValue.append("ignore", data.customeBind.isIgnoreMode());
 
 	}
 
-	static void read(const ext::json::JsonValue& jsonValue, Core::Ctrl::Operation& data){
+	static void read(const JsonValue& jsonValue, Core::Ctrl::Operation& data){
 		auto& map = jsonValue.asObject();
-		if(const auto val = map.tryFind("full")){
+		if(const auto val = map.try_find("full")){
 			auto [k, a, m] = Core::Ctrl::getSeperatedKey(val->as<int>());
 			data.setCustom(k, m);
 		}
 
-		if(const auto val = map.tryFind("ignore")){
+		if(const auto val = map.try_find("ignore")){
 			data.customeBind.setIgnoreMode(val->as<bool>());
 		}
 	}
@@ -353,8 +353,8 @@ template <>
 	struct ext::json::JsonSerializator<Core::Ctrl::OperationGroup>{
 	using UmapIO = JsonSrlContBase_string_map<Core::Ctrl::Operation, true>;
 
-	static void write(ext::json::JsonValue& jsonValue, const Core::Ctrl::OperationGroup& data){
-		ext::json::JsonValue bindsData{};
+	static void write(JsonValue& jsonValue, const Core::Ctrl::OperationGroup& data){
+		JsonValue bindsData{};
 
 		UmapIO::write(bindsData, data.getBinds());
 
@@ -362,8 +362,8 @@ template <>
 		jsonValue.append("binds", bindsData);
 	}
 
-	static void read(const ext::json::JsonValue& jsonValue, Core::Ctrl::OperationGroup& data){
-		const ext::json::JsonValue* bindsData = jsonValue.asObject().tryFind("binds");
+	static void read(const JsonValue& jsonValue, Core::Ctrl::OperationGroup& data){
+		const JsonValue* bindsData = jsonValue.asObject().try_find("binds");
 
 		if(bindsData)UmapIO::read(*bindsData, data.getBinds());
 	}

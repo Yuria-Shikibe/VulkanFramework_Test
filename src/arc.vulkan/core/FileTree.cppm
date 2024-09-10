@@ -5,7 +5,7 @@ export module Core.FileTree;
 export import Core.File;
 import ext.RuntimeException;
 import std;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 export namespace Core{
 	//TODO use a struct to wrap the data structure of just directly use vector?
@@ -26,9 +26,9 @@ export namespace Core{
 		/**
 		 * \brief Key - directory name | Value - File
 		 * */
-		ext::StringHashMap<std::vector<File>> files{};
+		ext::string_hash_map<std::vector<File>> files{};
 
-		ext::StringHashMap<File> flatView{};
+		ext::string_hash_map<File> flatView{};
 
 		File root{};
 
@@ -72,7 +72,7 @@ export namespace Core{
 			return os;
 		}
 
-		[[nodiscard]] const ext::StringHashMap<std::vector<File>>& getFiles() const{
+		[[nodiscard]] const ext::string_hash_map<std::vector<File>>& getFiles() const{
 			return files;
 		}
 
@@ -98,7 +98,7 @@ export namespace Core{
 			}
 		}
 
-		[[nodiscard]] ext::StringHashMap<File>& getFlatView(){ return flatView; }
+		[[nodiscard]] ext::string_hash_map<File>& getFlatView(){ return flatView; }
 
 		template <bool quiet = false>
 		[[nodiscard]] File flatFind(const std::string_view fileName) const {

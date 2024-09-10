@@ -1,9 +1,9 @@
 export module ext.StaticReflection;
 
 export import ext.meta_programming;
-import ext.Concepts;
+import ext.concepts;
 import std;
-import ext.Owner;
+import ext.owner;
 
 struct NullptrTestT{
 	void* val;
@@ -11,7 +11,7 @@ struct NullptrTestT{
 
 export namespace ext::reflect{
 	inline auto& constructors_RTTI() noexcept{
-		static std::unordered_map<std::string_view, std::function<Owner<void*>()>> _constructors;
+		static std::unordered_map<std::string_view, std::function<owner<void*>()>> _constructors;
 		return _constructors;
 	}
 
@@ -62,7 +62,7 @@ export namespace ext::reflect{
 	};
 
 	template <typename T>
-	Owner<T*> tryConstruct() noexcept(std::same_as<void, T>){
+	owner<T*> tryConstruct() noexcept(std::same_as<void, T>){
 		if(const std::decay_t<decltype(constructors_RTTI())>::const_iterator itr = constructors_RTTI().find(ClassInfo<T>::name); itr != constructors_RTTI().end() && itr->second){
 			return static_cast<T*>(itr->second.operator()());
 		}
@@ -71,7 +71,7 @@ export namespace ext::reflect{
 	}
 
 	template <typename T = void>
-	Owner<T*> tryConstruct(const std::string_view name) noexcept(std::same_as<void, T>){
+	owner<T*> tryConstruct(const std::string_view name) noexcept(std::same_as<void, T>){
 		if(const std::decay_t<decltype(constructors_RTTI())>::const_iterator itr = constructors_RTTI().find(name); itr != constructors_RTTI().end() && itr->second){
 			return static_cast<T*>(itr->second.operator()());
 		}
@@ -81,7 +81,7 @@ export namespace ext::reflect{
 
 	//TODO
 	template <typename T>
-	constexpr SrlType dependencySrlType = ext::conditionalVal<ClassInfo<T>::srlType == SrlType::depends, SrlType::json, ClassInfo<T>::srlType>;
+	constexpr SrlType dependencySrlType = ext::conditional_v<ClassInfo<T>::srlType == SrlType::depends, SrlType::json, ClassInfo<T>::srlType>;
 
 	//TODO
 	template <SrlType type>

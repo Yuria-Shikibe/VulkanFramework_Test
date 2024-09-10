@@ -4,7 +4,7 @@ export module Core.Input;
 import std;
 
 import Geom.Vector2D;
-import ext.Concepts;
+import ext.concepts;
 import Core.Ctrl.Bind.Constants;
 import Core.Ctrl.Bind;
 import Core.InputListener;

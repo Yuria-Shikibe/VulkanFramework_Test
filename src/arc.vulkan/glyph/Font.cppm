@@ -23,7 +23,7 @@ import Graphic.Pixmap;
 import Math;
 
 import ext.RuntimeException;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 import ext.TransferAdaptor;
 
 namespace Font{

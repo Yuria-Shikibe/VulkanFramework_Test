@@ -17,7 +17,7 @@ import Graphic.Pixmap;
 import Geom.Vector2D;
 import Geom.Rect_Orthogonal;
 import ext.Allocator2D;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 import std;
 
 namespace Graphic{
@@ -122,7 +122,7 @@ namespace Graphic{
 
 		std::string name{};
 		std::deque<SubpageData> subpages{};
-		ext::StringHashMap<SubpageData::AllocatedViewRegion> namedImageRegions{};
+		ext::string_hash_map<SubpageData::AllocatedViewRegion> namedImageRegions{};
 
 		std::uint32_t margin{4};
 
@@ -201,7 +201,7 @@ namespace Graphic{
 		const Core::Vulkan::Context* context{};
 		Core::Vulkan::CommandPool transientCommandPool{};
 
-		ext::StringHashMap<ImagePage> pages{};
+		ext::string_hash_map<ImagePage> pages{};
 
 		[[nodiscard]] ImageAtlas() = default;
 

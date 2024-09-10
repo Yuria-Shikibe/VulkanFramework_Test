@@ -5,7 +5,7 @@ module;
 export module ext.json;
 
 import std;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 import ext.meta_programming;
 
 namespace ext::json{
@@ -13,7 +13,7 @@ namespace ext::json{
 
 	export using Integer = std::int64_t;
 	export using Float = std::double_t;
-	export using Object = StringHashMap<JsonValue>;
+	export using Object = string_hash_map<JsonValue>;
 	export using Array = std::vector<JsonValue>;
 
 	export template <typename T>
@@ -152,7 +152,7 @@ namespace ext::json{
 
 		template <typename T>
 		static constexpr bool validType = requires{
-			requires ext::containedWith<std::decay_t<T>, TypeGroup>;
+			requires ext::contained_within<std::decay_t<T>, TypeGroup>;
 		};
 
 	private:
@@ -274,7 +274,7 @@ namespace ext::json{
 			return std::get<std::to_underlying(tag)>(data);
 		}
 
-		decltype(auto) asObject(){
+		string_hash_map<JsonValue>& asObject(){
 			if(getTag() != object){
 				setData(Object{});
 			}
@@ -282,7 +282,7 @@ namespace ext::json{
 			return std::get<Object>(data);
 		}
 
-		[[nodiscard]] decltype(auto) asObject() const{
+		[[nodiscard]] const string_hash_map<JsonValue>& asObject() const{
 			return std::get<Object>(data);
 		}
 

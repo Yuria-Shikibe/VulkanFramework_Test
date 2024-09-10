@@ -2,7 +2,7 @@ export module Core.Ctrl.Bind:InputBind;
 
 import Core.Ctrl.Bind.Constants;
 import std;
-import ext.Concepts;
+import ext.concepts;
 
 export namespace Core::Ctrl{
 	struct InputBind{

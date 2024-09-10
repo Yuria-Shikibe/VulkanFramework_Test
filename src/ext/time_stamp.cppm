@@ -1,7 +1,7 @@
 export module ext.time_stamp;
 
 import std;
-import ext.Concepts;
+import ext.concepts;
 
 export namespace ext {
 	class [[deprecated]] TimeStamper {

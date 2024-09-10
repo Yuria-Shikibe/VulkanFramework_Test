@@ -2,10 +2,10 @@ export module ext.json.io;
 
 export import ext.json;
 import ext.meta_programming;
-import ext.Owner;
+import ext.owner;
 import ext.Base64;
 import ext.StaticReflection;
-import ext.Heterogeneous;
+import ext.heterogeneous;
 
 import std;
 
@@ -60,7 +60,7 @@ export namespace ext::json{
 		}
 
 		template <typename T>
-		[[nodiscard]] static ext::Owner<T*> generate(const ext::json::JsonValue& jval) noexcept(std::same_as<void, T>){
+		[[nodiscard]] static ext::owner<T*> generate(const ext::json::JsonValue& jval) noexcept(std::same_as<void, T>){
 			if(jval.is<ext::json::object>()){
 				auto& map = jval.asObject();
 				if(const auto itr = map.find(ext::json::keys::Typename); itr != map.end() && itr->second.is<ext::json::string>()){
@@ -72,7 +72,7 @@ export namespace ext::json{
 		}
 
 		template <typename T>
-		[[nodiscard]] static ext::Owner<T*> generate_noCheck(const ext::json::JsonValue& jval){
+		[[nodiscard]] static ext::owner<T*> generate_noCheck(const ext::json::JsonValue& jval){
 			return static_cast<T*>(ext::reflect::tryConstruct(jval.asObject().at(ext::json::keys::Typename).as<ext::json::string>()));
 		}
 
@@ -80,7 +80,7 @@ export namespace ext::json{
 	};
 
 	template <typename T = void>
-	ext::Owner<T*> getObjectFrom(const ext::json::JsonValue& jval){
+	ext::owner<T*> getObjectFrom(const ext::json::JsonValue& jval){
 		if(jval.is<ext::json::object>()){
 			const auto& map = jval.asObject();
 			if(const auto itr = map.find(ext::json::keys::Typename); itr != map.end()){
@@ -219,7 +219,7 @@ export namespace ext::json{
 			auto& member = val.*Field::mptr;
 			constexpr std::string_view fieldName = Field::getName;
 
-			constexpr auto srlType = ext::conditionalVal<
+			constexpr auto srlType = ext::conditional_v<
 				FieldClassInfo::srlType == ext::reflect::SrlType::depends,
 				Field::getSrlType, FieldClassInfo::srlType>;
 
@@ -249,7 +249,7 @@ export namespace ext::json{
 
 		if constexpr(Field::getSrlType != ext::reflect::SrlType::disable){
 			constexpr std::string_view fieldName = Field::getName;
-			constexpr auto srlType = ext::conditionalVal<
+			constexpr auto srlType = ext::conditional_v<
 				FieldClassInfo::srlType == ext::reflect::SrlType::depends,
 				Field::getSrlType, FieldClassInfo::srlType>;
 
@@ -360,7 +360,7 @@ export namespace ext::json{
 		requires !std::is_pointer_v<V> && std::is_default_constructible_v<V>
 	struct JsonSrlContBase_string_map{
 		//OPTM using array instead of object to be the KV in json?
-		static void write(ext::json::JsonValue& jsonValue, const ext::StringHashMap<V>& data){
+		static void write(ext::json::JsonValue& jsonValue, const ext::string_hash_map<V>& data){
 			auto& val = jsonValue.asObject();
 			val.reserve(data.size());
 
@@ -369,13 +369,13 @@ export namespace ext::json{
 			}
 		}
 
-		static void read(const ext::json::JsonValue& jsonValue, ext::StringHashMap<V>& data){
+		static void read(const ext::json::JsonValue& jsonValue, ext::string_hash_map<V>& data){
 			if(auto* ptr = jsonValue.tryGetValue<ext::json::object>()){
 				data.reserve(ptr->size());
 
 				for(const auto& [k, v] : *ptr){
 					if constexpr (overwirteOnly){
-						V* d = data.tryFind(k);
+						V* d = data.try_find(k);
 						if(d){
 							ext::json::getValueTo(*d, v);
 						}

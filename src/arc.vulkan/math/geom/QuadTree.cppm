@@ -6,7 +6,7 @@ export module Geom.QuadTree;
 export import Geom.Rect_Orthogonal;
 export import Geom.Vector2D;
 
-import ext.Concepts;
+import ext.concepts;
 import ext.RuntimeException;
 import std;
 export import Geom.QuadTree.Interface;

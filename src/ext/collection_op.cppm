@@ -2,7 +2,7 @@
 // Created by Matrix on 2024/5/25.
 //
 
-export module ext.bool_merge;
+export module ext.collection_operation;
 
 import std;
 

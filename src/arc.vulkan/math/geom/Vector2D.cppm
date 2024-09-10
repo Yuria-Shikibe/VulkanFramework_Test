@@ -3,7 +3,7 @@ export module Geom.Vector2D;
 import std;
 
 import Math;
-import ext.Concepts;
+import ext.concepts;
 
 export namespace Geom{
 	template <ext::Number T>
