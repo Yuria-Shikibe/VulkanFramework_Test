@@ -13,3 +13,4 @@ build/
 /cmake-build-debug-visual-studio/
 /cmake-build-release/
 /cmake-build-release-visual-studio/
+/cmake-build-relwithdebinfo/
