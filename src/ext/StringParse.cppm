@@ -2,7 +2,7 @@
 // Created by Matrix on 2024/4/24.
 //
 
-export module ext.StringParse;
+export module ext.StringParseLegacy;
 
 import std;
 

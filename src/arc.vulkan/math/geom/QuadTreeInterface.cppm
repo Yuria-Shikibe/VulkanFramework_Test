@@ -9,7 +9,7 @@ export import Geom.Rect_Orthogonal;
 import ext.Concepts;
 
 export namespace Geom{
-	template <typename T, Concepts::Number N = float>
+	template <typename T, ext::Number N = float>
 	struct QuadTreeAdaptable{
 		Rect_Orthogonal<N> getBound() const noexcept = delete;
 

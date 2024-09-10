@@ -1,14 +1,14 @@
 module;
 
 #include <vulkan/vulkan.h>
-#include "../vk_loader.hpp"
 
 export module Core.Vulkan.Validation;
 
 import std;
-import StackTrace;
 
 namespace Core::Vulkan{
+	export constexpr bool EnableValidationLayers{DEBUG_CHECK};
+
 	export constexpr std::array UsedValidationLayers{
 		"VK_LAYER_KHRONOS_validation",
 	};
@@ -17,37 +17,20 @@ namespace Core::Vulkan{
 		VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 		VkDebugUtilsMessageTypeFlagsEXT messageType,
 		const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-		void* pUserData){
-		std::println(std::cerr, "{}", pCallbackData->pMessage);
-		ext::getStackTraceBrief(std::cerr);
-
-		return VK_FALSE;
-	}
+		void* pUserData);
 
 	VkResult CreateDebugUtilsMessengerEXT(
 		VkInstance instance,
 		const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
 		const VkAllocationCallbacks* pAllocator,
-		VkDebugUtilsMessengerEXT* pCallback){
-
-		if(const auto* func = LoadFuncPtr(instance, vkCreateDebugUtilsMessengerEXT)){
-			return func(instance, pCreateInfo, pAllocator, pCallback);
-		} else{
-			return VK_ERROR_EXTENSION_NOT_PRESENT;
-		}
-	}
+		VkDebugUtilsMessengerEXT* pCallback);
 
 	void DestroyDebugUtilsMessengerEXT(
 		VkInstance instance,
 		VkDebugUtilsMessengerEXT callback,
 		const VkAllocationCallbacks* pAllocator
-	){
-		if(const auto* func = LoadFuncPtr(instance, vkDestroyDebugUtilsMessengerEXT)){
-			func(instance, callback, pAllocator);
-		}
-	}
+	);
 
-	export constexpr bool EnableValidationLayers{DEBUG_CHECK};
 
 	export
 	class ValidationEntry{
@@ -57,7 +40,7 @@ namespace Core::Vulkan{
 	public:
 		[[nodiscard]] constexpr ValidationEntry() noexcept = default;
 
-		[[nodiscard]] ValidationEntry(
+		[[nodiscard]] explicit ValidationEntry(
 			VkInstance instance,
 			PFN_vkDebugUtilsMessengerCallbackEXT callbackFuncPtr = validationCallback,
 			const VkDebugUtilsMessengerCreateFlagsEXT flags = 0,

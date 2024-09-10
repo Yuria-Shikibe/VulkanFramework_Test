@@ -1,6 +1,4 @@
-module;
-
-export module ext.TimeMark;
+export module ext.time_stamp;
 
 import std;
 import ext.Concepts;
@@ -44,26 +42,26 @@ export namespace ext {
 		}
 	};
 
-	template <std::size_t maxSize = 1, Concepts::SpecDeriveOf<std::chrono::duration> Duration = std::chrono::milliseconds>
-	class StaticTimeStamper {
+	template <std::size_t maxSize = 1, ext::SpecDeriveOf<std::chrono::duration> Duration = std::chrono::milliseconds>
+	class array_time_stamper {
 		std::array<std::chrono::time_point<std::chrono::system_clock>, maxSize> stamps{};
 
 	public:
-		using DurTy = Duration;
-		using IdTy = std::size_t;
+		using duration_type = Duration;
+		using id_type = std::size_t;
 
 		[[nodiscard]] static constexpr std::size_t size() noexcept{
 			return maxSize;
 		}
 
-		template <IdTy stampID = 0>
+		template <id_type stampID = 0>
 			requires (stampID < maxSize)
 		void mark() noexcept{
 			stamps.at(stampID) = std::chrono::system_clock::now();
 		}
 
 
-		template <IdTy stampID = 0>
+		template <id_type stampID = 0>
 			requires (stampID < maxSize)
 		[[nodiscard]] Duration get() const noexcept{
 			const auto current = std::chrono::system_clock::now();

@@ -154,7 +154,7 @@ export namespace Align{
 		stretchY,
 	};
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	Geom::Vector2D<T> embedTo(const Scale stretch, Geom::Vector2D<T> src, Geom::Vector2D<T> tgt){
 		switch(stretch){
 			case Scale::fit :{
@@ -240,7 +240,7 @@ export namespace Align{
 	 * @tparam T arithmetic type, does not accept unsigned type
 	 * @return
 	 */
-	template <Concepts::Signed T>
+	template <ext::Signed T>
 	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Rect_Orthogonal<T>& bound){
 		Geom::Vector2D<T> offset{};
 
@@ -264,7 +264,7 @@ export namespace Align{
 	 * @tparam T arithmetic type, does not accept unsigned type
 	 * @return
 	 */
-	template <Concepts::Signed T>
+	template <ext::Signed T>
 	constexpr Geom::Vector2D<T> getVert(const Pos align, const Geom::Rect_Orthogonal<T>& bound){
 		Geom::Vector2D<T> offset{bound.getSrc()};
 
@@ -289,7 +289,7 @@ export namespace Align{
 	 * @tparam T arithmetic type, does not accept unsigned type
 	 * @return
 	 */
-	template <Concepts::Signed T>
+	template <ext::Signed T>
 	[[nodiscard]] constexpr Geom::Vector2D<T> getOffsetOf(const Pos align,
 	                                                      const Geom::Vector2D<T>& internal_toAlignSize,
 	                                                      const Geom::Rect_Orthogonal<T>& external){
@@ -321,7 +321,7 @@ export namespace Align{
 	 * @tparam T arithmetic type, does not accept unsigned type
 	 * @return
 	 */
-	template <Concepts::Signed T>
+	template <ext::Signed T>
 	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Rect_Orthogonal<T>& internal_toAlign,
 	                                        const Geom::Rect_Orthogonal<T>& external){
 		return Align::getOffsetOf(align, internal_toAlign.getSize(), external);

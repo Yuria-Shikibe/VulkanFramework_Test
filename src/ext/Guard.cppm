@@ -1,6 +1,6 @@
 export module ext.Guard;
 
-import ext.MetaProgramming;
+import ext.meta_programming;
 import ext.Concepts;
 import std;
 
@@ -8,11 +8,11 @@ export namespace ext{
 	template <typename T, auto T::* mem, bool passByMove = false>
 		requires requires{
 			requires
-				(passByMove && std::is_move_assignable_v<typename ext::GetMemberPtrInfo<decltype(mem)>::ValueType>) ||
-				(!passByMove && std::is_copy_assignable_v<typename ext::GetMemberPtrInfo<decltype(mem)>::ValueType>);
+				(passByMove && std::is_move_assignable_v<typename mptr_info<decltype(mem)>::value_type>) ||
+				(!passByMove && std::is_copy_assignable_v<typename mptr_info<decltype(mem)>::value_type>);
 		}
 	class [[jetbrains::guard]] Guard{
-		using DataType = typename ext::GetMemberPtrInfo<decltype(mem)>::ValueType;
+		using DataType = typename mptr_info<decltype(mem)>::value_type;
 
 		T& tgt;
 		DataType original{};

@@ -6,13 +6,13 @@ import Math;
 import ext.Concepts;
 
 export namespace Geom{
-	template <Concepts::Number T>
+	template <ext::Number T>
 	struct Vector2D
 	{
 		T x{0};
 		T y{0};
 
-		using PassType = Concepts::ParamPassType<Vector2D, sizeof(T) * 2>;
+		using PassType = ext::ParamPassType<Vector2D, sizeof(T) * 2>;
 
 		[[nodiscard]] constexpr Vector2D operator+(const PassType tgt) const noexcept {
 			return {x + tgt.x, y + tgt.y};
@@ -222,7 +222,7 @@ export namespace Geom{
 			return this->mul(val, val);
 		}
 
-		constexpr Vector2D& reverse() noexcept requires Concepts::Signed<T> {
+		constexpr Vector2D& reverse() noexcept requires ext::Signed<T> {
 			x = -x;
 			y = -y;
 			return *this;
@@ -617,7 +617,7 @@ export namespace Geom{
 		 * @param signProv > 0: counterClockwise; < 0: clockWise; = 0: do nothing
 		 * @return
 		 */
-		template <Concepts::Number S>
+		template <ext::Number S>
 		constexpr Vector2D& rotateRT_with(const S signProv) noexcept requires std::is_signed_v<T> {
 			const int sign = Math::sign(signProv);
 			if(sign){
@@ -719,7 +719,7 @@ export namespace Geom{
 			return std::weak_ordering::equivalent;
 		}
 
-		template <Concepts::Number TN>
+		template <ext::Number TN>
 		[[nodiscard]] constexpr Vector2D<TN> as() const noexcept{
 			return Vector2D<TN>{static_cast<TN>(x), static_cast<TN>(y)};
 		}

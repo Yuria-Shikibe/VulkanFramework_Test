@@ -77,7 +77,7 @@ export namespace Core::Vulkan{
 
 			template <typename T1, typename T2>
 			static void check(T1& t1, T2& t2){
-				std::println("[Vulkan] EXT {}.pNext -> {}", typeid(T1).name(), typeid(T2).name());
+				// std::println("[Vulkan] EXT {}.pNext -> {}", typeid(T1).name(), typeid(T2).name());
 
 				if(t1.pNext != &t2){
 					throw std::runtime_error("Chain Failed");

@@ -79,7 +79,7 @@ export namespace ext{
 
 		std::vector<T> rawData{};
 
-		template <Concepts::Iterable<RepresentType> ParentRange>
+		template <ext::Iterable<RepresentType> ParentRange>
 		std::pair<TreeNode*, decltype(std::declval<ParentRange>().begin())>
 			findLastMatchNode(ParentRange&& elemParents){
 			auto currentDepth = elemParents.begin();
@@ -105,7 +105,7 @@ export namespace ext{
 		}
 
 
-		template <Concepts::Iterable<RepresentType> ParentRange, Concepts::Invokable<ParentRange(const T&)> Func>
+		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		void build(Func&& insertPred){
 			initTree();
 
@@ -115,7 +115,7 @@ export namespace ext{
 		}
 
 
-		template <bool addToRaw = true, Concepts::Iterable<RepresentType> ParentRange, Concepts::Invokable<ParentRange
+		template <bool addToRaw = true, ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange
 			(const T&)> Func>
 		void insert(auto&& element, Func&& insertPred) requires std::convertible_to<decltype(element), T>{
 			ParentRange&& elemParents = insertPred(element);
@@ -135,7 +135,7 @@ export namespace ext{
 		}
 
 
-		template <Concepts::Iterable<RepresentType> ParentRange, Concepts::Invokable<ParentRange(const T&)> Func>
+		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		bool erase(const T& element, Func&& insertPred){
 			if(std::erase(rawData, element)){
 				ParentRange&& elemParents = insertPred(element);
@@ -151,7 +151,7 @@ export namespace ext{
 			return false;
 		}
 
-		template <Concepts::Iterable<RepresentType> ParentRange, Concepts::Invokable<ParentRange(const T&)> Func>
+		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		TreeNode* find(const T& element, Func&& insertPred){
 			ParentRange&& elemParents = insertPred(element);
 
@@ -178,23 +178,23 @@ export namespace ext{
 
 		TreeNode root{defRootRepresent};
 
-		template <Concepts::InvokableVoid<void(const T&)> Func>
+		template <ext::InvokableVoid<void(const T&)> Func>
 		void build(Func&& insertPred){
 			this->template build<std::invoke_result_t<Func, const T&>>(std::forward<Func>(insertPred));
 		}
 
-		template <bool addToRaw = true, Concepts::InvokableVoid<void(const T&)> Func>
+		template <bool addToRaw = true, ext::InvokableVoid<void(const T&)> Func>
 		void insert(auto&& element, Func&& insertPred) requires std::convertible_to<decltype(element), T>{
 			this->template insert<addToRaw, std::invoke_result_t<Func, const T&>>(
 				std::forward<T>(element), std::forward<Func>(insertPred));
 		}
 
-		template <Concepts::InvokableVoid<void(const T&)> Func>
+		template <ext::InvokableVoid<void(const T&)> Func>
 		void erase(const T& element, Func&& insertPred){
 			this->template erase<std::invoke_result_t<Func, const T&>>(element, std::forward<Func>(insertPred));
 		}
 
-		template <Concepts::InvokableVoid<void(const T&)> Func>
+		template <ext::InvokableVoid<void(const T&)> Func>
 		TreeNode* find(const T& element, Func&& insertPred){
 			return this->template find<std::invoke_result_t<Func, const T&>>(element, std::forward<Func>(insertPred));
 		}

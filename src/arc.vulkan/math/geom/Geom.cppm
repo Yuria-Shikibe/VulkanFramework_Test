@@ -171,7 +171,7 @@ export namespace Geom {
 		return true;
 	}
 
-	template <Concepts::Derived<QuadBox> T>
+	template <ext::Derived<QuadBox> T>
 	[[nodiscard]] constexpr Vec2 nearestEdgeNormal(const Vec2 p, const T& rectangle) {
 		float minDistance = std::numeric_limits<float>::max();
 		Vec2 closestEdgeNormal{};
@@ -191,7 +191,7 @@ export namespace Geom {
 		return closestEdgeNormal;
 	}
 
-	template <Concepts::Derived<QuadBox> T>
+	template <ext::Derived<QuadBox> T>
 	[[nodiscard]] constexpr Vec2 avgEdgeNormal(const Vec2 p, const T& rectangle) {
 		Vec2 closestEdgeNormal{};
 
@@ -250,7 +250,7 @@ export namespace Geom {
 		return OrthoRectFloat{ minX, minY, maxX - minX, maxY - minY };
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	bool overlap(const T x, const T y, const T radius, const Rect_Orthogonal<T>& rect) {
 		T closestX = std::clamp<T>(x, rect.getSrcX(), rect.getEndX());
 		T closestY = std::clamp<T>(y, rect.getSrcY(), rect.getEndY());
@@ -262,7 +262,7 @@ export namespace Geom {
 		return distanceSquared <= radius * radius;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	bool overlap(const Circle<T>& circle, const Rect_Orthogonal<T>& rect) {
 		return Geom::overlap<T>(circle.getCX(), circle.getCY(), circle.getRadius(), rect);
 	}

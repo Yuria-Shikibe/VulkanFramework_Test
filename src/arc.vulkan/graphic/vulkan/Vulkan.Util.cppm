@@ -109,7 +109,7 @@ namespace Core::Vulkan::Util{
 	}
 
 	export
-	template <std::size_t W, std::size_t S = 0>
+	template <std::size_t W, std::size_t S>
 	void submitCommand(VkQueue queue, VkCommandBuffer commandBuffer, VkFence fence = nullptr,
 		const std::array<VkSemaphore, W> toWait = {}, const std::array<VkPipelineStageFlags2, W> waitStage = {},
 		const std::array<VkSemaphore, S> toSignal = {}, const std::array<VkPipelineStageFlags2, S> signalStage = {}

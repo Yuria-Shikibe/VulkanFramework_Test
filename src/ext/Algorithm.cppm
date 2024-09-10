@@ -9,8 +9,8 @@ import std;
 namespace ext::algo{
 	export
 	template <typename Range>
-		requires Concepts::Iterable<Range>
-	auto partBy(Range&& range, Concepts::Invokable<bool(const std::ranges::range_value_t<Range>&)> auto&& pred){
+		requires ext::Iterable<Range>
+	auto partBy(Range&& range, ext::Invokable<bool(const std::ranges::range_value_t<Range>&)> auto&& pred){
 		return std::make_pair(range | std::ranges::views::filter(pred),
 			range | std::ranges::views::filter(std::not_fn(pred)));
 	}

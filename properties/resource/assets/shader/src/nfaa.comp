@@ -1,6 +1,6 @@
 #version 460
 #pragma shader_stage(compute)
-#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_separate_shader_objects: enable
 
 #include "lib/util"
 
@@ -63,125 +63,122 @@ void main() {
     vec4 color = nfaa(inputImage, pos, uv, norstep);
     imageStore(outputImage, pos, color);
 }
+/**
 
-/*
+const float oneThird = 1.0 / 3.0;
 
-#define PIXEL_SIZE float2(1.0/1280, 1.0/720)
-
-float4 sampleOffseted(const in sampler2D tex, const in float2 texCoord, const float2 pixelOffset )
-{
-return tex2D(tex, texCoord + pixelOffset * PIXEL_SIZE);
+float favg(vec3 vec){
+    return (vec.x + vec.y + vec.z) * oneThird;
 }
 
-float3 avg(const in float3 value)
-{
-static const float oneThird = 1.0 / 3.0;
-return dot(value.xyz, float3(oneThird, oneThird, oneThird) );
+vec4 sampleOffseted(const sampler2D tex, const vec2 texCoord, const vec2 pixelOffset, const vec2 norStep) {
+    return texture(tex, texCoord + pixelOffset * norStep);
 }
 
-float4 firsPassEdgeDetect( float2 texCoord : TEXCOORD0 ) : COLOR
+vec3 avg(const in vec3 value)
 {
-float4 sCenter = sampleOffseted(Texture0, texCoord, float2( 0.0, 0.0) );
-float4 sUpLeft = sampleOffseted(Texture0, texCoord, float2(-0.5, -0.5) );
-float4 sUpRight = sampleOffseted(Texture0, texCoord, float2( 0.5, -0.5) );
-float4 sDownLeft = sampleOffseted(Texture0, texCoord, float2(-0.5, 0.5) );
-float4 sDownRight = sampleOffseted(Texture0, texCoord, float2( 0.5, 0.5) );
-
-float4 diff = abs( ((sUpLeft + sUpRight + sDownLeft + sDownRight) * 4.0) - (sCenter * 16.0) );
-float edgeMask = avg(diff.xyz);
-
-return float4(sCenter.rgb, edgeMask);
+    return dot(value.xyz, vec3(oneThird, oneThird, oneThird));
 }
 
-
-float4 secondPassEdgeDetectAndBlur( float2 texCoord : TEXCOORD0 ) : COLOR
+vec4 firsPassEdgeDetect(vec2 texCoord, const vec2 norStep)
 {
-// short edges
-float4 sampleCenter = sampleOffseted(Texture0, texCoord.xy, float2( 0.0, 0.0) );
-float4 sampleHorizNeg0 = sampleOffseted(Texture0, texCoord.xy, float2(-1.5, 0.0) );
-float4 sampleHorizPos0 = sampleOffseted(Texture0, texCoord.xy, float2( 1.5, 0.0) );
-float4 sampleVertNeg0 = sampleOffseted(Texture0, texCoord.xy, float2( 0.0, -1.5) );
-float4 sampleVertPos0 = sampleOffseted(Texture0, texCoord.xy, float2( 0.0, 1.5) );
+vec4 sCenter = sampleOffseted(inputImage, texCoord, vec2(0.0, 0.0), norStep);
+vec4 sUpLeft = sampleOffseted(inputImage, texCoord, vec2(- 0.5, - 0.5), norStep);
+vec4 sUpRight = sampleOffseted(inputImage, texCoord, vec2(0.5, -0.5), norStep);
+vec4 sDownLeft = sampleOffseted(inputImage, texCoord, vec2(- 0.5, 0.5), norStep);
+vec4 sDownRight = sampleOffseted(inputImage, texCoord, vec2(0.5, 0.5), norStep);
 
-float4 sumHoriz = sampleHorizNeg0 + sampleHorizPos0;
-float4 sumVert = sampleVertNeg0 + sampleVertPos0;
+vec4 diff = abs(((sUpLeft + sUpRight + sDownLeft + sDownRight) * 4.0) - (sCenter * 16.0));
+float edgeMask = favg(diff.xyz) * oneThird;
 
-float4 diffToCenterHoriz = abs( sumHoriz - (2.0 * sampleCenter) ) / 2.0;
-float4 diffToCenterVert = abs( sumHoriz - (2.0 * sampleCenter) ) / 2.0;
-
-float valueEdgeHoriz = avg( diffToCenterHoriz.xyz );
-float valueEdgeVert = avg( diffToCenterVert.xyz );
-
-float edgeDetectHoriz = saturate( (3.0 * valueEdgeHoriz) - 0.1);
-float edgeDetectVert = saturate( (3.0 * valueEdgeVert) - 0.1);
-
-float4 avgHoriz = ( sumHoriz + sampleCenter) / 3.0;
-float4 avgVert = ( sumVert + sampleCenter) / 3.0;
-
-float valueHoriz = avg( avgHoriz.xyz );
-float valueVert = avg( avgVert.xyz );
-
-float blurAmountHoriz = saturate( edgeDetectHoriz / valueHoriz );
-float blurAmountVert = saturate( edgeDetectVert / valueVert );
-
-float4 aaResult = lerp( sampleCenter, avgHoriz, blurAmountHoriz );
-aaResult = lerp( aaResult, avgVert, blurAmountVert );
-
-// long edges
-float4 sampleVertNeg1 = sampleOffseted(Texture0, texCoord.xy, float2(0.0, -3.5) );
-float4 sampleVertNeg2 = sampleOffseted(Texture0, texCoord.xy, float2(0.0, -7.5) );
-float4 sampleVertPos1 = sampleOffseted(Texture0, texCoord.xy, float2(0.0, 3.5) );
-float4 sampleVertPos2 = sampleOffseted(Texture0, texCoord.xy, float2(0.0, 7.5) );
-
-float4 sampleHorizNeg1 = sampleOffseted(Texture0, texCoord.xy, float2(-3.5, 0.0) );
-float4 sampleHorizNeg2 = sampleOffseted(Texture0, texCoord.xy, float2(-7.5, 0.0) );
-float4 sampleHorizPos1 = sampleOffseted(Texture0, texCoord.xy, float2( 3.5, 0.0) );
-float4 sampleHorizPos2 = sampleOffseted(Texture0, texCoord.xy, float2( 7.5, 0.0) );
-
-float pass1EdgeAvgHoriz = ( sampleHorizNeg2.a + sampleHorizNeg1.a + sampleCenter.a + sampleHorizPos1.a + sampleHorizPos2.a ) / 5.0;
-float pass1EdgeAvgVert = ( sampleVertNeg2.a + sampleVertNeg1.a + sampleCenter.a + sampleVertPos1.a + sampleVertPos2.a ) / 5.0;
-pass1EdgeAvgHoriz = saturate( pass1EdgeAvgHoriz * 2.0f - 1.0f );
-pass1EdgeAvgVert = saturate( pass1EdgeAvgVert * 2.0f - 1.0f );
-float longEdge = max( pass1EdgeAvgHoriz, pass1EdgeAvgVert);
-
-if ( longEdge > 0 )
-{
-float4 avgHorizLong = ( sampleHorizNeg2 + sampleHorizNeg1 + sampleCenter + sampleHorizPos1 + sampleHorizPos2 ) / 5.0;
-float4 avgVertLong = ( sampleVertNeg2 + sampleVertNeg1 + sampleCenter + sampleVertPos1 + sampleVertPos2 ) / 5.0;
-float valueHorizLong = avg(avgHorizLong.xyz);
-float valueVertLong = avg(avgVertLong.xyz);
-
-float4 sampleLeft = sampleOffseted(Texture0, texCoord.xy, float2(-1.0, 0.0) );
-float4 sampleRight = sampleOffseted(Texture0, texCoord.xy, float2( 1.0, 0.0) );
-float4 sampleUp = sampleOffseted(Texture0, texCoord.xy, float2( 0.0, -1.0) );
-float4 sampleDown = sampleOffseted(Texture0, texCoord.xy, float2( 0.0, 1.0) );
-
-float valueCenter = avg(sampleCenter.xyz);
-float valueLeft = avg(sampleLeft.xyz);
-float valueRight = avg(sampleRight.xyz);
-float valueTop = avg(sampleUp.xyz);
-float valueBottom = avg(sampleDown.xyz);
-
-float4 diffToCenter = valueCenter - float4(valueLeft, valueTop, valueRight, valueBottom);
-float blurAmountLeft = saturate( 0.0 + ( valueVertLong - valueLeft ) / diffToCenter.x );
-float blurAmountUp = saturate( 0.0 + ( valueHorizLong - valueTop ) / diffToCenter.y );
-float blurAmountRight= saturate( 1.0 + ( valueVertLong - valueCenter ) / diffToCenter.z );
-float blurAmountDown = saturate( 1.0 + ( valueHorizLong - valueCenter ) / diffToCenter.w );
-
-float4 blurAmounts = float4( blurAmountLeft, blurAmountRight, blurAmountUp, blurAmountDown );
-blurAmounts = (blurAmounts == float4(0.0, 0.0, 0.0, 0.0)) ? float4(1.0, 1.0, 1.0, 1.0) : blurAmounts;
-
-float4 longBlurHoriz = lerp( sampleLeft, sampleCenter, blurAmounts.x );
-longBlurHoriz = lerp( sampleRight, longBlurHoriz, blurAmounts.y );
-float4 longBlurVert = lerp( sampleUp, sampleCenter, blurAmounts.z );
-longBlurVert = lerp( sampleDown, longBlurVert, blurAmounts.w );
-
-aaResult = lerp( aaResult, longBlurHoriz, pass1EdgeAvgVert);
-aaResult = lerp( aaResult, longBlurVert, pass1EdgeAvgHoriz);
-}
-
-return float4(aaResult.rgb, 1.0f);
+return vec4(sCenter.rgb, edgeMask);
 }
 
 
+vec4 secondPassEdgeDetectAndBlur(vec2 texCoord, const vec2 norStep) {
+    // short edges
+    vec4 sampleCenter = sampleOffseted(inputImage, texCoord, vec2(0.0, 0.0), norStep);
+    vec4 sampleHorizNeg0 = sampleOffseted(inputImage, texCoord, vec2(- 1.5, 0.0), norStep);
+    vec4 sampleHorizPos0 = sampleOffseted(inputImage, texCoord, vec2(1.5, 0.0), norStep);
+    vec4 sampleVertNeg0 = sampleOffseted(inputImage, texCoord, vec2(0.0, - 1.5), norStep);
+    vec4 sampleVertPos0 = sampleOffseted(inputImage, texCoord, vec2(0.0, 1.5), norStep);
+    
+    vec4 sumHoriz = sampleHorizNeg0 + sampleHorizPos0;
+    vec4 sumVert = sampleVertNeg0 + sampleVertPos0;
+    
+    vec4 diffToCenterHoriz = abs(sumHoriz - (2.0 * sampleCenter)) / 2.0;
+    vec4 diffToCenterVert = abs(sumHoriz - (2.0 * sampleCenter)) / 2.0;
+    
+    float valueEdgeHoriz = favg(diffToCenterHoriz.xyz);
+    float valueEdgeVert = favg(diffToCenterVert.xyz);
+    
+    float edgeDetectHoriz = clamp((3.0 * valueEdgeHoriz) - 0.1, 0., 1.);
+    float edgeDetectVert = clamp((3.0 * valueEdgeVert) - 0.1, 0., 1.);
+    
+    vec4 avgHoriz = (sumHoriz + sampleCenter) / 3.0;
+    vec4 avgVert = (sumVert + sampleCenter) / 3.0;
+    
+    float valueHoriz = favg(avgHoriz.xyz);
+    float valueVert = favg(avgVert.xyz);
+    
+    float blurAmountHoriz = clamp(edgeDetectHoriz / valueHoriz, 0., 1.);
+    float blurAmountVert = clamp(edgeDetectVert / valueVert, 0., 1.);
+    
+    vec4 aaResult = mix(sampleCenter, avgHoriz, blurAmountHoriz);
+    aaResult = mix(aaResult, avgVert, blurAmountVert);
+    
+    // long edges
+    vec4 sampleVertNeg1 = sampleOffseted(inputImage, texCoord, vec2(0.0, - 3.5), norStep);
+    vec4 sampleVertNeg2 = sampleOffseted(inputImage, texCoord, vec2(0.0, - 7.5), norStep);
+    vec4 sampleVertPos1 = sampleOffseted(inputImage, texCoord, vec2(0.0, 3.5), norStep);
+    vec4 sampleVertPos2 = sampleOffseted(inputImage, texCoord, vec2(0.0, 7.5), norStep);
+    
+    vec4 sampleHorizNeg1 = sampleOffseted(inputImage, texCoord, vec2(- 3.5, 0.0), norStep);
+    vec4 sampleHorizNeg2 = sampleOffseted(inputImage, texCoord, vec2(- 7.5, 0.0), norStep);
+    vec4 sampleHorizPos1 = sampleOffseted(inputImage, texCoord, vec2(3.5, 0.0), norStep);
+    vec4 sampleHorizPos2 = sampleOffseted(inputImage, texCoord, vec2(7.5, 0.0), norStep);
+    
+    float pass1EdgeAvgHoriz = (sampleHorizNeg2.a + sampleHorizNeg1.a + sampleCenter.a + sampleHorizPos1.a + sampleHorizPos2.a) / 5.0;
+    float pass1EdgeAvgVert = (sampleVertNeg2.a + sampleVertNeg1.a + sampleCenter.a + sampleVertPos1.a + sampleVertPos2.a) / 5.0;
+    pass1EdgeAvgHoriz = clamp( pass1EdgeAvgHoriz * 2.0f - 1.0f, 0., 1.);
+    pass1EdgeAvgVert = clamp(pass1EdgeAvgVert * 2.0f - 1.0f, 0., 1.);
+    float longEdge = max(pass1EdgeAvgHoriz, pass1EdgeAvgVert);
+    
+    if (longEdge > 0) {
+        vec4 avgHorizLong = (sampleHorizNeg2 + sampleHorizNeg1 + sampleCenter + sampleHorizPos1 + sampleHorizPos2) / 5.0;
+        vec4 avgVertLong = (sampleVertNeg2 + sampleVertNeg1 + sampleCenter + sampleVertPos1 + sampleVertPos2 ) / 5.0;
+        float valueHorizLong = favg(avgHorizLong.xyz);
+        float valueVertLong = favg(avgVertLong.xyz);
+        
+        vec4 sampleLeft = sampleOffseted(inputImage, texCoord, vec2(- 1.0, 0.0), norStep);
+        vec4 sampleRight = sampleOffseted(inputImage, texCoord, vec2(1.0, 0.0), norStep);
+        vec4 sampleUp = sampleOffseted(inputImage, texCoord, vec2(0.0, - 1.0), norStep);
+        vec4 sampleDown = sampleOffseted(inputImage, texCoord, vec2(0.0, 1.0), norStep);
+        
+        float valueCenter = favg(sampleCenter.xyz);
+        float valueLeft = favg(sampleLeft.xyz);
+        float valueRight = favg(sampleRight.xyz);
+        float valueTop = favg(sampleUp.xyz);
+        float valueBottom = favg(sampleDown.xyz);
+        
+        vec4 diffToCenter = valueCenter - vec4(valueLeft, valueTop, valueRight, valueBottom);
+        float blurAmountLeft = clamp(0.0 + (valueVertLong - valueLeft) / diffToCenter.x, 0., 1.);
+        float blurAmountUp = clamp(0.0 + (valueHorizLong - valueTop) / diffToCenter.y, 0., 1.);
+        float blurAmountRight = clamp(1.0 + (valueVertLong - valueCenter) / diffToCenter.z, 0., 1.);
+        float blurAmountDown = clamp(1.0 + ( valueHorizLong - valueCenter) / diffToCenter.w, 0., 1.);
+        
+        vec4 blurAmounts = vec4(blurAmountLeft, blurAmountRight, blurAmountUp, blurAmountDown);
+        blurAmounts = (blurAmounts == vec4(0.0, 0.0, 0.0, 0.0)) ? vec4(1.0, 1.0, 1.0, 1.0): blurAmounts;
+        
+        vec4 longBlurHoriz = mix(sampleLeft, sampleCenter, blurAmounts.x);
+        longBlurHoriz = mix(sampleRight, longBlurHoriz, blurAmounts.y);
+        vec4 longBlurVert = mix(sampleUp, sampleCenter, blurAmounts.z);
+        longBlurVert = mix(sampleDown, longBlurVert, blurAmounts.w);
+        
+        aaResult = mix(aaResult, longBlurHoriz, pass1EdgeAvgVert);
+        aaResult = mix(aaResult, longBlurVert, pass1EdgeAvgHoriz);
+        }
+    
+    return vec4(aaResult.rgb, 1.0f);
+}
 */

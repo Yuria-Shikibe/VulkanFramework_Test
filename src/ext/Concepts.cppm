@@ -2,7 +2,7 @@ export module ext.Concepts;
 
 import std;
 
-namespace Concepts {
+namespace ext {
 
 	/**
 	 * \brief coonditional variant but friendly to IDEs
@@ -137,7 +137,7 @@ namespace Concepts {
 	export
 	template <class T, template <class...> class Template>
 	concept SpecDeriveOf = requires(const T& obj) {
-		Concepts::derived_from_specialization_impl<Template>(obj);
+		ext::derived_from_specialization_impl<Template>(obj);
 	};
 
     template <typename T>

@@ -12,7 +12,7 @@ export import Graphic.ImageRegion;
 
 export import Graphic.Draw.Interface;
 
-import ext.MetaProgramming;
+import ext.meta_programming;
 import std;
 import ext.Concepts;
 import Math;

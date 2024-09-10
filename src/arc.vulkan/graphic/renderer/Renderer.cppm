@@ -35,5 +35,7 @@ export namespace Graphic{
 
 		void resize(Geom::USize2 size2) = delete;
 
+		void init(Geom::USize2 size2) = delete;
+
 	};
 }

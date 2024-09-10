@@ -12,7 +12,7 @@ export namespace ext{
 	class TaskQueue{
 	public:
 		using TaskTy = std::packaged_task<FuncTy>;
-		using RstTy = typename Concepts::FunctionTraits<FuncTy>::ReturnType;
+		using RstTy = typename ext::FunctionTraits<FuncTy>::ReturnType;
 		using Future = std::future<RstTy>;
 
 	private:
@@ -20,7 +20,7 @@ export namespace ext{
 		mutable std::mutex mtx{};
 
 	public:
-		template <Concepts::Invokable<FuncTy> Func>
+		template <ext::Invokable<FuncTy> Func>
 		[[nodiscard]] Future push(Func&& task){
 			return this->push(std::packaged_task<FuncTy>(std::forward<Func>(task)));
 		}

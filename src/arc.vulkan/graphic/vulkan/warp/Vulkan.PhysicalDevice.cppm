@@ -9,7 +9,7 @@ import std;
 import Core.Vulkan.Util;
 import Core.Vulkan.SwapChainInfo;
 
-import ext.MetaProgramming;
+import ext.meta_programming;
 
 
 export namespace Core::Vulkan{
@@ -141,7 +141,7 @@ export namespace Core::Vulkan{
 
 		template <typename... Args>
 			requires requires(VkPhysicalDeviceFeatures features, Args... args){
-				requires (std::same_as<VkBool32, typename ext::GetMemberPtrInfo<Args>::ValueType> && ...);
+				requires (std::same_as<VkBool32, typename ext::mptr_info<Args>::value_type> && ...);
 				requires std::conjunction_v<std::is_member_object_pointer<Args>...>;
 			}
 		[[nodiscard]] bool meetFeatures(Args... args) const{

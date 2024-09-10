@@ -6,7 +6,7 @@ export module Core.Vulkan.Manager;
 
 import std;
 
-import ext.MetaProgramming;
+import ext.meta_programming;
 
 import Core.Window;
 import Core.Vulkan.Uniform;
@@ -70,13 +70,12 @@ export namespace Core::Vulkan{
 	public:
 		[[nodiscard]] VulkanManager() = default;
 
-		Graphic::RendererWorld* rendererWorld{};
-
 		ext::EventManager eventManager{
-			{ext::typeIndexOf<ResizeEvent>()}
+			{ext::index_of<ResizeEvent>()}
 		};
 
 		std::function<std::pair<VkImageView, VkImageView>()> uiImageViewProv{};
+		std::function<VkImageView()> worldImageViewProv{};
 
 		Context context{};
 		CommandPool commandPool{};
@@ -92,8 +91,6 @@ export namespace Core::Vulkan{
 		}
 
 		struct InFlightData{
-			Fence inFlightFence{};
-
 			Semaphore imageAvailableSemaphore{};
 			Semaphore flushFinishedSemaphore{};
 		};
@@ -117,15 +114,14 @@ export namespace Core::Vulkan{
 
 			presentMerge.submitCommand();
 
-			currentFrameData.inFlightFence.waitAndReset();
 			const auto imageIndex = swapChain.acquireNextImage(currentFrameData.imageAvailableSemaphore);
 
 			Util::submitCommand(
 				context.device.getPrimaryGraphicsQueue(),
 				swapChain.getCommandFlushes()[imageIndex],
-				currentFrameData.inFlightFence,
-				currentFrameData.imageAvailableSemaphore, VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-				currentFrameData.flushFinishedSemaphore, VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
+				nullptr,
+				currentFrameData.imageAvailableSemaphore.get(), VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+				currentFrameData.flushFinishedSemaphore.get(), VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT
 			);
 
 			swapChain.postImage(imageIndex, currentFrameData.flushFinishedSemaphore);
@@ -168,7 +164,7 @@ export namespace Core::Vulkan{
 
 					auto [ui1, ui2] = uiImageViewProv();
 
-					port.in.insert_or_assign(0, rendererWorld->getResult_NFAA().getView());
+					port.in.insert_or_assign(0, worldImageViewProv());
 					port.in.insert_or_assign(1, ui1);
 					port.in.insert_or_assign(2, ui2);
 
@@ -192,7 +188,6 @@ export namespace Core::Vulkan{
 	private:
 		void createFrameObjects(){
 			for(auto& frameData : frameDataArr){
-				frameData.inFlightFence = Fence{context.device, Fence::CreateFlags::signal};
 				frameData.imageAvailableSemaphore = Semaphore{context.device};
 				frameData.flushFinishedSemaphore = Semaphore{context.device};
 			}
@@ -226,7 +221,6 @@ export namespace Core::Vulkan{
     public:
 		auto& getFinalAttachment(){
 			return presentMerge.images.back();
-			// return rendererWorld->getResult_NFAA();
 		}
 
 		void setFlushGroup(){
@@ -265,15 +259,15 @@ export namespace Core::Vulkan{
 
 				pipeline.createDescriptorSet(swapChain.size());
 
-				pipeline.builder = [](PipelineData& pipeline){
+				pipeline.builder = [](PipelineData& p){
 					PipelineTemplate pipelineTemplate{};
 					pipelineTemplate
 						.useDefaultFixedStages()
 						.setColorBlend(&Default::ColorBlending<std::array{Blending::Disable}>)
 						.setShaderChain({&Assets::Shader::Vert::blitSingle, &Assets::Shader::Frag::blitSingle})
-						.setStaticViewportAndScissor(pipeline.size.x, pipeline.size.y);
+						.setStaticViewportAndScissor(p.size.x, p.size.y);
 
-					pipeline.createPipeline(pipelineTemplate);
+					p.createPipeline(pipelineTemplate);
 				};
 			});
 
@@ -313,120 +307,5 @@ export namespace Core::Vulkan{
 				vkCmdEndRenderPass(commandBuffer);
 			}
 		}
-
-		// void createPresentMergeData(){
-		// 	presentPipelineData = SinglePipelineData{&context};
-		// 	presentPipelineData.createDescriptorLayout([](DescriptorSetLayout& layout){
-		// 		layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
-		// 		layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
-		// 		// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
-		// 		// layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
-		// 		layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
-		// 	});
-		//
-		// 	presentPipelineData.createPipelineLayout();
-		// 	presentPipelineData.createComputePipeline(
-		// 		VK_PIPELINE_CREATE_DESCRIPTOR_BUFFER_BIT_EXT,
-		// 		Assets::Shader::Comp::presentMerge);
-		//
-		// 	presentDescriptorBuffer = DescriptorBuffer{
-		// 			context.physicalDevice, context.device,
-		// 		presentPipelineData.descriptorSetLayout,
-		// 			presentPipelineData.descriptorSetLayout.size()
-		// 		};
-		//
-		// 	gameUIMergeCommand = {context.device, commandPool_compute};
-		//
-		// 	finalStagingAttachment = Attachment{context.physicalDevice, context.device};
-		// 	finalStagingAttachment.create(swapChain.size2D(), obtainTransientCommand(),
-		// 	                              VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT |
-		// 	                              VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
-		// 	                              VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT,
-		// 	                              VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-		// 	);
-		//
-		// 	updatePresentData();
-		// }
-		//
-		// void updatePresentData(){
-		// 	auto [ui1, ui2] = uiImageViewProv();
-		//
-		// 	VkSampler sampler = Assets::Sampler::blitSampler;
-		// 	const VkDescriptorImageInfo worldInfo{
-		// 		.sampler = sampler,
-		// 		.imageView = rendererWorld->getResult_NFAA().getView(),
-		// 		.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		// 	};
-		//
-		// 	// const VkDescriptorImageInfo ui1Info{
-		// 	// 	.sampler = sampler,
-		// 	// 	.imageView = ui1,
-		// 	// 	.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		// 	// };
-		// 	//
-		// 	// const VkDescriptorImageInfo ui2Info{
-		// 	// 	.sampler = sampler,
-		// 	// 	.imageView = ui2,
-		// 	// 	.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		// 	// };
-		//
-		// 	presentDescriptorBuffer.load([&, this](const DescriptorBuffer& buffer){
-		// 		buffer.loadImage(0, worldInfo);
-		// 		// buffer.loadImage(1, ui1Info);
-		// 		// buffer.loadImage(2, ui2Info);
-		//
-		// 		buffer.loadImage(
-		// 			1, {
-		// 				.sampler = nullptr,
-		// 				.imageView = finalStagingAttachment.getView(),
-		// 				.imageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		// 			}, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-		// 	});
-		//
-		// 	createPresentCommand();
-		// }
-		//
-		// void createPresentCommand(){
-		// 	const ScopedCommand scopedCommand{gameUIMergeCommand, VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT};
-		//
-		// 	std::array barriers = {
-		// 		VkImageMemoryBarrier2{
-		// 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-		// 			.srcStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-		// 			.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
-		// 			.dstStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-		// 			.dstAccessMask = VK_ACCESS_2_SHADER_WRITE_BIT,
-		// 			.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-		// 			.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-		// 			.srcQueueFamilyIndex = context.graphicFamily(),
-		// 			.dstQueueFamilyIndex = context.computeFamily(),
-		// 			.image = finalStagingAttachment.getImage(),
-		// 			.subresourceRange = ImageSubRange::Color
-		// 		},
-		// 	};
-		//
-		// 	Util::imageBarrier(scopedCommand, barriers);
-		//
-		// 	vkCmdBindPipeline(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE, presentPipelineData.pipeline);
-		//
-		// 	presentDescriptorBuffer.bindTo(
-		// 		scopedCommand,
-		// 		VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT_KHR |
-		// 		VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT
-		// 	);
-		//
-		// 	EXT::cmdSetDescriptorBufferOffsetsEXT(
-		// 		scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE,
-		// 		presentPipelineData.layout,
-		// 		0, 1, Seq::Indices<0>, Seq::Offset<0>);
-		//
-		// 	static constexpr Geom::USize2 UnitSize{16, 16};
-		// 	const auto [ux, uy] = swapChain.size2D().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
-		//
-		// 	vkCmdDispatch(scopedCommand, ux, uy, 1);
-		//
-		// 	Util::swapStage(barriers);
-		// 	Util::imageBarrier(scopedCommand, barriers);
-		// }
 	};
 }

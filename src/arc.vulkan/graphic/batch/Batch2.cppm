@@ -2,7 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Graphic.Batch2;
+export module Graphic.Batch;
 
 import Core.Vulkan.Buffer.PersistentTransferBuffer;
 import Core.Vulkan.Buffer.IndexBuffer;
@@ -27,7 +27,7 @@ import ext.circular_array;
 export namespace Graphic{
 
 	//TODO support move assignment
-	struct Batch2{
+	struct Batch{
 		static constexpr std::size_t MaxGroupCount{2048 * 4};
 		static constexpr std::size_t BufferSize{3};
 		static constexpr std::size_t UnitSize{4};
@@ -66,7 +66,7 @@ export namespace Graphic{
 
 			[[nodiscard]] CommandUnit() = default;
 
-			[[nodiscard]] explicit CommandUnit(const Batch2& batch)
+			[[nodiscard]] explicit CommandUnit(const Batch& batch)
 				:
 				vertexBuffer{
 					batch.context->physicalDevice, batch.context->device,
@@ -116,7 +116,7 @@ export namespace Graphic{
 				return currentCount == 0;
 			}
 
-			void init(const Batch2& batch){
+			void init(const Batch& batch){
 				transferEvent = Core::Vulkan::Event{batch.context->device, false};
 				vertexStagingBuffer = {
 						batch.context->physicalDevice, batch.context->device, (batch.unitOffset * MaxGroupCount),
@@ -206,9 +206,9 @@ export namespace Graphic{
 		ext::circular_array<CommandUnit, UnitSize> units{};
 		std::function<void(std::size_t)> drawCall{};
 
-		[[nodiscard]] Batch2() = default;
+		[[nodiscard]] Batch() = default;
 
-		[[nodiscard]] explicit Batch2(const Core::Vulkan::Context& context, const std::size_t vertexSize, VkSampler sampler) :
+		[[nodiscard]] explicit Batch(const Core::Vulkan::Context& context, const std::size_t vertexSize, VkSampler sampler) :
 			context{&context}, transientCommandPool{
 				context.device,
 				context.graphicFamily(),
@@ -566,7 +566,7 @@ export namespace Graphic{
 	};
 
 	template <typename VertexType>
-	struct BatchAcquirer : AutoDrawSpaceAcquirer<VertexType, BatchAcquirer<VertexType>, Batch2::VerticesGroupCount>{
+	struct BatchAcquirer : AutoDrawSpaceAcquirer<VertexType, BatchAcquirer<VertexType>, Batch::VerticesGroupCount>{
 
 	};
 }

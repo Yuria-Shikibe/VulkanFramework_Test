@@ -5,7 +5,7 @@ module;
 export module Core.Vulkan.Comp;
 
 import std;
-import ext.MetaProgramming;
+import ext.meta_programming;
 
 namespace Core::Vulkan{
 	namespace Util{
@@ -69,7 +69,7 @@ namespace Core::Vulkan{
 
 
 		export template <typename T, typename... Args>
-		Component(T, Args...) -> Component<T, typename ext::GetMemberPtrInfo<Args>::ValueType...>;
+		Component(T, Args...) -> Component<T, typename ext::mptr_info<Args>::value_type...>;
 
 		export template <typename T>
 		constexpr auto defStructureType(const VkStructureType sType){

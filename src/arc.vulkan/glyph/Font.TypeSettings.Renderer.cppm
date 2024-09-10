@@ -8,9 +8,8 @@ export import Font.TypeSettings;
 
 import Geom.Vector2D;
 
-import Graphic.Batch;
 import Core.Vulkan.BatchData;
-import Graphic.Batch2;
+import Graphic.Batch;
 import std;
 
 //TEMP
@@ -22,10 +21,10 @@ import Core.Vulkan.Vertex;
 export namespace Font::TypeSettings{
 	template <typename T = std::identity>
 	struct AutoDrawParamAc : Graphic::AutoDrawSpaceAcquirer<Core::Vulkan::Vertex_UI, AutoDrawParamAc<T>>{
-		Graphic::Batch2& batch;
+		Graphic::Batch& batch;
 		const Graphic::ImageViewRegion* region{};
 
-		[[nodiscard]] explicit AutoDrawParamAc(Graphic::Batch2& batch, const Graphic::ImageViewRegion* region = nullptr)
+		[[nodiscard]] explicit AutoDrawParamAc(Graphic::Batch& batch, const Graphic::ImageViewRegion* region = nullptr)
 			: batch{batch}, region{region}{}
 
 		void setRegion(const Graphic::ImageViewRegion* region){
@@ -55,7 +54,7 @@ export namespace Font::TypeSettings{
 		}
 	};
 
-	void draw(Graphic::Batch2& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
+	void draw(Graphic::Batch& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
 		using namespace Graphic;
 
 		Draw::DrawContext context{};

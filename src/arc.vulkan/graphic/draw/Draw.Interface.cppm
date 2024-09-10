@@ -1,7 +1,7 @@
 export module Graphic.Draw.Interface;
 
 import std;
-import ext.MetaProgramming;
+import ext.meta_programming;
 import ext.Concepts;
 export import Core.Vulkan.Vertex;
 export import Graphic.ImageRegion;
@@ -43,8 +43,9 @@ export namespace Graphic::Draw{
 
 	template <typename... Args>
 	VertexGenerator(Args...) ->
-		VertexGenerator<typename ext::GetMemberPtrInfo<std::tuple_element_t<0, std::tuple<Args...>>>::ClassType, typename
-		                ext::GetMemberPtrInfo<Args>::ValueType...>;
+		VertexGenerator<
+			typename ext::mptr_info<std::tuple_element_t<0, std::tuple<Args...>>>::class_type,
+			typename ext::mptr_info<Args>::value_type...>;
 
 	template <typename Vertex>
 	struct ModifierBase : std::type_identity<Vertex>{};
@@ -115,7 +116,7 @@ export namespace Graphic::Draw{
 
 	template <typename M>
 	concept AutoParam = requires(M& m){
-		requires Concepts::SpecDeriveOf<M, DrawParam>;
+		requires ext::SpecDeriveOf<M, DrawParam>;
 		{ ++m } -> std::same_as<M&>;
 	};
 }

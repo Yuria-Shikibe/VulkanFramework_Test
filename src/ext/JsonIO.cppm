@@ -1,7 +1,7 @@
 export module ext.json.io;
 
 export import ext.json;
-import ext.MetaProgramming;
+import ext.meta_programming;
 import ext.Owner;
 import ext.Base64;
 import ext.StaticReflection;

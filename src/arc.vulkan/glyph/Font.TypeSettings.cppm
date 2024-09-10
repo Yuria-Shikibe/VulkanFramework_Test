@@ -11,7 +11,7 @@ import Align;
 
 import Graphic.ImageRegion;
 import Graphic.Color;
-import ext.SnapShot;
+import ext.snap_shot;
 import ext.Heterogeneous;
 import ext.TaskQueue;
 
@@ -327,7 +327,7 @@ namespace Font{
 			[[nodiscard]] explicit(false) TokenModifier(std::function<FuncType>&& modifier)
 				: modifier{std::move(modifier)}{}
 
-			template <Concepts::Invokable<FuncType> Func>
+			template <ext::Invokable<FuncType> Func>
 			[[nodiscard]] explicit(false) TokenModifier(Func&& modifier)
 				: modifier{std::forward<Func>(modifier)}{}
 		};

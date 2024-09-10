@@ -11,7 +11,7 @@ export namespace Geom{
 	 * \brief width, height should be always non-negative.
 	 * \tparam T Arithmetic Type
 	 */
-	template <Concepts::Number T>
+	template <ext::Number T>
 	class Rect_Orthogonal/* : public Shape<Rect_Orthogonal<T>, T>*/{
 		static constexpr T TWO{2};
 
@@ -130,7 +130,7 @@ export namespace Geom{
 			return &height;
 		}
 
-		template <Concepts::Number T_>
+		template <ext::Number T_>
 		constexpr Rect_Orthogonal<T_> as() const noexcept{
 			return Rect_Orthogonal<T_>{
 				static_cast<T_>(srcX),
@@ -140,7 +140,7 @@ export namespace Geom{
 			};
 		}
 
-		template <Concepts::Number N>
+		template <ext::Number N>
 		constexpr auto& setWidth(const N w) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
 				this->width = w;
@@ -157,7 +157,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number N>
+		template <ext::Number N>
 		constexpr auto& setHeight(const N h) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
 				this->height = h;
@@ -174,14 +174,14 @@ export namespace Geom{
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires Concepts::Signed<T> {
+		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires ext::Signed<T> {
 			this->setWidth<T>(width + x);
 			this->setHeight<T>(height + y);
 
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& addWidth(const T x) noexcept requires Concepts::Signed<T> {
+		constexpr Rect_Orthogonal& addWidth(const T x) noexcept requires ext::Signed<T> {
 			this->setWidth<T>(width + x);
 
 			return *this;
@@ -205,13 +205,13 @@ export namespace Geom{
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& addHeight(const T y) noexcept requires Concepts::Signed<T> {
+		constexpr Rect_Orthogonal& addHeight(const T y) noexcept requires ext::Signed<T> {
 			this->setHeight<T>(height + y);
 
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires Concepts::NonNegative<T> {
+		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires ext::NonNegative<T> {
 			using S = std::make_signed_t<T>;
 			this->setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
 			this->setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
@@ -219,7 +219,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number N>
+		template <ext::Number N>
 		constexpr Rect_Orthogonal& addSize(const N x, const N y) noexcept{
 			using S = std::make_signed_t<T>;
 			this->setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
@@ -437,7 +437,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number T1, Concepts::Number T2>
+		template <ext::Number T1, ext::Number T2>
 		constexpr Rect_Orthogonal& sclSize(const T1 xScl, const T2 yScl) noexcept{
 			width = static_cast<T>(static_cast<T1>(width) * xScl);
 			height = static_cast<T>(static_cast<T1>(height) * yScl);
@@ -445,7 +445,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number T1, Concepts::Number T2>
+		template <ext::Number T1, ext::Number T2>
 		constexpr Rect_Orthogonal& sclPos(const T1 xScl, const T2 yScl) noexcept{
 			srcX = static_cast<T>(static_cast<T1>(srcX) * xScl);
 			srcY = static_cast<T>(static_cast<T1>(srcY) * yScl);
@@ -453,7 +453,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number T1, Concepts::Number T2>
+		template <ext::Number T1, ext::Number T2>
 		constexpr Rect_Orthogonal& scl(const T1 xScl, const T2 yScl) noexcept{
 			(void)this->sclPos<T1, T2>(xScl, yScl);
 			(void)this->sclSize<T1, T2>(xScl, yScl);
@@ -461,7 +461,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		template <Concepts::Number N>
+		template <ext::Number N>
 		constexpr Rect_Orthogonal& scl(const typename Vector2D<N>::PassType scl) noexcept{
 			(void)this->sclPos<N, N>(scl.x, scl.y);
 			(void)this->sclSize<N, N>(scl.x, scl.y);
@@ -609,7 +609,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		void each(Concepts::Invokable<void(Vector2D<T>)> auto&& pred) const requires std::is_integral_v<T>{
+		void each(ext::Invokable<void(Vector2D<T>)> auto&& pred) const requires std::is_integral_v<T>{
 			for(T x = srcX; x < getEndX(); ++x){
 				for(T y = srcY; y < getEndY(); ++y){
 					pred(Vector2D<T>{x, y});
@@ -617,7 +617,7 @@ export namespace Geom{
 			}
 		}
 
-		void each_jumpSrc(Concepts::Invokable<void(Vector2D<T>)> auto&& pred) const requires std::is_integral_v<T>{
+		void each_jumpSrc(ext::Invokable<void(Vector2D<T>)> auto&& pred) const requires std::is_integral_v<T>{
 			for(T x = srcX; x < getEndX(); ++x){
 				for(T y = srcY; y < getEndY(); ++y){
 					if(x != srcX && y != srcY)pred(Vector2D<T>{x, y});

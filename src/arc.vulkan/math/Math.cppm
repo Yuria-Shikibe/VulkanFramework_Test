@@ -4,7 +4,6 @@ import std;
 
 import SinTable;
 import ext.Concepts;
-import ext.RuntimeException;
 
 export namespace Math {
 	constexpr int SIGNS[2]     = { -1, 1 };
@@ -233,8 +232,8 @@ export namespace Math {
 		return a * b < 0;
 	}
 
-	template <Concepts::Number T>
-	constexpr T sign(const T f) noexcept requires Concepts::Signed<T> {
+	template <ext::Number T>
+	constexpr T sign(const T f) noexcept requires ext::Signed<T> {
 		return f == 0 ? 0 : f < 0 ? -1 : 1;
 	}
 
@@ -248,8 +247,8 @@ export namespace Math {
 		return f < 0.0f ? -1.0f : 1.0f;
 	}
 
-	template <Concepts::Number T>
-	constexpr T sign(const T f) noexcept requires Concepts::NonNegative<T> {
+	template <ext::Number T>
+	constexpr T sign(const T f) noexcept requires ext::NonNegative<T> {
 		return f == 0 ? 0 : 1;
 	}
 
@@ -259,7 +258,7 @@ export namespace Math {
 	}
 
 	/**Converts a bool to an integer: 1 if true, 0, if false.*/
-	template <Concepts::Number T>
+	template <ext::Number T>
 	constexpr T num(const bool b) noexcept {
 		return static_cast<T>(b);
 	}
@@ -299,15 +298,11 @@ export namespace Math {
 		return value != 0 && (value & value - 1) == 0;
 	}
 
-	template <Concepts::Number T>
-	constexpr T clamp(const T v, const T min, const T max)
-#ifndef _DEBUG
-		noexcept
-#endif
-	{
-#ifdef _DEBUG
+	template <ext::Number T>
+	constexpr T clamp(const T v, const T min, const T max) noexcept(!DEBUG_CHECK){
+#ifdef DEBUG_CHECK
 		if(min > max) {
-			throw ext::IllegalArguments{"Min Greater Than Max: " + std::to_string(min) + " : " + std::to_string(max)};
+			throw std::invalid_argument{"Min Greater Than Max"};
 		}
 #endif
 
@@ -317,7 +312,7 @@ export namespace Math {
 		return v;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	constexpr T abs(const T v) noexcept {
 		if constexpr(std::is_unsigned_v<T>) {
 			return v;
@@ -332,15 +327,11 @@ export namespace Math {
 	}
 
 
-	template <Concepts::Number T>
-	T clampRange(const T v, const T absMax)
-#ifndef _DEBUG
-		noexcept
-#endif
-	{
+	template <ext::Number T>
+	T clampRange(const T v, const T absMax) noexcept(!DEBUG_CHECK){
 #ifdef _DEBUG
 		if(absMax < 0) {
-			throw ext::IllegalArguments{std::format("absMax is Negative: {}", absMax)};
+			throw std::invalid_argument{"arg absMax is Negative"};
 		}
 #endif
 
@@ -381,18 +372,18 @@ export namespace Math {
 		return v1 < v2 ? v1 : v2;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	T maxAbs(const T v1, const T v2) noexcept {
-		if constexpr (Concepts::NonNegative<T>){
+		if constexpr (ext::NonNegative<T>){
 			return std::max(v1, v2);
 		}else{
 			return std::abs(v1) > std::abs(v2) ? v1 : v2;
 		}
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	T minAbs(const T v1, const T v2) noexcept {
-		if constexpr (Concepts::NonNegative<T>){
+		if constexpr (ext::NonNegative<T>){
 			return std::min(v1, v2);
 		}else{
 			return std::abs(v1) < std::abs(v2) ? v1 : v2;
@@ -404,7 +395,7 @@ export namespace Math {
 		return clamp(value, 0.0f, 1.0f);
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	constexpr T clampPositive(const T val) noexcept {
 		return val > 0 ? val : 0;
 	}
@@ -420,12 +411,12 @@ export namespace Math {
 	}
 
 	template <typename T>
-		requires (!Concepts::Number)
+		requires (!ext::Number)
 	T& lerp(const T& fromValue, const T& toValue, const T& progress) noexcept {
 		return fromValue + (toValue - fromValue) * progress;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	constexpr T lerp(const T fromValue, const T toValue, const T progress) noexcept {
 		return fromValue + (toValue - fromValue) * progress;
 	}
@@ -478,7 +469,7 @@ export namespace Math {
 	template <std::integral T = int>
 	constexpr T trac(const float value) noexcept {
 		T val = static_cast<T>(value);
-		if constexpr (Concepts::Signed<T>){
+		if constexpr (ext::Signed<T>){
 			if(value < 0)--val;
 		}
 
@@ -524,7 +515,7 @@ export namespace Math {
 		return static_cast<int>(value / static_cast<float>(step)) * step;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	T round(const T num, const T step) {
 		return std::round(num / step) * step;
 	}
@@ -585,7 +576,7 @@ export namespace Math {
 		return (x % n + n) % n;
 	}
 
-	template <Concepts::Number T>
+	template <ext::Number T>
 	T mod(const T x, const T n) noexcept {
 		if constexpr(std::is_floating_point_v<T>) {
 			return std::fmod(x, n);
@@ -725,7 +716,7 @@ export namespace Math {
 	/**
 	 * \return a corret dst value safe for unsigned numbers, can be negative if params are signed.
 	 */
-	template <Concepts::Number T>
+	template <ext::Number T>
 	T constexpr safeDst(const T a, const T b) noexcept {
 		if constexpr(std::is_signed_v<T>) {
 			return a - b;
@@ -735,8 +726,8 @@ export namespace Math {
 	}
 
 
-	template<Concepts::Number auto cycle, auto trigger = cycle / 2>
-	bool cycleStep(Concepts::Number auto cur){
+	template<ext::Number auto cycle, auto trigger = cycle / 2>
+	bool cycleStep(ext::Number auto cur){
 		return Math::mod<decltype(cur)>(cur, cycle) < trigger;
 	}
 
@@ -818,7 +809,7 @@ export namespace Math {
 			return angle;
 		}
 
-		[[nodiscard]] float moveToward_signed(const float angle, const float to, const float speed, const float margin, Concepts::InvokeNullable<void()> auto&& func = nullptr) noexcept {
+		[[nodiscard]] float moveToward_signed(const float angle, const float to, const float speed, const float margin, ext::InvokeNullable<void()> auto&& func = nullptr) noexcept {
 			if(const float dst = angleDst(angle, to), absSpeed = std::abs(speed); dst < absSpeed && absSpeed < margin){
 				if constexpr (!std::same_as<decltype(func), std::nullptr_t>){
 					func();

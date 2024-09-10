@@ -1,6 +1,6 @@
 export module ext.StaticReflection;
 
-export import ext.MetaProgramming;
+export import ext.meta_programming;
 import ext.Concepts;
 import std;
 import ext.Owner;
@@ -99,8 +99,8 @@ export namespace ext::reflect{
 
 	public:
 		using PtrType = decltype(ptr);
-		using Type = typename ext::GetMemberPtrInfo<PtrType>::ValueType;
-		using ClassType = typename ext::GetMemberPtrInfo<PtrType>::ClassType;
+		using Type = typename ext::mptr_info<PtrType>::value_type;
+		using ClassType = typename ext::mptr_info<PtrType>::class_type;
 		using ClassInfo = ClassInfo<Type>;
 
 		static constexpr auto mptr = ptr;
@@ -137,7 +137,7 @@ export namespace ext::reflect{
 	struct Field<nullptr> : Field<&NullptrTestT::val>{};
 
 	template <typename T, auto... mptrs>
-		requires (std::same_as<T, typename ext::GetMemberPtrInfo<decltype(mptrs)>::ClassType> && ...)
+		requires (std::same_as<T, typename ext::mptr_info<decltype(mptrs)>::class_type> && ...)
 	struct ClassField{
 		using Type = T;
 

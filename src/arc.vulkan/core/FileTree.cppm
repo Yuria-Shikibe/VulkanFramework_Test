@@ -87,7 +87,7 @@ export namespace Core{
 		}
 
 		template <bool ignoreDir = true>
-		void mapSubFiles(Concepts::Invokable<std::string(const File&)> auto&& func) {
+		void mapSubFiles(ext::Invokable<std::string(const File&)> auto&& func) {
 			for(auto& element : files | std::ranges::views::values) {
 				for(auto& file : element) {
 					if constexpr (ignoreDir)if(file.isDir())continue;

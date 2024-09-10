@@ -22,7 +22,7 @@ import Core.Vulkan.Semaphore;
 import Core.Vulkan.Preinstall;
 import Core.Vulkan.EXT;
 
-import Graphic.Batch2;
+import Graphic.Batch;
 import Graphic.PostProcessor;
 
 import Geom.Rect_Orthogonal;
@@ -48,7 +48,7 @@ export namespace Graphic{
 		//[base, def, light]
 		static constexpr std::size_t AttachmentCount = 3;
 
-		Batch2 batch{};
+		Batch batch{};
 
 		using Batch = decltype(batch);
 
@@ -86,10 +86,8 @@ export namespace Graphic{
 
 
 		Core::Vulkan::RenderProcedure batchDrawPass{};
-		// Core::Vulkan::RenderProcedure mergeDrawPass{};
 
 		Core::Vulkan::FramebufferLocal batchFramebuffer{};
-		// Core::Vulkan::FramebufferLocal mergeFrameBuffer{};
 
 		std::vector<Geom::OrthoRectUInt> scissors{};
 

@@ -17,7 +17,6 @@ import Core.Vulkan.EXT;
 import Core.File;
 import Graphic.Color;
 import Graphic.Batch;
-import Graphic.Batch2;
 import Graphic.Pixmap;
 
 import Core.Input;
@@ -53,7 +52,7 @@ import std;
 import Align;
 
 import Core.Vulkan.DescriptorBuffer;
-import ext.MetaProgramming;
+import ext.meta_programming;
 import ext.object_pool;
 import ext.array_queue;
 import ext.array_stack;
@@ -62,6 +61,10 @@ import Assets.Graphic.PostProcess;
 import Assets.Bundle;
 
 import MainTest;
+
+import ext.stack_trace;
+import ext.algo.string_parse;
+import ext.Event;
 
 Graphic::ImageAtlas loadTex(){
     using namespace Core;
@@ -108,18 +111,35 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 }
 
 
-int main_(){
-    using namespace std::literals;
+struct T1{
+    virtual ~T1() = default;
 
-    auto sv = "t\0abc"sv;
-    auto str = "t\0abc";
+    virtual void print() const{
+        std::println("T1");
+    }
+};
 
-    std::println("{}", sv);
-    std::println("{}", str);
+struct T2 : T1{
+    void print() const override{
+        std::println("T2");
+    }
+};
+
+void foo(){
+    ext::event_submitter<true> submitter_pmr{
+        ext::index_of<T1>(), ext::index_of<T2>()};
+
+    T2 t{};
+
+    submitter_pmr.submit<T1>(&t);
+}
+int main(){
+    foo();
+
     return 0;
 }
 
-int main(){
+int main_(){
     using namespace Core;
 
 	::Core::init();
@@ -139,7 +159,6 @@ int main(){
             rendererUi->initRenderPass(e);
         });
 
-    vulkanManager->rendererWorld = rendererWorld;
 
     vulkanManager->registerResizeCallback(
     [rendererWorld](auto& e){
@@ -152,6 +171,10 @@ int main(){
 
     vulkanManager->uiImageViewProv = [&]{
         return std::make_pair(rendererUi->mergeProcessor.images[0].getView().get(), rendererUi->mergeProcessor.images[1].getView().get());
+    };
+
+    vulkanManager->worldImageViewProv = [rendererWorld]{
+        return rendererWorld->getResult_NFAA().getView().get();
     };
 
     vulkanManager->initPipeline();

@@ -5,7 +5,7 @@
 export module ext.Heterogeneous;
 
 import std;
-import ext.MetaProgramming;
+import ext.meta_programming;
 
 export namespace ext::transparent{
 
@@ -99,10 +99,10 @@ export namespace ext::transparent{
 export namespace ext{
 	template <typename T, auto T::* ptr>
 		requires requires(T& t){
-			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename GetMemberPtrInfo<decltype(ptr)>::ValueType>;
+			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename mptr_info<decltype(ptr)>::value_type>;
 		}
 	struct MemberHasher{
-		using MemberType = typename GetMemberPtrInfo<decltype(ptr)>::ValueType;
+		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
 		using is_transparent = void;
 
 		std::size_t operator()(const T& val) const noexcept {
@@ -118,10 +118,10 @@ export namespace ext{
 
 	template <typename T, auto T::* ptr>
 		requires requires(T& t){
-			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename GetMemberPtrInfo<decltype(ptr)>::ValueType>;
+			requires ext::HasDefHasher<T> && ext::HasDefHasher<typename mptr_info<decltype(ptr)>::value_type>;
 		}
 	struct MemberEqualTo{
-		using MemberType = typename GetMemberPtrInfo<decltype(ptr)>::ValueType;
+		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
 		using is_transparent = void;
 
 		bool operator()(const T& a, const T& b) const noexcept{

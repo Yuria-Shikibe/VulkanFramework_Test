@@ -25,7 +25,7 @@ export namespace ext{
 
 		template <size_t Index = 0, bool Strict = false>
 			requires requires { requires Index < size;}
-		void run(const float spacing, const float delta, Concepts::Invokable<void()> auto&& func){
+		void run(const float spacing, const float delta, ext::Invokable<void()> auto&& func){
 			if(spacing == 0.0f){
 				func();
 				return;

@@ -91,7 +91,7 @@ export namespace Core::Vulkan{
 		template <VkCompareOp op = VK_COMPARE_OP_NEVER>
 		constexpr Util::Component CompareOp{
 				VkSamplerCreateInfo{
-					.compareEnable = op,
+					.compareEnable = static_cast<bool>(op),
 					.compareOp = op,
 				},
 				&VkSamplerCreateInfo::compareEnable, &VkSamplerCreateInfo::compareOp

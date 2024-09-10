@@ -88,8 +88,8 @@ namespace Geom{
 	// constexpr bool sync = false;
 
 	export
-	template <typename ItemTy, Concepts::Number T = float, bool sync = true, bool strict = false>
-		requires Concepts::Derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
+	template <typename ItemTy, ext::Number T = float, bool sync = true, bool strict = false>
+		requires ext::Derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
 	class QuadTree : MtxBase<sync, strict>{
 	public:
 		using Rect = Geom::Rect_Orthogonal<T>;
@@ -287,7 +287,7 @@ namespace Geom{
 			return currentSize == items.size();
 		}
 
-		template <Concepts::Invokable<void(QuadTree&)> Func>
+		template <ext::Invokable<void(QuadTree&)> Func>
 		void each(Func&& func){
 			func(*this);
 
@@ -353,8 +353,8 @@ namespace Geom{
 		 * @brief Notice that this may have side effects!
 		 */
 		template <
-			Concepts::InvokeNullable<void(const ItemTy&, ItemTy&)> Func = std::nullptr_t,
-			Concepts::InvokeNullable<bool(const ItemTy&, const ItemTy&)> Filter = std::nullptr_t>
+			ext::InvokeNullable<void(const ItemTy&, ItemTy&)> Func = std::nullptr_t,
+			ext::InvokeNullable<bool(const ItemTy&, const ItemTy&)> Filter = std::nullptr_t>
 		void intersectAll(const ItemTy& object, Func&& func = nullptr, Filter&& filter = nullptr) const{
 			if(!this->inbound(object)) return;
 
@@ -380,8 +380,8 @@ namespace Geom{
 		}
 
 		template <
-			Concepts::InvokeNullable<void(ItemTy&, ItemTy&)> Func = std::nullptr_t,
-			Concepts::InvokeNullable<bool(ItemTy&, const ItemTy&)> Filter = std::nullptr_t>
+			ext::InvokeNullable<void(ItemTy&, ItemTy&)> Func = std::nullptr_t,
+			ext::InvokeNullable<bool(ItemTy&, const ItemTy&)> Filter = std::nullptr_t>
 		void intersectAll(ItemTy& object, Func&& func = nullptr, Filter&& filter = nullptr) const{
 			if(!this->inbound(object)) return;
 
@@ -406,7 +406,7 @@ namespace Geom{
 			}
 		}
 
-		template <Concepts::Invokable<void(ItemTy&)> Func>
+		template <ext::Invokable<void(ItemTy&)> Func>
 		void intersect(const ItemTy& object, Func&& func){
 			if(!this->inbound(object)) return;
 
@@ -426,7 +426,7 @@ namespace Geom{
 		}
 
 
-		template <Concepts::Invokable<void(ItemTy&, const Rect&)> Func>
+		template <ext::Invokable<void(ItemTy&, const Rect&)> Func>
 		void intersectRect(const Rect& rect, Func&& func){
 			if(!this->inbound(rect)) return;
 
@@ -446,8 +446,8 @@ namespace Geom{
 		template <typename Region>
 			requires !std::same_as<Region, Rect>
 		void intersectRegion(const Region& region,
-			Concepts::Invokable<bool(const Rect&, const Region&)> auto&& boundCheck,
-			Concepts::Invokable<void(ItemTy&, const Region&)> auto&& func){
+			ext::Invokable<bool(const Rect&, const Region&)> auto&& boundCheck,
+			ext::Invokable<void(ItemTy&, const Region&)> auto&& func){
 			if(!boundCheck(boundary, region)) return;
 
 			// If this node has children, check if the rectangle overlaps with any rectangle in the children
@@ -463,7 +463,7 @@ namespace Geom{
 			}
 		}
 
-		void intersectPoint(const Vec2 point, Concepts::Invokable<void(ItemTy&)> auto&& func){
+		void intersectPoint(const Vec2 point, ext::Invokable<void(ItemTy&)> auto&& func){
 			if(!this->inbound(point)) return;
 
 			// If this node has children, check if the rectangle overlaps with any rectangle in the children
@@ -481,7 +481,7 @@ namespace Geom{
 			}
 		}
 
-		template <Concepts::Invokable<void(ItemTy*)> Pred>
+		template <ext::Invokable<void(ItemTy*)> Pred>
 		void within(const ItemTy& object, const T dst, Pred&& pred){
 			if(!this->withinBound(object, dst)) return;
 
@@ -498,7 +498,7 @@ namespace Geom{
 			}
 		}
 
-		template <Concepts::Invokable<void(ItemTy*)> Pred>
+		template <ext::Invokable<void(ItemTy*)> Pred>
 		bool intersectOnce(const ItemTy& object, Pred&& pred){
 			if(!this->inbound(object)) return false;
 

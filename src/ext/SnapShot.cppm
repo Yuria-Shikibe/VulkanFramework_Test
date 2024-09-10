@@ -2,72 +2,89 @@
 // Created by Matrix on 2024/6/14.
 //
 
-export module ext.SnapShot;
+export module ext.snap_shot;
 
 import std;
 
 export namespace ext{
+	/**
+	 * @brief provide a type for state resume or apply
+	 *
+	 *	cap - captured value
+	 *	snap - snapshot value
+	 *
+	 * @tparam T value type
+	 */
 	template <typename T>
 		requires (std::is_copy_assignable_v<T>)
-	struct SnapShot{
-		T cap{};
-		T snap{};
+	struct snap_shot{
+		static constexpr bool is_nothrow_copy_assignable = std::is_nothrow_copy_assignable_v<T>;
+		using value_type = T;
 
-		[[nodiscard]] SnapShot() requires (std::is_default_constructible_v<T>) = default;
+		T base{};
+		T temp{};
 
-		[[nodiscard]] explicit SnapShot(const T& ref) : cap{ref}, snap{ref}{}
+		[[nodiscard]] constexpr snap_shot() requires (std::is_default_constructible_v<T>) = default;
 
-		void resume() {
-			snap = cap;
+		[[nodiscard]] constexpr explicit snap_shot(const T& ref) : base{ref}, temp{ref}{}
+
+		constexpr void resume() noexcept(is_nothrow_copy_assignable) {
+			temp = base;
 		}
 
 		template <typename R>
-		void resumeProj(R T::* mptr) requires requires{
+		constexpr void resumeProj(R T::* mptr) requires requires{
 			requires std::is_copy_assignable_v<std::invoke_result_t<decltype(mptr), T&>>;
 		}{
-			std::invoke_r<R&>(mptr, snap) = std::invoke_r<const R&>(mptr, cap);
+			std::invoke_r<R&>(mptr, temp) = std::invoke_r<const R&>(mptr, base);
 		}
 
-		void apply() {
-			cap = snap;
+		constexpr void apply() noexcept(is_nothrow_copy_assignable) {
+			base = temp;
+		}
+
+		constexpr void apply() && noexcept(std::is_nothrow_move_assignable_v<T>) requires std::is_move_assignable_v<T> {
+			base = std::move(temp);
 		}
 
 		template <typename R>
-		void applyProj(R T::* mptr) requires requires{
+		constexpr void apply_proj(R T::* mptr) requires requires{
 			requires std::is_copy_assignable_v<std::invoke_result_t<decltype(mptr), T&>>;
 		}{
-			std::invoke_r<R&>(mptr, cap) = std::invoke_r<const R&>(mptr, snap);
+			std::invoke_r<R&>(mptr, base) = std::invoke_r<const R&>(mptr, temp);
 		}
 
-		void set(const T& val) {
-			cap = snap = val;
+		constexpr void set(const T& val) noexcept(is_nothrow_copy_assignable) {
+			base = temp = val;
 		}
 
-		SnapShot& operator=(const T& val){
-			SnapShot::set(val);
+		constexpr snap_shot& operator=(const T& val) noexcept(is_nothrow_copy_assignable) {
+			snap_shot::set(val);
 			return *this;
 		}
 
-		T* operator ->() noexcept{
-			return &cap;
+		constexpr T* operator ->() noexcept{
+			return &base;
 		}
 
-		const T* operator ->() const noexcept{
-			return &cap;
+		constexpr const T* operator ->() const noexcept{
+			return &base;
 		}
 
-		SnapShot(const SnapShot& other) = default;
+		constexpr snap_shot(const snap_shot& other) noexcept(is_nothrow_copy_assignable) = default;
 
-		SnapShot(SnapShot&& other) noexcept = default;
+		constexpr snap_shot(snap_shot&& other) noexcept = default;
 
-		SnapShot& operator=(const SnapShot& other) = default;
+		constexpr snap_shot& operator=(const snap_shot& other) noexcept(is_nothrow_copy_assignable) = default;
 
-		SnapShot& operator=(SnapShot&& other) noexcept = default;
+		constexpr snap_shot& operator=(snap_shot&& other) noexcept = default;
 
-		friend bool operator==(const SnapShot& lhs, const SnapShot& rhs) requires requires(const T& t){
+		constexpr friend bool operator==(const snap_shot& lhs, const snap_shot& rhs) noexcept(requires(const T& t){
+			{ t == t } noexcept;
+		}) requires requires(const T& t){
 			{ t == t } -> std::convertible_to<bool>;
 		}{
-			return lhs.cap == rhs.cap;
+			return lhs.base == rhs.base;
 		}
 	};
 }

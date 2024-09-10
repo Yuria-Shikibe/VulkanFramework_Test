@@ -5,7 +5,7 @@ module;
 export module Graphic.Renderer.World;
 
 export import Graphic.Renderer;
-export import Graphic.Batch2;
+export import Graphic.Batch;
 
 import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.DynamicRendering;
@@ -32,8 +32,7 @@ export namespace Graphic{
 	};
 
 	struct RendererWorld : BasicRenderer{
-		Batch2 batch{};
-		using Batch = decltype(batch);
+		Batch batch{};
 
 		//Pipeline Data
 		Core::Vulkan::DynamicRendering dynamicRendering{};
@@ -63,10 +62,8 @@ export namespace Graphic{
 
 
 		//Post Processors
-		//parallel
 		ComputePostProcessor gaussian{};
 		ComputePostProcessor ssao{};
-		//sync
 		ComputePostProcessor merge{};
 		ComputePostProcessor nfaa{};
 
@@ -163,6 +160,7 @@ export namespace Graphic{
 		void updateProjection(const Core::Vulkan::UniformProjectionBlock& data) const{
 			worldUniformBuffer.memory.loadData(data);
 		}
+
 		void updateCameraProperties(const CameraProperties& data) const{
 			cameraPropertiesUniformBuffer.memory.loadData(data);
 		}

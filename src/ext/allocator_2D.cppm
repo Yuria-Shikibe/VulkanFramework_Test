@@ -5,7 +5,7 @@ import Geom.Rect_Orthogonal;
 import std;
 
 export namespace ext {
-    class Allocator2D{
+    class allocator_2D{
         using T = std::uint32_t;
         using SizeType = Geom::Vector2D<T>;
         using PointType = Geom::Vector2D<T>;
@@ -73,7 +73,7 @@ export namespace ext {
         };
 
         struct Node{
-            Allocator2D* packer{};
+            allocator_2D* packer{};
             Node* parent{};
             std::array<std::unique_ptr<Node>, 3> subNodes{};
 
@@ -89,10 +89,10 @@ export namespace ext {
 
             [[nodiscard]] Node() = default;
 
-            [[nodiscard]] explicit Node(Allocator2D* packer) :
+            [[nodiscard]] explicit Node(allocator_2D* packer) :
                 packer{packer} {}
 
-            [[nodiscard]] Node(Allocator2D* packer, Node* parent, const Rect& bound) :
+            [[nodiscard]] Node(allocator_2D* packer, Node* parent, const Rect& bound) :
                 packer{packer},
                 parent{parent},
                 bound{bound}
@@ -237,7 +237,7 @@ export namespace ext {
         friend Node;
 
     public:
-        [[nodiscard]] explicit Allocator2D(const SizeType size) : size{size}, remainArea{size.area()} {
+        [[nodiscard]] explicit allocator_2D(const SizeType size) : size{size}, remainArea{size.area()} {
             rootNode->bound.setSize(size);
             rootNode->insertSelf(size);
         }
@@ -261,13 +261,13 @@ export namespace ext {
 
         [[nodiscard]] SizeType getSize() const noexcept{ return size; }
 
-        [[nodiscard]] T getRemainArea() const noexcept{ return remainArea; }
+        [[nodiscard]] T get_valid_area() const noexcept{ return remainArea; }
 
-        Allocator2D(const Allocator2D& other) = delete;
+        allocator_2D(const allocator_2D& other) = delete;
 
-        Allocator2D& operator=(const Allocator2D& other) = delete;
+        allocator_2D& operator=(const allocator_2D& other) = delete;
 
-        Allocator2D(Allocator2D&& other) noexcept
+        allocator_2D(allocator_2D&& other) noexcept
             : size{std::move(other.size)},
               remainArea{other.remainArea},
               nodes_XY{std::move(other.nodes_XY)},
@@ -277,7 +277,7 @@ export namespace ext {
             changePackerToThis();
         }
 
-        Allocator2D& operator=(Allocator2D&& other) noexcept{
+        allocator_2D& operator=(allocator_2D&& other) noexcept{
             if(this == &other) return *this;
             size = std::move(other.size);
             remainArea = other.remainArea;

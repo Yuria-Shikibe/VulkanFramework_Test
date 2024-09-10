@@ -1,65 +1,41 @@
 export module ext.RuntimeException;
 
-import StackTrace;
+import ext.stack_trace;
 import std;
 
 export namespace ext{
+
 	class RuntimeException : public std::exception{
 	public:
-		~RuntimeException() override = default;
+		~RuntimeException() override;
 
 		std::string data{};
 
-		explicit RuntimeException(const std::string& str, const std::source_location& location = std::source_location::current()){
-			std::ostringstream ss;
-
-			ss << str << '\n';
-			ss << "at: " << location.file_name() << '\n';
-			ss << "at: " << location.function_name() << '\n';
-			ss << "at: " << location.column() << '\n';
-
-			ext::getStackTraceBrief(ss);
-
-			data = std::move(ss).str();
-
-			RuntimeException::postProcess();
-		}
+		explicit RuntimeException(const std::string& str, const std::source_location& location = std::source_location::current());
 
 
-		[[nodiscard]] char const* what() const override {
-			return data.data();
-		}
+		[[nodiscard]] char const* what() const override;
 
-		virtual void postProcess() const{};
+		virtual void postProcess() const;;
 
-		RuntimeException() : RuntimeException("Crashed At...") {
-
-		}
+		RuntimeException();
 	};
 
-	class NullPointerException final : public RuntimeException{
+	class [[deprecated]] NullPointerException final : public RuntimeException{
 	public:
-		[[nodiscard]] explicit NullPointerException(const std::string& str)
-			: RuntimeException(str) {
-		}
+		[[nodiscard]] explicit NullPointerException(const std::string& str);
 
-		[[nodiscard]] NullPointerException() : NullPointerException("Null Pointer At...") {
-
-		}
+		[[nodiscard]] NullPointerException();
 	};
 
-	class IllegalArguments final : public RuntimeException {
+	class [[deprecated]] IllegalArguments final : public RuntimeException {
 	public:
-		[[nodiscard]] explicit IllegalArguments(const std::string& str)
-			: RuntimeException(str) {
-		}
+		[[nodiscard]] explicit IllegalArguments(const std::string& str);
 
-		[[nodiscard]] IllegalArguments() : IllegalArguments("Illegal Arguments At...") {
-
-		}
+		[[nodiscard]] IllegalArguments();
 	};
 
-	class ArrayIndexOutOfBound final : public RuntimeException {
+	class [[deprecated]] ArrayIndexOutOfBound final : public RuntimeException {
 	public:
 		[[nodiscard]] explicit ArrayIndexOutOfBound(const std::string& str)
 			: RuntimeException(str) {

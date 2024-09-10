@@ -263,7 +263,7 @@ namespace Core{
 			return files;
 		}
 
-		template <Concepts::Invokable<bool(const File&)> Pred>
+		template <ext::Invokable<bool(const File&)> Pred>
 		[[nodiscard]] std::vector<File> subs(Pred&& pred) const{
 			std::vector<File> files;
 			for(const auto& item : fs::directory_iterator(getPath())){
@@ -308,7 +308,7 @@ namespace Core{
 			}
 		}
 
-		template <Concepts::InvokeNullable<void(std::string&)> Consumer = std::nullptr_t>
+		template <ext::InvokeNullable<void(std::string&)> Consumer = std::nullptr_t>
 		[[nodiscard]] std::string readString_byLine(Consumer&& consumer = nullptr) const{
 			std::ifstream file_stream(getPath());
 

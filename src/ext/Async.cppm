@@ -11,7 +11,7 @@ export namespace ext {
 	 * \brief Uses this handler to post tasks to other threads, usually main thread, useful for GL functions which is main thread only
 	 */
 	struct TaskHandler {
-		std::future<void> operator()(Concepts::Invokable<void()> auto&& func) const {
+		std::future<void> operator()(ext::Invokable<void()> auto&& func) const {
 			std::packaged_task<void()> t{std::forward<decltype(func)>(func)};
 			auto f = t.get_future();
 			t();
@@ -31,7 +31,7 @@ export namespace ext {
 		}
 	};
 
-	template <typename T = void, Concepts::Derived<TaskHandler> Handler = TaskHandler>
+	template <typename T = void, ext::Derived<TaskHandler> Handler = TaskHandler>
 	class Task {
 	protected:
 		Handler* handler{nullptr};
@@ -54,7 +54,7 @@ export namespace ext {
 			this->handler = handler;
 		}
 
-		[[nodiscard]] std::future<void> postToHandler(Concepts::Invokable<void()> auto&& func) {
+		[[nodiscard]] std::future<void> postToHandler(ext::Invokable<void()> auto&& func) {
 			if(!deferred){
 				return handler->operator()(std::forward<decltype(func)>(func));
 			}else{
@@ -68,7 +68,7 @@ export namespace ext {
 		}
 	};
 
-	template <typename T = void, Concepts::Derived<TaskHandler> Handler = TaskHandler>
+	template <typename T = void, ext::Derived<TaskHandler> Handler = TaskHandler>
 	class ProgressTask : public Task<T, Handler>{
 	protected:
 		float taskProgress = 0;

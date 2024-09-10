@@ -17,7 +17,6 @@ export namespace Core{
 		void init(){
 			glfwInit();
 			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-			// glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		}
 
 		void terminate(){
@@ -34,7 +33,7 @@ export namespace Core{
 		};
 
 		ext::NamedEventManager eventManager{
-			ext::typeIndexOf<ResizeEvent>()
+			{ext::index_of<ResizeEvent>()}
 		};
 
 		[[nodiscard]] Window(){

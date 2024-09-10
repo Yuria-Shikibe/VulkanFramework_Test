@@ -243,17 +243,17 @@ export namespace Core::Ctrl{
 			registerList.registerBind(std::move(bind));
 		}
 
-		template <Concepts::Invokable<void()> Func>
+		template <ext::Invokable<void()> Func>
 		void registerBind(const int key, const int expectedState, const int expectedMode, Func&& func){
 			registerBind(InputBind{key, expectedState, expectedMode, std::forward<Func>(func)});
 		}
 
-		template <Concepts::Invokable<void()> Func>
+		template <ext::Invokable<void()> Func>
 		void registerBind(const int key, const int expectedState, Func&& func){
 			registerBind(InputBind{key, expectedState, std::forward<Func>(func)});
 		}
 
-		template <Concepts::Invokable<void()> Func1, Concepts::Invokable<void()> Func2>
+		template <ext::Invokable<void()> Func1, ext::Invokable<void()> Func2>
 		void registerBind(const int key, const int expectedMode, Func1&& onPress, Func2&& onRelease){
 			registerBind(InputBind{key, Ctrl::Act::Press, expectedMode, std::forward<Func1>(onPress)});
 			registerBind(InputBind{
@@ -261,21 +261,21 @@ export namespace Core::Ctrl{
 				});
 		}
 
-		template <Concepts::Invokable<void()> Func>
+		template <ext::Invokable<void()> Func>
 		void registerBind(std::initializer_list<std::pair<int, int>> pairs, Func&& func){
 			for(auto [key, expectedState] : pairs){
 				registerBind(InputBind{key, expectedState, std::forward<Func>(func)});
 			}
 		}
 
-		template <Concepts::Invokable<void()> Func>
+		template <ext::Invokable<void()> Func>
 		void registerBind(std::initializer_list<std::pair<int, int>> pairs, const int expectedMode, Func&& func){
 			for(auto [key, expectedState] : pairs){
 				registerBind(InputBind{key, expectedState, expectedMode, std::forward<Func>(func)});
 			}
 		}
 
-		template <Concepts::Invokable<void()> Func>
+		template <ext::Invokable<void()> Func>
 		void registerBind(std::initializer_list<std::tuple<int, int, int>> params, Func&& func){
 			for(auto [key, expectedState, expectedMode] : params){
 				registerBind(InputBind{key, expectedState, expectedMode, std::forward<Func>(func)});

@@ -6,7 +6,7 @@ export module ext.json;
 
 import std;
 import ext.Heterogeneous;
-import ext.MetaProgramming;
+import ext.meta_programming;
 
 namespace ext::json{
 	export class JsonValue;

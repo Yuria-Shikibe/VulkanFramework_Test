@@ -7,11 +7,11 @@ import Math;
 import std;
 
 export namespace Geom {
-	template <Concepts::Number T>
+	template <ext::Number T>
 	struct Vector3D {
 		T x = 0, y = 0, z = 0;
 
-		using PassType = Concepts::ParamPassType<Vector3D, sizeof(T) * 3>;
+		using PassType = ext::ParamPassType<Vector3D, sizeof(T) * 3>;
 
 		[[nodiscard]] static constexpr float len(const T x, const T y, const T z) {
 			return std::sqrtf(static_cast<float>(x * x + y * y + z * z));

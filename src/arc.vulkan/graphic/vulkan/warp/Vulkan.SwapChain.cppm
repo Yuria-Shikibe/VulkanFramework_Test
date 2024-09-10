@@ -17,7 +17,7 @@ import Core.Vulkan.Buffer.FrameBuffer;
 import std;
 
 export namespace Core::Vulkan{
-	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 2;
+	constexpr std::uint32_t MAX_FRAMES_IN_FLIGHT = 3;
 
 	class SwapChain{
 	public:

@@ -1,4 +1,4 @@
-export module ext.MetaProgramming;
+export module ext.meta_programming;
 
 import std;
 // import ext.RuntimeException;
@@ -34,10 +34,19 @@ namespace ext{
 
 	export
 	template <typename Dst>
-	struct to{
+	struct strict_to{
 		template <typename T>
 		constexpr Dst operator()(T&& src) const noexcept(noexcept(Dst{std::forward<T>(src)})){
 			static_assert(std::convertible_to<Dst, std::decay_t<T>>);
+			return Dst{std::forward<T>(src)};
+		}
+	};
+
+	export
+	template <typename Dst>
+	struct to{
+		template <typename T>
+		constexpr Dst operator()(T&& src) const noexcept(noexcept(Dst{std::forward<T>(src)})){
 			return Dst{std::forward<T>(src)};
 		}
 	};
@@ -106,15 +115,15 @@ namespace ext{
 
 export namespace ext{
 	template <typename SuperTuple, typename... Args>
-	constexpr decltype(auto) makeTuple_withDef(SuperTuple&& defaultArgs, Args&&... args){
+	constexpr decltype(auto) makeTuple_with_def(SuperTuple&& defaultArgs, Args&&... args){
 		return ext::makeTuple_withDef_impl(std::make_tuple(std::forward<Args>(args)...),
 		                                   std::forward<SuperTuple>(defaultArgs),
 		                                   std::make_index_sequence<std::tuple_size_v<std::decay_t<SuperTuple>>>());
 	}
 
 	template <typename SuperTuple, typename... Args>
-	constexpr decltype(auto) makeTuple_withDef(Args&&... args){
-		return ext::makeTuple_withDef(SuperTuple{}, std::forward<Args>(args)...);
+	constexpr decltype(auto) makeTuple_with_def(Args&&... args){
+		return ext::makeTuple_with_def(SuperTuple{}, std::forward<Args>(args)...);
 	}
 
 	/**
@@ -157,38 +166,34 @@ export namespace ext{
 	}
 
 	template <typename MemberPtr>
-	struct GetMemberPtrInfo;
+	struct mptr_info;
 
 	template <typename C, typename T>
-	struct GetMemberPtrInfo<T C::*>{
-		using ClassType = C;
-		using ValueType = T;
+	struct mptr_info<T C::*>{
+		using class_type = C;
+		using value_type = T;
 	};
 
 	template <typename C, typename T, typename ...Args>
-	struct GetMemberPtrInfo<T (C::*)(Args...)>{
-		using ClassType = C;
-		using ValueType = T;
-		using FuncArgs = std::tuple<Args...>;
+	struct mptr_info<T (C::*)(Args...)>{
+		using class_type = C;
+		using value_type = T;
+		using func_args = std::tuple<Args...>;
 	};
 
 	template <typename C, typename T>
-	struct GetMemberPtrInfo<T C::* const> : GetMemberPtrInfo<T C::*>{};
+	struct mptr_info<T C::* const> : mptr_info<T C::*>{};
 
 	template <typename C, typename T>
-	struct GetMemberPtrInfo<T C::* &> : GetMemberPtrInfo<T C::*>{};
+	struct mptr_info<T C::* &> : mptr_info<T C::*>{};
 
 	template <typename C, typename T>
-	struct GetMemberPtrInfo<T C::* &&> : GetMemberPtrInfo<T C::*>{};
+	struct mptr_info<T C::* &&> : mptr_info<T C::*>{};
 
 	template <typename C, typename T>
-	struct GetMemberPtrInfo<T C::* const&> : GetMemberPtrInfo<T C::*>{};
+	struct mptr_info<T C::* const&> : mptr_info<T C::*>{};
 
 
-	// template<auto mPtr>
-	// constexpr std::size_t offset_of = std::bit_cast<std::size_t>(&(static_cast<typename GetMemberPtrClass<decltype(mPtr)>::type*>(nullptr)->*mPtr));
-	//
-	// constexpr auto off = offset_of<&std::pair<int, int>::first>;
 
 	template <typename T>
 	concept HasDefHasher = requires(const T& t){

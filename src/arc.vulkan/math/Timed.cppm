@@ -57,7 +57,7 @@ export namespace Math{
 			return time / otherLifetime;
 		}
 
-		[[nodiscard]] float get(Concepts::Invokable<float(float)> auto&& interp) const{
+		[[nodiscard]] float get(ext::Invokable<float(float)> auto&& interp) const{
 			return interp(get());
 		}
 

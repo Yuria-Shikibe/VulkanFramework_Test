@@ -7,7 +7,7 @@ import Geom.Shape;
 
 
 export namespace Geom::Shape{
-	template <Concepts::Number T>
+	template <ext::Number T>
 	class Circle final : virtual public Shape<Circle<T>, T>{
 		T cX{ 0 };
 		T cY{ 0 };

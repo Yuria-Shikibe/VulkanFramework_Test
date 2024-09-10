@@ -106,7 +106,7 @@ export namespace Container {
 			this->height = height;
 		}
 
-		template <Concepts::Invokable<T(SizeType, SizeType)> Provider>
+		template <ext::Invokable<T(SizeType, SizeType)> Provider>
 		void construct(const SizeType width, const SizeType height, Provider&& prov) requires std::is_move_constructible_v<T>{
 			clear();
 
@@ -122,7 +122,7 @@ export namespace Container {
 			}
 		}
 
-		template <Concepts::Invokable<void(T&, SizeType, SizeType)> Func>
+		template <ext::Invokable<void(T&, SizeType, SizeType)> Func>
 		void each(Func&& func) {
 			for(SizeType x = 0; x < this->width; ++x) {
 				for(SizeType y = 0; y < this->height; ++y) {
@@ -131,7 +131,7 @@ export namespace Container {
 			}
 		}
 
-		template <Concepts::Invokable<void(T&)> Func>
+		template <ext::Invokable<void(T&)> Func>
 		void each(Func&& func) {
 			for(auto& element : items){
 				func(element);

@@ -30,7 +30,7 @@ namespace Graphic{
 
 
 	export struct SubpageData{
-		ext::Allocator2D allocator2D;
+		ext::allocator_2D allocator2D;
 		Core::Vulkan::Texture texture{};
 
 		struct AllocatedViewRegion : ImageViewRegion{

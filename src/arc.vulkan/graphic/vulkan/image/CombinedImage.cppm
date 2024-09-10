@@ -46,7 +46,7 @@ export namespace Core::Vulkan{
 		template <typename Fn>
 		void cmdClear(Fn fn, VkCommandBuffer commandBuffer,
 		              std::add_lvalue_reference_t<std::remove_pointer_t<std::tuple_element_t<
-			              3, typename Concepts::FunctionTraits<std::remove_pointer_t<Fn>>::ArgsTuple>>> clearValue,
+			              3, typename ext::FunctionTraits<std::remove_pointer_t<Fn>>::ArgsTuple>>> clearValue,
 		              VkAccessFlags srcAccessFlags,
 		              VkImageAspectFlags aspect,
 		              VkImageLayout layout
