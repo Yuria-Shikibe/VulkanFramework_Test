@@ -100,41 +100,38 @@ export namespace ext::transparent{
 }
 
 namespace ext{
-	/*template <typename T, auto T::* ptr>
-		requires requires(T& t){
-			requires ext::default_hashable<T> && ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>;
-		}
-	struct MemberHasher{
-		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
+	template <typename T, auto T::* ptr>
+		requires (ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>)
+	struct projection_hash{
+		using type = typename mptr_info<decltype(ptr)>::value_type;
 		using is_transparent = void;
 
-		std::size_t operator()(const T& val) const noexcept {
-			static constexpr std::hash<T> hasher{};
+		static constexpr std::hash<type> hasher{};
+
+		constexpr std::size_t operator()(const type& val) const noexcept {
 			return hasher(val);
 		}
 
-		std::size_t operator()(const MemberType& val) const noexcept {
-			static constexpr std::hash<MemberType> hasher{};
-			return hasher(val);
+		constexpr std::size_t operator()(const T& val) const noexcept {
+			return hasher(std::invoke(ptr, val));
 		}
 	};
 
 	template <typename T, typename V, V T::* ptr>
 		requires (ext::default_hashable<T> && ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>)
-	[[deprecated]] struct MemberEqualTo{
-		using MemberType = typename mptr_info<decltype(ptr)>::value_type;
+	[[deprecated]] struct projection_equal_to{
+		using type = typename mptr_info<decltype(ptr)>::value_type;
 		using is_transparent = void;
+		static constexpr std::equal_to<type> equal{};
 
-		bool operator()(const T& a, const T& b) const noexcept{
-			static constexpr std::equal_to<T> equal{};
-			return equal.operator()(a, b);
+		constexpr bool operator()(const T& a, const T& b) const noexcept{
+			return equal(std::invoke(ptr, a), std::invoke(ptr, b));
 		}
 
-		bool operator()(const MemberType& a, const T& b) const noexcept{
-			static constexpr std::equal_to<MemberType> equal{};
-			return equal(a, b.*ptr);
+		constexpr bool operator()(const type& a, const T& b) const noexcept{
+			return equal(a, std::invoke(ptr, b));
 		}
-	};*/
+	};
 
 	export
 	template <typename Alloc = std::allocator<std::string>>
@@ -163,6 +160,7 @@ namespace ext{
 	template <typename V, template<typename > typename Comp = std::less, typename Alloc = std::allocator<std::pair<const std::string, V>>>
 	using StringMap = std::map<std::string, V, transparent::string_comparator_of<Comp>, Alloc>;
 
+	//TODO allocator tparam
 	export
 	template <typename V>
 	class string_hash_map : public std::unordered_map<std::string, V, transparent::string_hasher, transparent::string_equal_to>{
@@ -227,8 +225,9 @@ namespace ext{
 	template <typename T, typename Deleter = std::default_delete<T>>
 	using UniquePtrHashMap = std::unordered_map<std::unique_ptr<T, Deleter>, transparent::unique_ptr_hasher<T>, transparent::unique_ptr_equal_to<T>>;
 
+	export
 	template <typename T, typename Deleter = std::default_delete<T>>
-	using UniquePtrSet = std::unordered_set<std::unique_ptr<T, Deleter>, transparent::unique_ptr_hasher<T>, transparent::unique_ptr_equal_to<T>>;
+	using unique_ptr_hash_set = std::unordered_set<std::unique_ptr<T, Deleter>, transparent::unique_ptr_hasher<T>, transparent::unique_ptr_equal_to<T>>;
 
 	template <typename V>
 	using StringMultiMap = std::unordered_multimap<std::string, V, transparent::string_hasher, transparent::string_equal_to>;

@@ -34,10 +34,7 @@ import Graphic.PostProcessor;
 import Graphic.ImageAtlas;
 import Graphic.Draw.Func;
 
-import Font;
-import Font.GlyphToRegion;
-import Font.TypeSettings;
-import Font.TypeSettings.Renderer;
+
 import ext.encode;
 
 import std;
@@ -56,22 +53,33 @@ import Assets.Bundle;
 import MainTest;
 
 import ext.stack_trace;
+import ext.views;
 import ext.algo.string_parse;
-import ext.Event;
+import ext.event;
 
 import Core.Vulkan.Vertex;
 
 import Graphic.Renderer.UI;
 import Graphic.Renderer.World;
 import Core.Global;
+import Core.Global.Graphic;
+import Core.Global.UI;
+import Core.UI.Root;
+
+import Font;
+import Font.GlyphToRegion;
+import Font.TypeSettings;
+import Font.TypeSettings.Renderer;
 
 
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
 Graphic::ImageAtlas loadTex(){
+    std::unordered_map<std::string, std::uint64_t> tags{};
+
     using namespace Core;
-    Graphic::ImageAtlas imageAtlas{vulkanManager->context};
+    Graphic::ImageAtlas imageAtlas{Global::vulkanManager->context};
 
     auto& mainPage = imageAtlas.registerPage("main");
     auto& fontPage = imageAtlas.registerPage("font");
@@ -114,46 +122,34 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 }
 
 
-struct T1{
-    virtual ~T1() = default;
+int main(){
+    using namespace std::literals;
+    auto v = "0.11.222.3333.44444.555555..6666666."sv |
+        ext::ranges::views::split_if([](char c){
+            return c == '.';
+        }) | std::views::transform(ext::to<std::string_view>{})/* | std::ranges::to<std::vector>()*/;
 
-    virtual void print() const{
-        std::println("T1");
+    for (auto && basic_string_view : v){
+        std::println("{}", basic_string_view);
     }
-};
-
-struct T2 : T1{
-    void print() const override{
-        std::println("T2");
-    }
-};
-
-void foo(){
-    ext::event_submitter<true> submitter_pmr{
-        ext::index_of<T1>(), ext::index_of<T2>()};
-
-    T2 t{};
-
-    submitter_pmr.submit<T1>(&t);
-}
-
-int main_(){
-    foo();
 
     return 0;
 }
 
-int main(){
+int main_(){
     using namespace Core;
 
-	::Core::init();
+	Global::init();
 
     Test::compileAllShaders();
 
-	Assets::load(vulkanManager->context);
+	Assets::load(Global::vulkanManager->context);
 
-    ::Core::postInit();
+    Global::postInit();
 
+    Test::initDefUI();
+
+    using namespace Core::Global;
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
     auto imageAtlas = loadTex();
@@ -180,10 +176,12 @@ int main(){
     timer.resetTime();
 
     while(!window->shouldClose()) {
-        timer.fetchApplicationTime();
+        timer.fetchTime();
         window->pollEvents();
         input->update(timer.globalDeltaTick());
         mainCamera->update(timer.globalDeltaTick());
+        Global::UI::root->layout();
+        Global::UI::root->update(timer.globalDeltaTick());
 
         if(mainCamera->checkChanged()){
             rendererWorld->updateProjection(Vulkan::UniformProjectionBlock{mainCamera->getWorldToScreen(), 0.f});
@@ -206,73 +204,76 @@ int main(){
             fps_count = 0;
         }
         fps_count++;
-        // Font::TypeSettings::draw(rendererUI->batch, fps, {300, 300});
+        // Font::TypeSettings::draw(UI::renderer->batch, fps, {300, 300});
+        Global::UI::renderer->resetScissors();
 
 
-
-         {
-            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
-            new(dataPtr) std::array{
+        if constexpr (false){
+            {
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
+                new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 0.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
-        }
+            }
 
-        {
-            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
-            new(dataPtr) std::array{
+            {
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+                new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 0.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 0.0f}},
                 };
-        }
+            }
 
-        {
-            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
-            new(dataPtr) std::array{
+            {
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
+                new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.5f, {imageIndex}, baseColor, {1.0f, 0.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.5f, {imageIndex}, baseColor, {0.0f, 0.0f}},
                 };
-        }
+            }
 
-        {
-            auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
-            new(dataPtr) std::array{
+            {
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+                new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 800}.add(off2), 0.5f, {imageIndex}, lightColor, {1.0f, 0.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{0  , 800}.add(off2), 0.5f, {imageIndex}, lightColor, {0.0f, 0.0f}},
                 };
+            }
+
+            rendererWorld->batch.consumeAll();
+            rendererWorld->doPostProcess();
         }
 
-        rendererWorld->batch.consumeAll();
-        rendererWorld->doPostProcess();
+        Global::UI::root->draw();
 
-        Font::TypeSettings::draw(rendererUI->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
+        // Font::TypeSettings::draw(Global::UI::renderer->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 
-        rendererUI->pushScissor({200, 200, 1200, 1200}, false);
-        rendererUI->blit();
+        // Global::UI::renderer->pushScissor({200, 200, 1200, 700}, false);
+        // Global::UI::renderer->blit();
 
-        Font::TypeSettings::draw(rendererUI->batch, layout, {100, 100});
+        // Font::TypeSettings::draw(Global::UI::renderer->batch, layout, {100, 100});
 
-        rendererUI->resetScissors();
-        rendererUI->blit();
 
-        Font::TypeSettings::draw(rendererUI->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
+        // Global::UI::renderer->blit();
 
-        rendererUI->batch.consumeAll();
-        rendererUI->blit();
+        Font::TypeSettings::draw(Global::UI::renderer->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
 
-        rendererWorld->doMerge();
+        Global::UI::renderer->batch.consumeAll();
+        Global::UI::renderer->blit();
+
+        vulkanManager->mergePresent();
+        Global::UI::renderer->clearMerged();
 
         vulkanManager->blitToScreen();
-
-        rendererUI->clearAll();
     }
 
 
@@ -287,7 +288,7 @@ int main(){
 
 	Assets::dispose();
 
-	terminate();
+	Core::Global::terminate();
 
 	return 0;//just for main func test swap...
 }

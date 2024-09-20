@@ -22,7 +22,7 @@ export namespace ext{
 		using value_type = T;
 
 		T base{};
-		T temp{};
+		T temp{}; //TODO should it be mutable?
 
 		[[nodiscard]] constexpr snap_shot() requires (std::is_default_constructible_v<T>) = default;
 
@@ -81,9 +81,7 @@ export namespace ext{
 
 		constexpr friend bool operator==(const snap_shot& lhs, const snap_shot& rhs) noexcept(requires(const T& t){
 			{ t == t } noexcept;
-		}) requires requires(const T& t){
-			{ t == t } -> std::convertible_to<bool>;
-		}{
+		}) requires (std::equality_comparable<T>){
 			return lhs.base == rhs.base;
 		}
 	};

@@ -12,7 +12,7 @@ export namespace ext{
 	class TaskQueue{
 	public:
 		using TaskTy = std::packaged_task<FuncTy>;
-		using RstTy = typename ext::FunctionTraits<FuncTy>::ReturnType;
+		using RstTy = typename ext::function_traits<FuncTy>::return_type;
 		using Future = std::future<RstTy>;
 
 	private:

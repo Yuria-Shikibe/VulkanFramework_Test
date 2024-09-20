@@ -5,10 +5,9 @@ project(vulkan
         LANGUAGES CXX C
 )
 
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 23)
-
-set(CMAKE_BUILD_PARALLEL_LEVEL 8)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 #find msvc dir, totally mess
 set(MSVC_DIR ${CMAKE_CXX_COMPILER})
@@ -56,8 +55,6 @@ else()
     add_compile_definitions(DEBUG_CHECK=0)
 endif()
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/${INCLUDES})
-
 # Source Files...
 file(GLOB_RECURSE SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.cpp
@@ -72,14 +69,14 @@ file(GLOB_RECURSE CURRENT_HEADERS
 
 # Modules...
 #
-file(GLOB_RECURSE FAST_MODULES
+file(GLOB_RECURSE modules_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/modules/*.ixx
     ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.cppm
     ${CMAKE_CURRENT_SOURCE_DIR}/${SRC_DIR}/*.ixx
 )
 
 message(STATUS "Building...")
 
-set(MODULE_DIR modules)
 
 # Build .exe
 add_executable(
@@ -87,12 +84,12 @@ add_executable(
         ${SOURCE_FILES}      #[[.cpp]]
         ${CURRENT_HEADERS}   #[[.h]]
         main.cpp
-#        ${MODULE_DIR}/std.compat.ixx
-
 )
 
-target_link_directories(
-    ${PROJECT_NAME} PRIVATE
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/${INCLUDES})
+
+target_link_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/${LIB_DIR}
 )
 
@@ -104,21 +101,13 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     shaderc_shared.lib
 )
 
-
-target_sources(${PROJECT_NAME}
-    PRIVATE
-    ${FAST_MODULES}      #[[Modules]]
-    ${MODULE_DIR}/std.ixx
+target_sources(${PROJECT_NAME} PRIVATE
+    FILE_SET modules_files_set TYPE CXX_MODULES FILES ${modules_files}
 )
 
 
 if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
 
-#    set(FILE_TO_DELETE "${EXE_DIR}/${PROJECT_NAME}.pdb")
-#    add_custom_command(TARGET ${PROJECT_NAME} PRE_BUILD
-#        COMMAND ${CMAKE_COMMAND} -E remove ${FILE_TO_DELETE}
-#        COMMENT "Deleting ${FILE_TO_DELETE}"
-#    )
 elseif(${CMAKE_BUILD_TYPE} STREQUAL "Release")
     message(STATUS "Copy Properties Setup")
 

@@ -7,6 +7,27 @@ export module ext.algo.string_parse;
 import std;
 
 namespace ext::algo{
+
+
+	export
+	template <std::size_t count, std::ranges::range Rng = std::string_view, typename SplitterTy, std::ranges::viewable_range TargetRng>
+	constexpr std::array<Rng, count> split_to(TargetRng&& rng, SplitterTy&& splitter){
+		std::array<Rng, count> rst{};
+
+		auto view = std::forward<TargetRng>(rng)
+			| std::views::split(std::forward<SplitterTy>(splitter))
+			| std::views::take(count)
+			| std::views::transform([]<typename T>(T&& subRange){
+				return Rng{std::ranges::begin(std::forward<T>(subRange)), std::ranges::end(std::forward<T>(subRange))};
+			});
+
+		std::ranges::move(view, rst.begin());
+
+		return rst;
+	}
+
+
+
 	export struct unwrap_result{
 		using layer_type = std::string_view;
 		using element_type = std::string_view::value_type;

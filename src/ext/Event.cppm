@@ -1,4 +1,4 @@
-export module ext.Event;
+export module ext.event;
 
 import std;
 import ext.concepts;
@@ -7,7 +7,7 @@ import ext.heterogeneous;
 
 //TODO delayed event submitter
 namespace ext {
-	export struct EventType {};
+	export struct event_type {};
 
 	export
 	template<typename T>
@@ -66,7 +66,7 @@ namespace ext {
 	public:
 		using event_registry::event_registry;
 
-		template <std::derived_from<EventType> T>
+		template <std::derived_from<event_type> T>
 			requires (std::is_final_v<T>)
 		void fire(const T& event) const{
 			checkRegister<T>();
@@ -78,7 +78,7 @@ namespace ext {
 			}
 		}
 
-		template <std::derived_from<EventType> T, typename... Args>
+		template <std::derived_from<event_type> T, typename... Args>
 			requires requires(Args&&... args){
 				requires std::is_final_v<T>;
 				T{std::forward<Args>(args)...};
@@ -89,9 +89,9 @@ namespace ext {
 	};
 
 	export
-	struct EventManager : BasicEventManager<std::vector>{
+	struct event_manager : BasicEventManager<std::vector>{
 		// using BasicEventManager<std::vector>::BasicEventManager;
-		template <std::derived_from<EventType> T, std::invocable<const T&> Func>
+		template <std::derived_from<event_type> T, std::invocable<const T&> Func>
 			requires std::is_final_v<T>
 		void on(Func&& func){
 			checkRegister<T>();
@@ -107,7 +107,7 @@ namespace ext {
 	struct NamedEventManager : BasicEventManager<string_hash_map, NamedEventManager>{
 		// using BasicEventManager<StringHashMap, NamedEventManager>::BasicEventManager;
 
-		template <std::derived_from<EventType> T, std::invocable<const T&> Func>
+		template <std::derived_from<event_type> T, std::invocable<const T&> Func>
 			requires std::is_final_v<T>
 		void on(const std::string_view name, Func&& func){
 			checkRegister<T>();
@@ -117,7 +117,7 @@ namespace ext {
 			});
 		}
 
-		template <std::derived_from<EventType> T>
+		template <std::derived_from<event_type> T>
 			requires std::is_final_v<T>
 		std::optional<FuncType> erase(const std::string_view name){
 			checkRegister<T>();
@@ -144,8 +144,8 @@ namespace ext {
 	 * @tparam maxsize How Many Items This Enum Contains
 	 */
 	export
-	template <ext::Enum T, std::underlying_type_t<T> maxsize>
-	class SignalManager {
+	template <ext::enum_type T, std::underlying_type_t<T> maxsize>
+	class signal_manager {
 		std::array<std::vector<std::function<void()>>, maxsize> events{};
 
 	public:
@@ -196,7 +196,7 @@ namespace ext {
 
 
 	export
-	using CycleSignalManager = SignalManager<CycleSignalState, 2>;
+	using CycleSignalManager = signal_manager<CycleSignalState, 2>;
 
 	export
 	template <bool allow_pmr = false>

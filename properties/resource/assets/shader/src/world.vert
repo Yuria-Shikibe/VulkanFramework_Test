@@ -30,7 +30,7 @@ layout(set = 0, binding = 0) uniform UBO {
 } ubo;
 
 void main() {
-    gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z, 1.0);
+    gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z / 500, 1.0);
     baseColor = mod(inColor, 10.f);
     lightColor = inColor / LightColorRange;
 

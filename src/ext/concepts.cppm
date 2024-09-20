@@ -2,6 +2,8 @@ export module ext.concepts;
 
 import std;
 
+export import ext.meta_programming;
+
 namespace ext {
 
 	/**
@@ -18,53 +20,6 @@ namespace ext {
 		using type = T;
 	};
 
-	export
-	template<typename T>
-	struct FunctionTraits;
-
-	export
-	template<typename Ret, typename... Args>
-	struct FunctionTraits<Ret(Args...)>{
-		using ReturnType = Ret;
-		using ArgsTuple = std::tuple<Args...>;
-		static constexpr std::size_t argsArity = sizeof...(Args);
-
-		template <typename Func>
-		static constexpr bool isInvocable = std::is_invocable_r_v<Ret, Func, Args...>;
-
-		template <typename Func>
-		static constexpr bool invocableAs_v() {
-			return std::is_invocable_r_v<Ret, Func, Args...>;
-		}
-
-		template <typename Func>
-		static constexpr bool invocableVoidAs_v() {
-			return std::is_invocable_v<Func, Args...>;
-		}
-
-		template <typename Func>
-		static constexpr bool isReuglarOf = std::regular_invocable<Func, Args...>;
-	};
-
-#define Variant(ext) export template<typename Ret, typename... Args> struct FunctionTraits<Ret(Args...) ext> : FunctionTraits<Ret(Args...)>{};
-	Variant(&);
-	Variant(&&);
-	Variant(const);
-	Variant(const &);
-	Variant(noexcept);
-	Variant(& noexcept);
-	Variant(&& noexcept);
-	Variant(const noexcept);
-	Variant(const& noexcept);
-
-	export
-	template <typename FuncType, std::size_t N>
-	struct argAt{
-		using Trait = FunctionTraits<FuncType>;
-		static_assert(N < Trait::argsArity, "error: invalid parameter index.");
-		using type = std::tuple_element_t<N, typename Trait::ArgsTuple>;
-	};
-
 	/**
 	 * \brief Decide whether to use reference or value version of the given of the given template classes
 	 * \tparam T Value Type
@@ -76,10 +31,7 @@ namespace ext {
 	>::type;
 
     export template <typename T>
-    concept Number = std::is_arithmetic_v<T>;
-
-    export template <typename T>
-    concept NumberSingle = std::is_arithmetic_v<T> && sizeof(T) <= 4;
+    concept number = std::is_arithmetic_v<T>;
 
     export template <class DerivedT, class Base>
     concept Derived = std::derived_from<DerivedT, Base>;
@@ -91,13 +43,10 @@ namespace ext {
 	concept DefConstructable = std::is_default_constructible_v<T>;
 
 	export template <typename T, typename functype>
-	concept Invokable = FunctionTraits<functype>::template isInvocable<T>;
+	concept Invokable = function_traits<functype>::template is_invocable<T>;
 
 	export template <typename T, typename functype>
-	concept InvokableRegular = FunctionTraits<functype>::template isInvocable<T> && FunctionTraits<functype>::template isReuglarOf<T>;
-
-	export template <typename T, typename functype>
-	concept InvokableVoid = FunctionTraits<functype>::template invocableVoidAs_v<T>();
+	concept InvokableVoid = function_traits<functype>::template invocable_as_v<T>();
 
 	export template <typename T, typename functype>
 	concept InvokeNullable = std::same_as<std::nullptr_t, T> || Invokable<T, functype>;
@@ -106,16 +55,16 @@ namespace ext {
 	concept InvokableFunc = std::is_convertible_v<T, std::function<functype>>;
 
 	export template <typename T>
-	concept Enum = std::is_enum_v<T>;
+	concept enum_type = std::is_enum_v<T>;
 
 	export template <typename T>
-	concept NonNegative = std::is_unsigned_v<T>;
+	concept non_negative = std::is_unsigned_v<T>;
 
 	export template <typename T>
-	concept Signed = !std::is_unsigned_v<T> && Number<T>;
+	concept signed_number = !std::is_unsigned_v<T> && number<T>;
 
 	export template <typename T, typename ItemType = std::nullptr_t>
-	concept Iterable = requires{
+	concept range_of = requires{
 		requires std::ranges::range<T>;
 		requires std::same_as<ItemType, std::nullptr_t> || std::same_as<std::ranges::range_value_t<T>, ItemType>;
 	};
@@ -144,10 +93,4 @@ namespace ext {
     concept complete_type = requires{
         sizeof(T);
     };
-
-	export template <typename T, typename Type>
-	concept Iterator = requires(T t){
-		{ t.operator++() } -> std::convertible_to<T>;
-		{ t.operator*() } -> std::convertible_to<Type>;
-	};
 }

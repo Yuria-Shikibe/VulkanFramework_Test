@@ -79,7 +79,7 @@ export namespace ext{
 
 		std::vector<T> rawData{};
 
-		template <ext::Iterable<RepresentType> ParentRange>
+		template <ext::range_of<RepresentType> ParentRange>
 		std::pair<TreeNode*, decltype(std::declval<ParentRange>().begin())>
 			findLastMatchNode(ParentRange&& elemParents){
 			auto currentDepth = elemParents.begin();
@@ -105,7 +105,7 @@ export namespace ext{
 		}
 
 
-		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
+		template <ext::range_of<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		void build(Func&& insertPred){
 			initTree();
 
@@ -115,7 +115,7 @@ export namespace ext{
 		}
 
 
-		template <bool addToRaw = true, ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange
+		template <bool addToRaw = true, ext::range_of<RepresentType> ParentRange, ext::Invokable<ParentRange
 			(const T&)> Func>
 		void insert(auto&& element, Func&& insertPred) requires std::convertible_to<decltype(element), T>{
 			ParentRange&& elemParents = insertPred(element);
@@ -135,7 +135,7 @@ export namespace ext{
 		}
 
 
-		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
+		template <ext::range_of<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		bool erase(const T& element, Func&& insertPred){
 			if(std::erase(rawData, element)){
 				ParentRange&& elemParents = insertPred(element);
@@ -151,7 +151,7 @@ export namespace ext{
 			return false;
 		}
 
-		template <ext::Iterable<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
+		template <ext::range_of<RepresentType> ParentRange, ext::Invokable<ParentRange(const T&)> Func>
 		TreeNode* find(const T& element, Func&& insertPred){
 			ParentRange&& elemParents = insertPred(element);
 

@@ -50,12 +50,6 @@ namespace ext{
 
 			std::scoped_lock lk{mutex};
 			valid_pointers.push(p);
-
-#if DEBUG_CHECK
-			if(valid_pointers.size() > count){
-				throw std::overflow_error("pool_page::store: pointers overflow");
-			}
-#endif
 		}
 
 		/**
@@ -112,6 +106,12 @@ namespace ext{
 	};
 
 	export
+	/**
+	 * @brief a really simple object pool
+	 * @tparam T type
+	 * @tparam PageSize maximum objects a page can contain
+	 * @tparam Alloc allocator type ONLY SUPPORTS DEFAULT ALLOCATOR NOW
+	 */
 	template <typename T, std::size_t PageSize = 1000, typename Alloc = std::allocator<T>>
 	struct object_pool{
 		using value_type = T;

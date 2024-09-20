@@ -1,9 +1,56 @@
 export module ext.meta_programming;
 
 import std;
-// import ext.RuntimeException;
 
 namespace ext{
+
+	export
+	template<typename T>
+	struct function_traits;
+
+	export
+	template<typename Ret, typename... Args>
+	struct function_traits<Ret(Args...)>{
+		using return_type = Ret;
+		using args_type = std::tuple<Args...>;
+		static constexpr std::size_t args_count = sizeof...(Args);
+		static constexpr bool is_single = sizeof...(Args) == 1;
+
+		template <typename Func>
+		static constexpr bool is_invocable = std::is_invocable_r_v<Ret, Func, Args...>;
+
+		template <typename Func>
+		static constexpr bool invocable_as_r_v() {
+			return std::is_invocable_r_v<Ret, Func, Args...>;
+		}
+
+		template <typename Func>
+		static constexpr bool invocable_as_v() {
+			return std::is_invocable_v<Func, Args...>;
+		}
+	};
+
+#define Variant(ext) export template<typename Ret, typename... Args> struct function_traits<Ret(Args...) ext> : function_traits<Ret(Args...)>{};
+	Variant(&);
+	Variant(&&);
+	Variant(const);
+	Variant(const &);
+	Variant(noexcept);
+	Variant(& noexcept);
+	Variant(&& noexcept);
+	Variant(const noexcept);
+	Variant(const& noexcept);
+
+	export
+	template <std::size_t N, typename FuncType>
+	struct function_arg_at{
+		using trait = function_traits<FuncType>;
+		static_assert(N < trait::args_count, "error: invalid parameter index.");
+		using type = std::tuple_element_t<N, typename trait::args_type>;
+	};
+
+
+
 	template <std::size_t I, std::size_t size, typename ArgTuple, typename DefTuple>
 	constexpr decltype(auto) getWithDef(ArgTuple&& argTuple, DefTuple&& defTuple){
 		if constexpr(I < size){

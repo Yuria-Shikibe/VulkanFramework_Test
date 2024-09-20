@@ -20,5 +20,6 @@ void main() {
     vec4 baseDstColor = imageLoad(outputImageBase, pos);
     //TODO
     imageStore(outputImageBase, pos, blend2(baseSrcColor, baseDstColor));
+//    imageStore(outputImageBase, pos, vec4(1.));
 //    imageStore(outputImageBase, pos, baseSrcColor);
 }

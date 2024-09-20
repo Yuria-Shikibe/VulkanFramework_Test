@@ -1,15 +1,35 @@
-//
-// Created by Matrix on 2024/4/20.
-//
+module;
+
+// #include <type_traits>
 
 export module ext.algo;
 import ext.concepts;
 import std;
 
+
 namespace ext::algo{
 	export
+	template <std::input_iterator It, std::sentinel_for<It> Se, typename T, std::indirectly_unary_invocable<It> Proj = std::identity, typename Func = std::plus<>>
+		requires requires(Func func, T v, It it, Proj proj){
+			{ std::invoke(func, std::move(v), std::invoke(proj, it))} -> std::convertible_to<T>;
+		}
+	constexpr T accumulate(It it, Se se, T initial, Func func, Proj proj = {}){
+		for(; it != se; ++it){
+			initial = std::invoke(func, std::move(initial), std::invoke(proj, it));
+		}
+
+		return initial;
+	}
+
+	export
+	template <std::ranges::input_range Rng, typename T, typename Proj = std::identity, typename Func = std::plus<>>
+	constexpr T accumulate(Rng&& se, T initial, Func func, Proj proj = {}){
+		return ext::algo::accumulate(std::ranges::begin(se), std::ranges::end(se), initial, func, proj);
+	}
+
+	export
 	template <typename Range>
-		requires ext::Iterable<Range>
+		requires ext::range_of<Range>
 	auto partBy(Range&& range, ext::Invokable<bool(const std::ranges::range_value_t<Range>&)> auto&& pred){
 		return std::make_pair(range | std::ranges::views::filter(pred),
 			range | std::ranges::views::filter(std::not_fn(pred)));
@@ -239,4 +259,5 @@ namespace ext::algo{
 				replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj), std::ranges::end(range));
 		return oldSize - range.size();
 	}
+
 }
