@@ -6,11 +6,11 @@ import SinTable;
 import ext.concepts;
 
 export namespace Math {
-	constexpr int SIGNS[2]     = { -1, 1 };
-	constexpr int ZERO_ONE[2]  = { 0, 1 };
-	constexpr bool BOOLEANS[2] = { true, false };
+	constexpr std::array<int, 2> SIGNS{ -1, 1 };
+	constexpr std::array<int, 2> ZERO_ONE{ 0, 1 };
+	constexpr std::array<bool, 2> BOOLEANS{ true, false };
 
-	constexpr float FLOAT_ROUNDING_ERROR = 0.000001f;
+	constexpr double FLOATING_ROUNDING_ERROR = 0.000001;
 	constexpr float PI                   = std::numbers::pi_v<float>;
 	// ReSharper disable once CppInconsistentNaming
 	constexpr float pi        = PI, HALF_PI = PI / 2.0f;
@@ -500,7 +500,7 @@ export namespace Math {
 	template <typename T>
 		requires std::is_integral_v<T>
 	constexpr T round(const float value) noexcept {
-		return static_cast<T>(std::round(value) + FLOAT_ROUNDING_ERROR);
+		return static_cast<T>(std::round(value) + FLOATING_ROUNDING_ERROR);
 	}
 
 	constexpr int floor(const int value, const int step) noexcept {
@@ -530,7 +530,7 @@ export namespace Math {
 	 * @param value N/A
 	 * @param tolerance represent an upper bound below which the value is considered zero.
 	 */
-	bool zero(const float value, const float tolerance = FLOAT_ROUNDING_ERROR) noexcept {
+	bool zero(const float value, const float tolerance = FLOATING_ROUNDING_ERROR) noexcept {
 		return abs(value) <= tolerance;
 	}
 
@@ -540,7 +540,7 @@ export namespace Math {
 	 * @param b the second value.
 	 */
 	bool equal(const float a, const float b) noexcept {
-		return std::abs(a - b) <= FLOAT_ROUNDING_ERROR;
+		return std::abs(a - b) <= FLOATING_ROUNDING_ERROR;
 	}
 
 	/**

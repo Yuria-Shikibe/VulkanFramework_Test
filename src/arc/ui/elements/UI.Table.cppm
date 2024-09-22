@@ -10,6 +10,9 @@ export import Core.UI.Cell;
 import std;
 import ext.algo;
 import ext.views;
+import ext.meta_programming;
+
+import Core.UI.Test;
 
 namespace Core::UI{
 	struct TableCell : CellAdaptor<MasteringCell>{
@@ -25,17 +28,218 @@ namespace Core::UI{
 	};
 
 
-	struct RowLayoutInfo{
-		StatedLength height{0, LengthDependency::none};
-		std::vector<StatedLength> elemWidth{};
+	class RowInfo{
+	public:
+		// Geom::Vec2 size{};
+		std::vector<StatedSize> sizeData{};
+	};
 
-		[[nodiscard]] float getRowWidth() const noexcept{
-			return ext::algo::accumulate(elemWidth, 0.0f, {}, &StatedLength::val);
+	class TableLayoutInfo{
+		std::size_t maxColumn_{};
+		std::vector<StatedLength> maxSizes{};
+
+	public:
+		using CellType = TableCell;
+
+		std::vector<RowInfo> rowInfos{};
+
+		[[nodiscard]] TableLayoutInfo() = default;
+
+		[[nodiscard]] TableLayoutInfo(const std::size_t maxColumn, const std::size_t maxRow)
+			: maxColumn_{maxColumn}, rowInfos(maxRow){
+			maxSizes.resize(maxColumn + maxRow);
+		}
+
+		[[nodiscard]] constexpr std::size_t maxRow() const noexcept{
+			return maxSizes.size() - maxColumn_;
+		}
+
+		[[nodiscard]] constexpr std::size_t maxColumn() const noexcept{
+			return maxColumn_;
+		}
+
+		[[nodiscard]] constexpr auto& atColumn(const std::size_t column) noexcept{
+			return maxSizes[column];
+		}
+
+		[[nodiscard]] constexpr auto& atRow(const std::size_t row) noexcept{
+			return maxSizes[maxColumn_ + row];
+		}
+
+		[[nodiscard]] constexpr auto& atColumn(const std::size_t column) const noexcept{
+			return maxSizes[column];
+		}
+
+		[[nodiscard]] constexpr auto& atRow(const std::size_t row) const noexcept{
+			return maxSizes[maxColumn_ + row];
+		}
+
+		[[nodiscard]] constexpr Geom::Vec2 sizeAt(const std::size_t column, const std::size_t row) const noexcept{
+			return {atColumn(column).val, atRow(row).val};
+		}
+
+		[[nodiscard]] constexpr auto& data() const noexcept{
+			return maxSizes;
+		}
+
+		constexpr std::pair<StatedLength&, StatedLength&> at(const std::size_t column, const std::size_t row) noexcept{
+			return {(atColumn(column)), atRow(row)};
+		}
+
+		// template <std::derived_from<TableCell> T>
+		void preRegisterAcquiredSize(const std::vector<CellType>& cells){
+			auto zip =
+				std::views::zip(
+					rowInfos | std::views::enumerate,
+					cells | ext::views::part_if(&TableCell::endRow)
+				);
+			//pre register acquire state
+
+			 for (const std::tuple<std::tuple<long long, RowInfo&>, std::ranges::subrange<std::vector<CellType>::const_iterator>>& tuple : zip){
+			 	const auto& [row, rowInfo, rowCells] = ext::flat_tuple<false>(tuple);
+			 	rowInfo.sizeData.resize(rowCells.size());
+
+			 	for (const auto& [column, cell] : rowCells | std::views::enumerate){
+			 		auto acquiredSize = cell.cell.size;
+
+			 		const bool xExternal = acquiredSize.x.external();
+			 		const bool yExternal = acquiredSize.y.external();
+
+			 		if(xExternal || yExternal){
+			 			auto usedSize = acquiredSize.cropMasterRatio();
+			 			//set basic size
+						cell.element->resize_unchecked(usedSize.getConcreteSize());
+
+					    const auto [ax, ay] = cell.element->requestSpace(usedSize.x.mastering(), usedSize.y.mastering());
+			 			if(xExternal)acquiredSize.x.setConcreteSize(ax);
+			 			if(yExternal)acquiredSize.x.setConcreteSize(ay);
+			 		}
+
+			 		acquiredSize = acquiredSize.cropMasterRatio();
+
+			 		rowInfo.sizeData[column] = acquiredSize;
+			 		const auto [w, h] = acquiredSize.getConcreteSize();
+			 		const auto [c, r] = at(column, row);
+			 		c.val = std::max(c.val, w);
+			 		c.promoteIndependence(acquiredSize.x.dep);
+
+			 		r.val = std::max(r.val, h);
+			 		r.promoteIndependence(acquiredSize.y.dep);
+			 	}
+			 }
+		}
+
+		[[nodiscard]] Geom::USize2 getDependencyCount() const noexcept{
+			Geom::USize2 dependencyCount{};
+			for (const auto & [row, rowInfo] : rowInfos | std::views::enumerate){
+				bool lineHeightDependent = false;
+				std::uint32_t rowDependency{};
+				for (const auto& [column, size] : rowInfo.sizeData | std::views::enumerate){
+					lineHeightDependent |= !size.y.mastering();
+
+					if(!size.x.mastering() && !atColumn(column).mastering()){
+						++rowDependency;
+					}
+
+				}
+
+				lineHeightDependent &= !atRow(row).mastering();
+
+				dependencyCount.maxX(rowDependency);
+				dependencyCount.y += static_cast<std::uint32_t>(lineHeightDependent);
+			}
+
+			return dependencyCount;
+		}
+
+		[[nodiscard]] constexpr Geom::Vec2 getCapturedSize() const noexcept{
+			Geom::Vec2 capturedSize{
+				ext::algo::accumulate(maxSizes.begin(), maxSizes.begin() + maxColumn_, 0.f, {}, &StatedLength::val),
+				ext::algo::accumulate(maxSizes.begin() + maxColumn_, maxSizes.end(), 0.f, {}, &StatedLength::val),
+			};
+
+			return capturedSize;
+		}
+
+		constexpr void alignWith(const Geom::Vec2 unitSize) noexcept{
+			for (const auto& [row, info] : rowInfos | std::views::enumerate){
+				auto& r = atRow(row);
+				const float lineHeight = r.mastering() ? r.val : unitSize.y;
+
+				for (const auto& [column, elementSize] : info.sizeData | std::views::enumerate){
+					auto& c = atColumn(column);
+
+					const Geom::Vec2 recommendedSize{c.mastering() ? c.val : unitSize.x, lineHeight};
+					elementSize.trySetSlavedSize(recommendedSize);
+
+					const Geom::Vec2 maxSize{
+						elementSize.x.mastering() ? elementSize.x.val : recommendedSize.x,
+						elementSize.y.mastering() ? elementSize.y.val : recommendedSize.y
+					};
+
+					c.val = std::max(c.val, maxSize.x);
+					r.val = std::max(r.val, maxSize.y);
+				}
+			}
+		}
+
+ 		/**
+		 * @brief arrange the cells to its initial position and apply its ratio
+		 * @param cells cells to apply
+		 * @return captured size
+		 */
+		[[nodiscard]] constexpr Geom::Vec2 arrange(std::vector<CellType>& cells) const noexcept{
+			//apply size & position
+			float maxX{};
+			Geom::Vec2 offset{};
+
+			auto zip =
+				std::views::zip(
+					rowInfos | std::views::enumerate,
+					cells | ext::views::part_if(&TableCell::endRow)
+				)
+				| std::views::transform(ext::tuple_flatter<false>{});
+
+			for(const auto& [row, rowInfo, rowCells] : zip){
+				float lineHeight{};
+
+				for (const auto& [column, cell] : rowCells | std::views::enumerate){
+					auto size = rowInfo.sizeData[column];
+
+					const Geom::Vec2 curMaxSize = sizeAt(column, row);
+
+					//TODO post(after ratio) apply the size?
+					if(size.x.isFromRatio())size.x.val = cell.cell.size.x.val;
+					else if(size.y.isFromRatio())size.y.val = cell.cell.size.y.val;
+
+					size.applyRatio(curMaxSize);
+
+					auto rawSize = size.getRawSize();
+					if(!size.y.mastering()){
+						rawSize.y = curMaxSize.y;
+					}
+
+					cell.cell.allocate({Geom::FromExtent, Util::flipY(offset, 0, rawSize.y), rawSize});
+					cell.cell.applyBoundToElement(cell.element);
+					//TODO allocated bound align to the cell
+
+					offset.x += curMaxSize.x;
+					lineHeight = std::max(lineHeight, cell.cell.allocatedBound.getHeight());
+				}
+
+				maxX = std::max(maxX, offset.x);
+				offset.x = 0;
+				offset.y += lineHeight;
+			}
+
+			offset.x = maxX;
+			return offset;
 		}
 	};
 
 	export
 	struct Table : UniversalGroup<MasteringCell, TableCell>{
+		Align::Pos align = Align::Pos::center;
 		std::vector<std::uint32_t> grid{};
 
 		auto& endRow(){
@@ -44,7 +248,7 @@ namespace Core::UI{
 			return *this;
 		}
 
-		[[nodiscard]] Table(){
+		[[nodiscard]] Table() : UniversalGroup{"Table"}{
 			layoutState.ignoreChildren();
 			interactivity = Interactivity::childrenOnly;
 		}
@@ -60,32 +264,36 @@ namespace Core::UI{
 			grid = Util::countRowAndColumn_toVector(cells, &TableCell::endRow);
 			if(grid.empty())return;
 
-			auto size = property.getValidSize();
+			TableLayoutInfo layoutInfo{std::ranges::max(grid), grid.size()};
+			layoutInfo.preRegisterAcquiredSize(cells);
 
-			const bool endState = std::exchange(cells.back().endRow, true);
+			//Get dependencies
+			const auto dependencyCount = layoutInfo.getDependencyCount();
+			const auto capturedSize_initial = layoutInfo.getCapturedSize();
 
-			std::vector<RowLayoutInfo> infos(grid.size());
+			const auto validSize = property.getValidSize();
+			const auto remainArea = validSize - capturedSize_initial;
+			const auto slavedUnitSize = (remainArea / dependencyCount.as<float>()).infTo0();
 
-			auto zip = std::views::zip(infos, cells | ext::views::split_if(&TableCell::endRow));
+			layoutInfo.alignWith(slavedUnitSize);
 
-			for (const auto& [row, rowData] : zip | std::views::enumerate){
-				auto& [rowInfo, rowCells] = rowData;
-				rowInfo.elemWidth.resize(rowCells.size());
+			//apply size & position
+			const auto capturedSize_full = layoutInfo.arrange(cells);
+			const auto alignOffset = Align::getOffsetOf(align, capturedSize_full, Rect{property.getValidSize()});
 
-				for (const auto & [column, cell] : rowCells | std::views::enumerate){
-					Geom::Point2U curPos{static_cast<std::uint32_t>(column), static_cast<std::uint32_t>(row)};
-					auto acquiredSize = cell.cell.size.crop();
+			for (auto& cell : cells){
+				cell.cell.allocatedBound.src += alignOffset;
+				cell.cell.allocatedBound.src.y += capturedSize_full.y;
 
-					rowInfo.elemWidth[column] = acquiredSize.x;
-					if(acquiredSize.y.dep <= rowInfo.height.dep){
-						rowInfo.height.dep = acquiredSize.y.dep;
-						rowInfo.height.val = std::max(rowInfo.height.val, acquiredSize.y.val);
-					}
-				}
+				cell.cell.applyPosToElement(cell.element, absPos());
+				cell.element->layout();
 			}
-
-			cells.back().endRow = endState;
 		}
 
+		void drawMain() const override{
+			UniversalGroup::drawMain();
+
+			Test::drawCells(*this);
+		}
 	};
 }

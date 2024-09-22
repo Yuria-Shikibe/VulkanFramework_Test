@@ -31,6 +31,7 @@ export namespace Graphic{
 
 
 namespace Core::UI{
+	constexpr bool NoClipWhenDraw = true;
 	export using Rect = Geom::Rect_Orthogonal<float>;
 	export struct Element;
 	export struct ElementDrawer{
@@ -212,7 +213,9 @@ namespace Core::UI{
 		}
 
 		void resize_unchecked(const Geom::Vec2 size){
-			property.clampedSize.setSize_unchecked(size);
+			auto last = std::exchange(layoutState.acceptMask_inherent, SpreadDirection::none);
+			resize(size);
+			layoutState.acceptMask_inherent = last;
 		}
 
 		[[nodiscard]] constexpr Geom::Vec2 getSize() const noexcept{
@@ -315,7 +318,7 @@ namespace Core::UI{
 			layoutState.checkChanged();
 		}
 
-		[[nodiscard]] virtual Geom::Vec2 requestSpace() const noexcept{
+		[[nodiscard]] virtual Geom::Vec2 requestSpace(const bool xProvided, const bool yProvided) const noexcept{
 			return getSize();
 		}
 
@@ -328,7 +331,7 @@ namespace Core::UI{
 		}
 
 		virtual void tryDraw(const Rect& clipSpace) const{
-			if(inboundOf(clipSpace)){
+			if(NoClipWhenDraw || inboundOf(clipSpace)){
 				drawMain();
 			}
 		}
@@ -355,7 +358,7 @@ namespace Core::UI{
 
 		virtual bool updateAbsSrc(const Geom::Vec2 parentAbsSrc){
 			if(Util::tryModify(property.absoluteSrc, parentAbsSrc + property.relativeSrc)){
-				notifyLayoutChanged(SpreadDirection::lower);
+				notifyLayoutChanged(SpreadDirection::local);
 				return true;
 			}
 			return false;
@@ -391,11 +394,11 @@ namespace Core::UI{
 		}
 
 		void tryDraw(const Rect& clipSpace) const override{
-			if(!inboundOf(clipSpace))return;
+			if(!NoClipWhenDraw && !inboundOf(clipSpace))return;
 
 			drawMain();
 
-			const auto space = property.getValidBound_absolute().getOverlap(clipSpace);
+			const auto space = property.getValidBound_absolute().intersectionWith(clipSpace);
 			drawChildren(space);
 
 			drawPost();
@@ -416,9 +419,10 @@ namespace Core::UI{
 
 		bool resize(const Geom::Vec2 size) override{
 			if(Element::resize(size)){
-				layout();
+				tryLayout();
 				return true;
 			}
+
 			return false;
 		}
 

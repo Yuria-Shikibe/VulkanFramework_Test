@@ -20,15 +20,31 @@ export namespace Core::UI {
 		masterRatio,
 		slaving,
 		slavingRatio,
+		external,
 		none,
 	};
 
 	struct StatedLength{
 		float val{};
-		LengthDependency dep{};
+		LengthDependency dep{LengthDependency::slaving};
 
 		[[nodiscard]] constexpr decltype(auto) getDependency() const noexcept{
 			return std::to_underlying(dep);
+		}
+
+		constexpr void setConcreteSize(float val){
+			this->val = val;
+			dep = LengthDependency::master;
+		}
+
+		constexpr void promoteIndependence(const LengthDependency dependency) noexcept{
+			if(dependency < dep){
+				dep = dependency;
+			}
+		}
+
+		[[nodiscard]] constexpr bool external() const noexcept{
+			return dep == LengthDependency::external;
 		}
 
 		[[nodiscard]] constexpr bool dependent() const noexcept{
@@ -39,108 +55,13 @@ export namespace Core::UI {
 			return dep == LengthDependency::master;
 		}
 
+		[[nodiscard]] constexpr bool isFromRatio() const noexcept{
+			return dep == LengthDependency::slavingRatio || dep == LengthDependency::masterRatio;
+		}
+
 		[[nodiscard]] constexpr float crop() const noexcept{
-			if(!dependent())return 0;
+			if(!mastering())return 0;
 			return val;
-		}
-	};
-
-	class ScaledSize{
-	protected:
-		Geom::Vec2 size{};
-
-		static constexpr bool isScale(const float val) noexcept{
-			return val < 0;
-		}
-
-		static constexpr bool isSize(const float val) noexcept{
-			return val > 0;
-		}
-
-		/**
-		 * @brief cell size is determined by parent
-		 */
-		static constexpr bool passive(const float val) noexcept{
-			return val == 0;
-		}
-
-		/**
-		 * @brief cell size is determined by item
-		 */
-		static bool adaptive(const float val) noexcept{
-			return std::isnan(val);
-		}
-
-	public:
-		[[nodiscard]] ScaledSize() = default;
-
-		[[nodiscard]] explicit ScaledSize(const Geom::Vec2 size)
-			: size{size}{}
-
-
-		ScaledSize(const ScaledSize& other) = default;
-
-		ScaledSize(ScaledSize&& other) noexcept = default;
-
-		ScaledSize& operator=(const ScaledSize& other) = default;
-
-		ScaledSize& operator=(ScaledSize&& other) noexcept = default;
-
-		ScaledSize& operator=(const Geom::Vec2 v) noexcept{
-			size = v;
-			checkValid();
-			return *this;
-		}
-
-		// [[nodiscard]] bool empty() const{
-		// 	return size.isNaN() || (size.area() == 0);
-		// }
-
-		void checkValid() const{
-			if((isScale(size.x) && isScale(size.y)) || size.isNaN()){
-				throw new std::invalid_argument("invalid size");
-			}
-		}
-
-		void set(const Geom::Vec2 size){
-			this->size = size;
-			checkValid();
-		}
-
-		void setWidth(const float w){
-			this->size.x = w;
-			checkValid();
-		}
-
-		void setHeight(const float h){
-			this->size.y = h;
-			checkValid();
-		}
-
-		[[nodiscard]] Geom::Vec2 get() const noexcept{
-			auto rst = size;
-			if(isScale(rst.x)){ // NOLINT(*-branch-clone)
-				rst.x = std::abs(rst.x) * size.y;
-			}else if(isScale(rst.y)){
-				rst.y = std::abs(rst.y) * size.x;
-			}
-			return rst;
-		}
-
-		[[nodiscard]] constexpr bool isFetchX() const noexcept{
-			return passive(size.x);
-		}
-
-		[[nodiscard]] constexpr bool isFetchY() const noexcept{
-			return passive(size.y);
-		}
-
-		[[nodiscard]] bool isAdaptiveX() const noexcept{
-			return adaptive(size.x);
-		}
-
-		[[nodiscard]] bool isAdaptiveY() const noexcept{
-			return adaptive(size.y);
 		}
 	};
 
@@ -157,16 +78,56 @@ export namespace Core::UI {
 #endif
 		}
 
+		constexpr void trySetSlavedSize(const Geom::Vec2 size) noexcept{
+			if(x.dep == LengthDependency::slaving){
+				x.val = size.x;
+				x.dep = LengthDependency::master;
+			}
+			if(y.dep == LengthDependency::slaving){
+				y.val = size.y;
+				y.dep = LengthDependency::master;
+			}
+		}
 
+
+		constexpr void applyRatio(const Geom::Vec2 maxSize) noexcept{
+			checkValidity();
+
+			if(x.isFromRatio()){
+				x.val = std::clamp(x.val * y.val, 0.f, maxSize.x);
+				x.dep = y.dep;
+			}
+
+			if(y.isFromRatio()){
+				y.val = std::clamp(x.val * y.val, 0.f, maxSize.y);
+				y.dep = x.dep;
+			}
+		}
 
 		constexpr void setConcreteSize(const Geom::Vec2 size) noexcept{
 			x = {size.x, LengthDependency::master};
 			y = {size.y, LengthDependency::master};
 		}
 
+		constexpr void setConcreteWidth(const float w) noexcept{
+			x = {w, LengthDependency::master};
+		}
+
+		constexpr void setConcreteHeight(const float h) noexcept{
+			y = {h, LengthDependency::master};
+		}
+
 		constexpr void setSize(const Geom::Vec2 size) noexcept{
 			x.val = size.x;
 			y.val = size.y;
+		}
+
+		[[nodiscard]] constexpr Geom::Vec2 getRawSize() const noexcept{
+			return {x.val, y.val};
+		}
+
+		[[nodiscard]] constexpr Geom::Vec2 getConcreteSize() const noexcept{
+			return {x.crop(), y.crop()};
 		}
 
 		constexpr void setState(const LengthDependency xState, const LengthDependency yState) noexcept{
@@ -180,31 +141,40 @@ export namespace Core::UI {
 			return {x.dep, y.dep};
 		}
 
-		[[nodiscard]] constexpr StatedSize crop() const noexcept{
+		[[nodiscard]] constexpr StatedSize cropMasterRatio() const noexcept{
 			checkValidity();
 
 			StatedSize crop{};
 			crop.setState(x.dep, y.dep);
 
-			if(x.dep == LengthDependency::masterRatio){
-				if(y.mastering()){
-					crop.y.val = y.val;
-					crop.x.val = y.val * x.val;
-					crop.x.dep = crop.y.dep = LengthDependency::master;
-				}else{
-					crop.x.dep = LengthDependency::slavingRatio;
+			switch(x.dep){
+				case LengthDependency::masterRatio:{
+					if(y.mastering()){
+						crop.y.val = y.val;
+						crop.x.val = y.val * x.val;
+						crop.x.dep = crop.y.dep = LengthDependency::master;
+					}else{
+						crop.x.dep = LengthDependency::slavingRatio;
+					}
+					break;
 				}
+				case LengthDependency::master: crop.x = x; break;
+				default: break;
 			}
 
-			if(y.dep == LengthDependency::masterRatio){
-				if(x.mastering()){
-					crop.x.val = x.val;
-					crop.y.val = x.val * y.val;
-					crop.x.dep = crop.y.dep = LengthDependency::master;
-				}else{
-					crop.y.dep = LengthDependency::slavingRatio;
+			switch(y.dep){
+				case LengthDependency::masterRatio:{
+					if(x.mastering()){
+						crop.x.val = x.val;
+						crop.y.val = x.val * y.val;
+						crop.x.dep = crop.y.dep = LengthDependency::master;
+					}else{
+						crop.y.dep = LengthDependency::slavingRatio;
+					}
+					break;
 				}
-
+				case LengthDependency::master: crop.y = y; break;
+				default: break;
 			}
 
 			return crop;
@@ -217,7 +187,7 @@ export namespace Core::UI {
 	private:
 		//external modifiable fields
 		Align::Spacing margin{};
-		Align::Pos scaleAlign{};
+		Align::Pos scaleAlign{Align::Pos::center};
 		Rect sizeScale{FillScale};
 
 	public:
@@ -258,7 +228,7 @@ export namespace Core::UI {
 			return *this;
 		}
 
-		void applyBoundToElement(Element* element) const;
+		void applyBoundToElement(Element* element) const noexcept;
 		void applyPosToElement(Element* element, Geom::Vec2 absSrc) const;
 	};
 
@@ -273,12 +243,36 @@ export namespace Core::UI {
 			return *this;
 		}
 
-		constexpr MasteringCell& setSize(const float size){
+		constexpr MasteringCell& setSize(const float size) noexcept{
 			return setSize(Geom::Vec2{size, size});
 		}
 
-		constexpr MasteringCell& setSize(const float w, const float h){
+		constexpr MasteringCell& setWidth(const float w) noexcept{
+			size.setConcreteWidth(w);
+			return *this;
+		}
+
+		constexpr MasteringCell& setHeight(const float h) noexcept{
+			size.setConcreteHeight(h);
+			return *this;
+		}
+
+		constexpr MasteringCell& setSize(const float w, const float h) noexcept{
 			return setSize({w, h});
+		}
+
+		constexpr MasteringCell& setRatio_x(const float r) noexcept{
+			size.x.dep = size.y.mastering() ? LengthDependency::masterRatio : LengthDependency::slavingRatio;
+			size.x.val = r;
+			size.checkValidity();
+			return *this;
+		}
+
+		constexpr MasteringCell& setRatio_y(const float r){
+			size.y.dep = size.x.mastering() ? LengthDependency::masterRatio : LengthDependency::slavingRatio;
+			size.y.val = r;
+			size.checkValidity();
+			return *this;
 		}
 
 

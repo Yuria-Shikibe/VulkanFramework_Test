@@ -32,10 +32,13 @@ export namespace Core::UI{
 			events().on<Event::Drag>([this](const Event::Drag& e){
 				scrollTargetVelocity = scrollVelocity = {};
 				const auto trans = e.trans() * getVelClamp();
-				const auto ratio = getScrollProgress(Geom::norBaseVec2<float>);
-				const auto blank = property.getValidSize() - getBarSize() - Geom::Vec2{horiBarLength(), vertBarSLength()};
+				const auto blank = getViewportSize() - Geom::Vec2{horiBarLength(), vertBarSLength()};
 
-				auto rst = scroll.base + (trans / blank) / ratio;
+				auto rst = scroll.base + (trans / blank) * getScrollableSize();
+
+				//clear NaN
+				if(!enableHoriScroll())rst.x = 0;
+				if(!enableVertScroll())rst.y = 0;
 
 				auto [maxX, maxY] = getScrollableSize();
 				rst.clampXY({0, -maxY}, {maxX, 0});
@@ -78,7 +81,7 @@ export namespace Core::UI{
 
 			if(Util::tryModify(
 				scroll.base,
-					scroll.base.copy().addScaled(scrollVelocity, delta_in_ticks).clampXY({0, -maxY}, {maxX, 0}))){
+					scroll.base.copy().addScaled(scrollVelocity, delta_in_ticks).clampXY({0, -maxY}, {maxX, 0}) * getVelClamp())){
 				scroll.resume();
 				updateChildrenAbsSrc();
 			}
@@ -95,8 +98,19 @@ export namespace Core::UI{
 		}
 
 		bool resize(const Geom::Vec2 size) override{
+			auto clamp = getVelClamp();
 			if(Element::resize(size)){
 				setItemSize();
+
+				auto curClamp = getVelClamp();
+
+				if(clamp != curClamp || Util::tryModify(
+					scroll.base,
+					scroll.base.copy() * getVelClamp())){
+					scroll.resume();
+					updateChildrenAbsSrc();
+				}
+
 				return true;
 			}
 			return false;
@@ -149,10 +163,10 @@ export namespace Core::UI{
 		}
 
 		void updateChildrenAbsSrc() const{
-			auto offset = absPos() - scroll.temp;
+			auto offset = -scroll.temp;
 			offset.y -= (getItemSize().y - prop().getValidHeight());
-
-			item->updateAbsSrc(offset);
+			item->prop().relativeSrc = offset;
+			item->updateAbsSrc(absPos());
 		}
 
 		[[nodiscard]] constexpr Geom::Vec2 getVelClamp() const noexcept{

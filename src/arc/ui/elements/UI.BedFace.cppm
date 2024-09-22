@@ -14,6 +14,7 @@ export namespace Core::UI{
 	struct BedFaceCell : CellAdaptor<PassiveCell>{
 		using CellAdaptor::CellAdaptor;
 		void apply(const Geom::Vec2 absPos) const{
+			removeRestrict();
 			cell.applyBoundToElement(element);
 			restrictSize();
 			cell.applyPosToElement(element, absPos);
@@ -28,7 +29,7 @@ export namespace Core::UI{
 		void layout() override{
 			const auto bound = Geom::OrthoRectFloat{Geom::FromExtent, property.boarder.bot_lft(), property.getValidSize()};
 			for (auto&& value : cells){
-				value.cell.allocatedBound = bound;
+				value.cell.allocate(bound);
 				value.apply(absPos());
 				value.element->layout();
 			}

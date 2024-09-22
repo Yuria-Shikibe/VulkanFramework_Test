@@ -3,13 +3,12 @@ export module ext.meta_programming;
 import std;
 
 namespace ext{
-
 	export
-	template<typename T>
+	template <typename T>
 	struct function_traits;
 
 	export
-	template<typename Ret, typename... Args>
+	template <typename Ret, typename... Args>
 	struct function_traits<Ret(Args...)>{
 		using return_type = Ret;
 		using args_type = std::tuple<Args...>;
@@ -20,12 +19,12 @@ namespace ext{
 		static constexpr bool is_invocable = std::is_invocable_r_v<Ret, Func, Args...>;
 
 		template <typename Func>
-		static constexpr bool invocable_as_r_v() {
+		static constexpr bool invocable_as_r_v(){
 			return std::is_invocable_r_v<Ret, Func, Args...>;
 		}
 
 		template <typename Func>
-		static constexpr bool invocable_as_v() {
+		static constexpr bool invocable_as_v(){
 			return std::is_invocable_v<Func, Args...>;
 		}
 	};
@@ -98,10 +97,10 @@ namespace ext{
 		}
 	};
 
-	template<typename T, T a, T b>
+	template <typename T, T a, T b>
 	constexpr T max_const = a > b ? a : b;
 
-	template<typename T, T a, T b>
+	template <typename T, T a, T b>
 	constexpr T min_const = a < b ? a : b;
 
 	template <typename TargetTuple, typename FromTuple, std::size_t... I>
@@ -124,10 +123,10 @@ namespace ext{
 	struct UniqueTypeIndex;
 
 	template <typename T, typename... Ts>
-	struct UniqueTypeIndex<T, T, Ts...> : std::integral_constant<std::size_t, 0> {};
+	struct UniqueTypeIndex<T, T, Ts...> : std::integral_constant<std::size_t, 0>{};
 
 	template <typename T, typename U, typename... Ts>
-	struct UniqueTypeIndex<T, U, Ts...> : std::integral_constant<std::size_t, 1 + UniqueTypeIndex<T, Ts...>::value> {};
+	struct UniqueTypeIndex<T, U, Ts...> : std::integral_constant<std::size_t, 1 + UniqueTypeIndex<T, Ts...>::value>{};
 
 	export
 	template <typename T, typename... Ts>
@@ -140,7 +139,7 @@ namespace ext{
 	};
 
 	template <auto val1, decltype(val1) val2>
-	struct conditional_constexpr_val<false, val1, val2> {
+	struct conditional_constexpr_val<false, val1, val2>{
 		static constexpr auto value = val1;
 	};
 
@@ -150,7 +149,7 @@ namespace ext{
 
 	export
 	template <typename T, typename = void>
-	struct is_complete_type : std::false_type {};
+	struct is_complete_type : std::false_type{};
 
 	template <typename T>
 	struct is_complete_type<T, decltype(void(sizeof(T)))> : std::true_type{};
@@ -181,16 +180,18 @@ export namespace ext{
 	 * @tparam Args given params
 	 * @return Whether given param types are the subseq of the SuperTuple
 	 */
-	template <bool strict, typename SuperTuple, typename...Args>
+	template <bool strict, typename SuperTuple, typename... Args>
 	constexpr bool is_types_sub_of(){
 		constexpr std::size_t fromSize = sizeof...(Args);
 		constexpr std::size_t toSize = std::tuple_size_v<SuperTuple>;
-		if constexpr(std::tuple_size_v<SuperTuple> < fromSize)return false;
+		if constexpr(std::tuple_size_v<SuperTuple> < fromSize) return false;
 
 		if constexpr(strict){
-			return ext::tupleSameAs<SuperTuple, std::tuple<std::decay_t<Args>...>>(std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
-		}else{
-			return ext::tupleConvertableTo<SuperTuple, std::tuple<std::decay_t<Args>...>>(std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
+			return ext::tupleSameAs<SuperTuple, std::tuple<std::decay_t<Args>...>>(
+				std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
+		} else{
+			return ext::tupleConvertableTo<SuperTuple, std::tuple<std::decay_t<Args>...>>(
+				std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
 		}
 	}
 
@@ -199,7 +200,7 @@ export namespace ext{
 		requires ext::tupleContains<ArgsTuple, T>(std::make_index_sequence<std::tuple_size_v<ArgsTuple>>());
 	};
 
-	template <typename T, typename...Args>
+	template <typename T, typename... Args>
 	constexpr bool contained_within = requires{
 		requires ext::tupleContains<std::tuple<Args...>, T>(std::make_index_sequence<std::tuple_size_v<std::tuple<Args...>>>());
 	};
@@ -208,9 +209,10 @@ export namespace ext{
 	constexpr bool is_tuple_sub_of(){
 		constexpr std::size_t fromSize = std::tuple_size_v<FromTuple>;
 		constexpr std::size_t toSize = std::tuple_size_v<SuperTuple>;
-		if constexpr(toSize < fromSize)return false;
+		if constexpr(toSize < fromSize) return false;
 
-		return ext::tupleConvertableTo<SuperTuple, FromTuple>(std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
+		return ext::tupleConvertableTo<SuperTuple, FromTuple>(
+			std::make_index_sequence<ext::min_const<std::size_t, toSize, fromSize>>());
 	}
 
 	template <typename MemberPtr>
@@ -222,7 +224,7 @@ export namespace ext{
 		using value_type = T;
 	};
 
-	template <typename C, typename T, typename ...Args>
+	template <typename C, typename T, typename... Args>
 	struct mptr_info<T (C::*)(Args...)>{
 		using class_type = C;
 		using value_type = T;
@@ -359,4 +361,158 @@ export namespace ext{
 	// 		return SeqMemberPtrAccessor::getNext(in);
 	// 	}
 	// };
+}
+
+//flatten_tuple
+namespace ext{
+	export
+	template <typename T>
+	struct is_tuple : std::false_type{};
+
+	template <typename... Ts>
+	struct is_tuple<std::tuple<Ts...>> : std::true_type{};
+
+	export
+	template <typename T>
+	constexpr bool is_tuple_v = is_tuple<T>::value;
+
+	template <std::size_t idx, typename Ts>
+	struct flatten_tuple_impl{
+		using type = std::tuple<Ts>;
+		static constexpr std::size_t index = idx;
+		static constexpr std::size_t stride = 1;
+
+		using args = flatten_tuple_impl;
+
+		template <std::size_t Idx, bool byRef = true, typename T>
+		static constexpr decltype(auto) at(T&& t) noexcept{
+			return std::forward<T>(t);
+		}
+
+		template <typename T>
+		static constexpr T& forward_by_ref(T& t){
+			return t;
+		}
+
+		template <typename T>
+		static constexpr const T& forward_by_ref(const T& t){
+			return t;
+		}
+
+		template <typename T>
+		static constexpr T& forward_by_ref(T&& t) = delete;
+	};
+
+	template <std::size_t curIndex, typename... Ts>
+	struct flatten_tuple_impl<curIndex, std::tuple<Ts...>>{
+		using type = decltype(std::tuple_cat(std::declval<typename flatten_tuple_impl<0, Ts>::type>()...));
+		static constexpr std::size_t index = curIndex;
+		static constexpr std::size_t stride = (flatten_tuple_impl<0, Ts>::stride + ...);
+
+	private:
+		template <std::size_t ... I>
+		static constexpr std::size_t stride_at(std::index_sequence<I...>){
+			return (flatten_tuple_impl<0, std::tuple_element_t<I, std::tuple<Ts...>>>::stride + ... + 0);
+		}
+
+		static consteval auto unwrap_one(){
+			return [&] <std::size_t ... I>(std::index_sequence<I...>){
+				return
+					std::tuple_cat(
+						std::make_tuple(
+							flatten_tuple_impl<flatten_tuple_impl::stride_at(std::make_index_sequence<I>()), std::tuple_element_t<
+								              I, std::tuple<Ts...>>>{}...),
+						std::make_tuple(flatten_tuple_impl<stride, void>{}));
+			}(std::index_sequence_for<Ts...>());
+		}
+	public:
+		using args = decltype(unwrap_one());
+
+		template <std::size_t Idx, bool byRef = true, typename T>
+			requires std::same_as<std::decay_t<T>, std::tuple<Ts...>>
+		static constexpr decltype(auto) at(T&& t) noexcept{
+			constexpr std::size_t validIndex = []<std::size_t ... I>(std::index_sequence<I...>){
+				std::size_t rst{std::numeric_limits<std::size_t>::max()};
+				((func<Idx, I>(rst)), ...);
+				return rst;
+			}(std::make_index_sequence<stride>());
+
+			static_assert(validIndex != std::numeric_limits<std::size_t>::max(), "invalid index");
+
+			using arg = std::tuple_element_t<validIndex, args>;
+			return arg::template at<Idx - arg::index, byRef>(std::get<validIndex>(std::forward<T>(t)));
+		}
+
+	private:
+		template <std::size_t searchI, std::size_t intervalI>
+		static constexpr bool is_index_valid = requires{
+			requires searchI >= std::tuple_element_t<intervalI, args>::index;
+			requires searchI < std::tuple_element_t<intervalI + 1, args>::index;
+		};
+
+		template <std::size_t searchI, std::size_t intervalI>
+		static constexpr void func(std::size_t& rst){
+			if constexpr(is_index_valid<searchI, intervalI>){
+				rst = intervalI;
+			}
+		}
+	};
+
+	export
+	template <typename... Ts>
+	using flatten_tuple = flatten_tuple_impl<0, Ts...>;
+
+	template <typename T>
+	struct to_ref_tuple{
+		static consteval auto impl(T& t){
+			return [&] <std::size_t ... I>(std::index_sequence<I...>){
+				return std::make_tuple(std::ref(std::get<I>(t))...);
+			}(std::make_index_sequence<std::tuple_size_v<T>>());
+		}
+
+		using type = decltype(to_ref_tuple::impl(std::declval<T&>()));
+	};
+
+	export
+	template <typename T>
+	using to_ref_tuple_t = typename to_ref_tuple<T>::type;
+
+	export
+	template <typename... T>
+	using flatten_tuple_t = typename flatten_tuple<std::tuple<T...>>::type;
+
+	export
+	template <bool toRef, typename T>
+	constexpr std::conditional_t<toRef, to_ref_tuple_t<flatten_tuple_t<std::decay_t<T>>>, flatten_tuple_t<std::decay_t<T>>>
+	flat_tuple(T&& t) noexcept {
+		using flatter = flatten_tuple<std::decay_t<T>>;
+		if constexpr (toRef){
+			return [&] <std::size_t ...I>(std::index_sequence<I...>){
+				return std::make_tuple(std::ref(flatter::template at<I, toRef>(std::forward<T>(t))) ...);
+			}(std::make_index_sequence<flatter::stride>());
+		}else{
+			return [&] <std::size_t ...I>(std::index_sequence<I...>){
+				return flatten_tuple_t<std::decay_t<T>>(flatter::template at<I, toRef>(std::forward<T>(t)) ...);
+			}(std::make_index_sequence<flatter::stride>());
+		}
+	}
+
+	export
+	template <bool toRef = false>
+	struct tuple_flatter{
+		template <typename T>
+		constexpr decltype(auto) operator()(T&& t) const noexcept{
+			return ext::flat_tuple<toRef>(std::forward<T>(t));
+		}
+	};
+
+	void foo(){
+		using Tuple = const std::tuple<std::tuple<long long, std::string&>, std::ranges::subrange<std::vector<std::string>::const_iterator>>;
+
+		using T = decltype(flat_tuple<false>(std::declval<Tuple>()));
+
+		// auto v = flatten_tuple<0, Tuple>::at<1>(tuple);
+
+		// auto f = flatten<true>(tuple);
+	}
 }

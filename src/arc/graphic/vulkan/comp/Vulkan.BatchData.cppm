@@ -2,7 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Core.Vulkan.BatchData;
+export module Graphic.BatchData;
 
 import std;
 import ext.concepts;
@@ -10,25 +10,13 @@ import ext.concepts;
 export namespace Graphic{
 	using ImageIndex = std::uint8_t;
 
-	struct BatchUsedData{
-		VkPipelineLayout pipelineLayout{};
-		VkSampler textureSampler{};
-	};
-
-	struct BatchData{
-		VkBuffer vertices{};
-		VkBuffer indices{};
-		VkIndexType indexType{};
-		VkBuffer indirect{};
-
-		void bindTo(VkCommandBuffer commandBuffer, const VkDeviceSize offset = 0) const{
-			vkCmdBindVertexBuffers(commandBuffer, 0, 1, &vertices, &offset);
-			vkCmdBindIndexBuffer(commandBuffer, indices, 0, indexType);
-			vkCmdDrawIndexedIndirect(commandBuffer, indirect, 0, 1, sizeof(VkDrawIndexedIndirectCommand));
-		}
-	};
-
 	struct DrawArgs{
+		ImageIndex imageIndex{};
+		std::uint32_t validCount{};
+		void* dataPtr{};
+	};
+
+	struct LockableDrawArgs{
 		ImageIndex imageIndex{};
 		std::uint32_t validCount{};
 		void* dataPtr{};
@@ -36,15 +24,15 @@ export namespace Graphic{
 	};
 
 
-	template<typename T, std::size_t GroupCount = 4>
+	/*template<typename T, std::size_t GroupCount = 4>
 	struct DrawArgsView : std::ranges::view_interface<DrawArgsView<T, GroupCount>>, std::ranges::view_base{
 		static constexpr std::size_t UnitOffset = GroupCount * sizeof(T);
 
-		const DrawArgs* args{};
+		const LockableDrawArgs* args{};
 
 		[[nodiscard]] DrawArgsView() = default;
 
-		[[nodiscard]] explicit DrawArgsView(const DrawArgs* args)
+		[[nodiscard]] explicit DrawArgsView(const LockableDrawArgs* args)
 			: args{args}{}
 
 		using value_type = std::array<T, GroupCount>;
@@ -65,41 +53,35 @@ export namespace Graphic{
 		auto end() const noexcept{
 			return data() + size();
 		}
-	};
+	};*/
 
+	template <typename ArgTy>
 	struct DrawArgsGroup{
-		std::vector<DrawArgs> args{};
+		std::vector<ArgTy> args{};
 
-		template <typename T, std::size_t GroupCount = 4>
-		decltype(auto) as(){
-			return args | std::views::transform([](const auto& arg){return DrawArgsView<T, GroupCount>{&arg};}) | std::views::join;
-		}
+		// template <typename T, std::size_t GroupCount = 4>
+		// decltype(auto) as(){
+		// 	return args | std::views::transform([](const auto& arg){return DrawArgsView<T, GroupCount>{&arg};}) | std::views::join;
+		// }
 
-		template <typename T, std::size_t GroupCount = 4>
-		using view_iterator = std::ranges::iterator_t<decltype(std::declval<DrawArgsGroup&>().as<T, GroupCount>())>;
+		// template <typename T, std::size_t GroupCount = 4>
+		// using view_iterator = std::ranges::iterator_t<decltype(std::declval<DrawArgsGroup&>().as<T, GroupCount>())>;
 
 		template <std::ranges::sized_range Rng>
 		void append(Rng&& drawArgs){
 			args.reserve(args.size() + std::ranges::size(drawArgs));
 			std::ranges::move(std::move(drawArgs), std::back_inserter(args));
-			// args.append_range(std::forward<Rng>(drawArgs));
+		}
+
+		template <typename T>
+			requires (std::same_as<std::decay_t<T>, ArgTy>)
+		void append(T&& drawArgs){
+			args.push_back(std::forward<T>(drawArgs));
 		}
 	};
 
-	// struct DrawArgs{
-	// 	std::uint32_t validCount{};
-	// 	std::shared_lock<std::shared_mutex> captureLock{};
-	// };
-	//
-	// void foo(){
-	// 	std::vector<DrawArgs> args1{};
-	// 	std::vector<DrawArgs> args2{};
-	//
-	// 	std::ranges::move(std::move(args2), std::back_inserter(args1));
-	// 	args1.append_range(std::move(args2));
-	// }
 
-	template<typename T, typename Dv>
+	template<typename ArgTy, typename T, typename Dv>
 	struct AutoDrawSpaceAcquirer{
 		static constexpr std::size_t GroupCount = 4;
 		static constexpr std::size_t UnitOffset = GroupCount * sizeof(T);
@@ -108,14 +90,18 @@ export namespace Graphic{
 
 		std::size_t capacity{};
 
-		DrawArgsGroup argsGroup{};
+		DrawArgsGroup<ArgTy> argsGroup{};
 
-		void append(std::vector<DrawArgs>&& drawArgs){
-			for (const auto& count : drawArgs | std::views::transform(&DrawArgs::validCount)){
+		void append(std::vector<ArgTy>&& drawArgs){
+			for (const auto& count : drawArgs | std::views::transform(&ArgTy::validCount)){
 				capacity +=	count;
 			}
 
 			argsGroup.append(std::move(drawArgs));
+		}
+
+		void append(ArgTy&& drawArgs) requires std::is_trivially_copy_assignable_v<ArgTy>{
+			argsGroup.append(drawArgs);
 		}
 
 		//TODO auto unlock
@@ -132,7 +118,12 @@ export namespace Graphic{
 				auto& group = src->argsGroup.args[groupIndex];
 
 				if(localIndex >= group.validCount){
-					group.captureLock.unlock();
+					if constexpr (requires(ArgTy t){
+						t.captureLock.unlock();
+					}){
+						group.captureLock.unlock();
+					}
+
 					localIndex = 0;
 					groupIndex++;
 				}

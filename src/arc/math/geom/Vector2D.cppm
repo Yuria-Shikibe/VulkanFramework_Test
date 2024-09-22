@@ -94,6 +94,12 @@ export namespace Geom{
 			return this->mod(tgt, tgt);
 		}
 
+		constexpr Vector2D& infTo0() noexcept{
+			if(std::isinf(x))x = 0;
+			if(std::isinf(y))y = 0;
+			return *this;
+		}
+
 		constexpr Vector2D& mod(const T ox, const T oy) noexcept {
 			x = Math::mod(x, ox);
 			y = Math::mod(y, oy);
@@ -725,6 +731,15 @@ export namespace Geom{
 			return os << '(' << std::to_string(obj.x) << ", " << std::to_string(obj.y) << ')';
 		}
 
+		constexpr bool equalsTo(const PassType other){
+			if constexpr (std::is_integral_v<T>){
+				return *this == other;
+			}else{
+				T errX = Math::abs(x - other.x);
+				T errY = Math::abs(y - other.y);
+				return errX < Math::FLOATING_ROUNDING_ERROR && errY < Math::FLOATING_ROUNDING_ERROR;
+			}
+		}
 
 	};
 

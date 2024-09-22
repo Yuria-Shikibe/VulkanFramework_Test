@@ -54,6 +54,7 @@ import MainTest;
 
 import ext.stack_trace;
 import ext.views;
+import ext.algo;
 import ext.algo.string_parse;
 import ext.event;
 
@@ -122,21 +123,35 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 }
 
 
-int main(){
+int main_(){
     using namespace std::literals;
-    auto v = "0.11.222.3333.44444.555555..6666666."sv |
-        ext::ranges::views::split_if([](char c){
-            return c == '.';
-        }) | std::views::transform(ext::to<std::string_view>{})/* | std::ranges::to<std::vector>()*/;
 
-    for (auto && basic_string_view : v){
-        std::println("{}", basic_string_view);
+    std::vector<std::string> arr{
+        "12askjfhl;AShf;JASH:FJLHA:JLSF3", "", "345"
+    };
+
+    const std::vector<std::tuple<std::tuple<int, std::string>, double>> arr1{};
+
+    auto v = std::as_const(arr1) | std::views::transform(ext::tuple_flatter<>{});
+
+    for (auto&& basic_strings : std::as_const(arr) | ext::views::part_if(&std::string::empty)){
+        for (auto& basic_string : basic_strings){
+            std::println("{}", basic_string);
+            // basic_string = "aabbcc";
+            std::println("{}", basic_string);
+        }
     }
+
+    for (const auto & string : arr){
+        std::println("{}", string);
+    }
+
+    // std::views::
 
     return 0;
 }
 
-int main_(){
+int main(){
     using namespace Core;
 
 	Global::init();
@@ -249,8 +264,8 @@ int main_(){
                 };
             }
 
-            rendererWorld->batch.consumeAll();
-            rendererWorld->doPostProcess();
+            Global::rendererWorld->batch.consumeAll();
+            Global::rendererWorld->doPostProcess();
         }
 
         Global::UI::root->draw();

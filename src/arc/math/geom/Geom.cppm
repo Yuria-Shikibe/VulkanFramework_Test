@@ -56,7 +56,7 @@ export namespace Geom {
 
 	float dstToSegment(const Vec2 p, const Vec2 a, const Vec2 b) {
 		const float lenAB = a.dst(b);
-		if (lenAB < Math::FLOAT_ROUNDING_ERROR) {
+		if (lenAB < Math::FLOATING_ROUNDING_ERROR) {
 			return a.dst(p);
 		}
 
@@ -73,7 +73,7 @@ export namespace Geom {
 
 	float dst2ToSegment(const Vec2 p, const Vec2 a, const Vec2 b) {
 		const float lenAB = a.dst(b);
-		if (lenAB < Math::FLOAT_ROUNDING_ERROR) {
+		if (lenAB < Math::FLOATING_ROUNDING_ERROR) {
 			return a.dst2(p);
 		}
 

@@ -322,24 +322,24 @@ export namespace Geom {
 		}
 
 		[[nodiscard]] constexpr bool isOnLine(const Vector3D& other,
-		                        const T epsilon = static_cast<T>(Math::FLOAT_ROUNDING_ERROR)) const {
+		                        const T epsilon = static_cast<T>(Math::FLOATING_ROUNDING_ERROR)) const {
 			return this->len2(y * other.z - z * other.y, z * other.x - x * other.z, x * other.y - y * other.x) <=
 			       epsilon;
 		}
 
 
 		[[nodiscard]] constexpr bool isCollinear(const Vector3D& other,
-		                           const T epsilon = static_cast<T>(Math::FLOAT_ROUNDING_ERROR)) const {
+		                           const T epsilon = static_cast<T>(Math::FLOATING_ROUNDING_ERROR)) const {
 			return this->isOnLine(other, epsilon) && this->hasSameDirection(other);
 		}
 
 		[[nodiscard]] constexpr bool isCollinearOpposite(const Vector3D& other,
-		                                   const T epsilon = static_cast<T>(Math::FLOAT_ROUNDING_ERROR)) const {
+		                                   const T epsilon = static_cast<T>(Math::FLOATING_ROUNDING_ERROR)) const {
 			return this->isOnLine(other, epsilon) && this->hasOppositeDirection(other);
 		}
 
 		[[nodiscard]] constexpr bool isPerpendicular(const Vector3D& vector,
-		                               const T epsilon = static_cast<T>(Math::FLOAT_ROUNDING_ERROR)) const {
+		                               const T epsilon = static_cast<T>(Math::FLOATING_ROUNDING_ERROR)) const {
 			return Math::zero(this->dot(vector), epsilon);
 		}
 

@@ -25,6 +25,7 @@ import Core.Vulkan.Preinstall;
 import Core.Vulkan.EXT;
 
 import Graphic.Batch;
+import Graphic.Batch.Exclusive;
 
 import Geom.Rect_Orthogonal;
 
@@ -49,7 +50,8 @@ export namespace Graphic{
 		//[base, def, light]
 		static constexpr std::size_t AttachmentCount = 3;
 
-		Batch batch{};
+		Batch_Exclusive batch{};
+		using Batch = decltype(batch);
 
 		//Pipeline Data
 		Core::Vulkan::DynamicRendering dynamicRendering{};
@@ -179,7 +181,7 @@ export namespace Graphic{
 				element = {commandPool.obtain(), FrameData{*this, scissorDescriptorLayout}};
 			}
 
-			batch.drawCall = [this](const Batch::CommandUnit& unit, const std::size_t i){
+			batch.externalDrawCall = [this](const Batch::CommandUnit& unit, const std::size_t i){
 				draw(unit, i);
 			};
 		}
@@ -241,13 +243,18 @@ export namespace Graphic{
 		}
 
 		void draw(const Batch::CommandUnit& unit, const std::size_t index){
+			Core::Vulkan::Util::submitCommand(
+							context().device.getPrimaryGraphicsQueue(),
+							unit.transferCommand.get(), unit.fence);
+
+
 			if(drawCommands[index].second.scissor != getCurrentScissor()){
 				setScissor(getCurrentScissor());
 			}
 
 			Core::Vulkan::Util::submitCommand(
-					context().device.getPrimaryGraphicsQueue(),
-					std::array{unit.transferCommand.get(), drawCommands[index].first.get()}, unit.fence);
+				context().device.getPrimaryGraphicsQueue(),
+				drawCommands[index].first.get(), nullptr);
 
 			nextIndex = (index + 1) % drawCommands.size();
 		}

@@ -8,7 +8,7 @@ export import Font.TypeSettings;
 
 import Geom.Vector2D;
 
-import Core.Vulkan.BatchData;
+import Graphic.BatchData;
 import Graphic.Batch;
 import Graphic.Batch.AutoDrawParam;
 import std;
@@ -21,11 +21,11 @@ import Core.Vulkan.Vertex;
 
 export namespace Font::TypeSettings{
 
-	void draw(Graphic::Batch& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
+	void draw(Graphic::Batch_Exclusive& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
 		using namespace Graphic;
 
 		Draw::DrawContext context{};
-		Graphic::BatchAutoParam<Core::Vulkan::Vertex_UI> ac{batch, context.whiteRegion};
+		Graphic::BatchAutoParam_Exclusive<Core::Vulkan::Vertex_UI> ac{batch, context.whiteRegion};
 		auto param = ac.get();
 
 		context.color = Graphic::Colors::WHITE;
@@ -38,7 +38,7 @@ export namespace Font::TypeSettings{
 
 			for (auto && glyph : row.glyphs){
 				if(!glyph.glyph->imageView)continue;
-				auto [imageIndex, sz, dataPtr, captureLock] = batch.acquire(glyph.glyph->imageView, 1);
+				auto [imageIndex, sz, dataPtr] = batch.acquire(glyph.glyph->imageView, 1);
 
 				new(dataPtr) std::array{
 					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v01},

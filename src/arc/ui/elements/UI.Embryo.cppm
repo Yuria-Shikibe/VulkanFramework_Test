@@ -15,6 +15,7 @@ namespace Core::UI{
 		using CellAdaptor::CellAdaptor;
 
 		void apply(const Geom::Vec2 absPos) const{
+			removeRestrict();
 			cell.applyBoundToElement(element);
 			restrictSize();
 			cell.applyPosToElement(element, absPos);
@@ -58,7 +59,7 @@ namespace Core::UI{
 					Util::flipY(splittedSize * currentPos.as<float>(), property.getValidHeight(), splittedSize.y)
 					+ property.boarder.bot_lft();
 
-				cell.cell.allocatedBound = {Geom::FromExtent, off, splittedSize};
+				cell.cell.allocate({Geom::FromExtent, off, splittedSize});
 				cell.apply(absPos());
 				cell.element->layout();
 

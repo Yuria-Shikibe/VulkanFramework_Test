@@ -32,7 +32,7 @@ export namespace Graphic{
 	};
 
 	struct RendererWorld : BasicRenderer{
-		Batch batch{};
+		Batch_MultiThread batch{};
 
 		//Pipeline Data
 		Core::Vulkan::DynamicRendering dynamicRendering{};
@@ -40,7 +40,7 @@ export namespace Graphic{
 
 
 		//Commands Region
-		Batch::DrawCommandSeq<void> drawCommands{};
+		Batch_MultiThread::DrawCommandSeq<void> drawCommands{};
 		Core::Vulkan::CommandBuffer cleanCommand{};
 		Core::Vulkan::CommandBuffer endBatchCommand{};
 
@@ -91,7 +91,7 @@ export namespace Graphic{
 				vkCommandBuffer = {context.device, commandPool};
 			}
 
-			batch.drawCall = [this](const Batch::CommandUnit& unit, const std::size_t idx){
+			batch.externalDrawCall = [this](const Batch_MultiThread::CommandUnit& unit, const std::size_t idx){
 				Core::Vulkan::Util::submitCommand(
 					this->context().device.getPrimaryGraphicsQueue(),
 					std::array{unit.transferCommand.get(), drawCommands[idx].get()}, unit.fence);

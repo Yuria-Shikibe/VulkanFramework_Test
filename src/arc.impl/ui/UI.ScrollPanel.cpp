@@ -20,7 +20,7 @@ void Core::UI::ScrollPanel::drawPost() const{
 	using namespace Graphic;
 
 	Draw::DrawContext context{};
-	BatchAutoParam<Vulkan::Vertex_UI> ac{getScene()->renderer->batch, context.whiteRegion};
+	BatchAutoParam_Exclusive<Vulkan::Vertex_UI> ac{getScene()->renderer->batch, context.whiteRegion};
 
 	auto param = ac.get();
 

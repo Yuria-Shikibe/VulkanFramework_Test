@@ -709,7 +709,7 @@ export namespace Geom {
             const T angle = static_cast<T>(2.0 * std::acos(this->w));
             auto s = Math::sqrt(1 - this->w * this->w);
             // assuming quaternion normalised then w is less than 1, so term always positive.
-            if(s < Math::FLOAT_ROUNDING_ERROR) {
+            if(s < Math::FLOATING_ROUNDING_ERROR) {
                 // test to avoid divide by zero, s is always positive due to sqrt
                 // if s close to zero then direction of axis not important
                 axis.x = this->x; // if it is important that axis is normalised then replace with x=1; y=z=0;

@@ -28,6 +28,11 @@ export namespace Core::UI{
 			//TODO move this to other place?
 			element->layoutState.restrictedByParent = true;
 		}
+
+		constexpr void removeRestrict() const noexcept{
+			element->prop().clampedSize.setMaximumSize(Geom::maxVec2<float>);
+
+		}
 	};
 
 	template <std::derived_from<CellBase> T, std::derived_from<CellAdaptor<T>> Adaptor = CellAdaptor<T>>
@@ -44,6 +49,12 @@ export namespace Core::UI{
 
 
 	public:
+		using Group::Group;
+
+		[[nodiscard]] const std::vector<Adaptor>& getCells() const noexcept{
+			return cells;
+		}
+
 		void postRemove(Element* element) override{
 			if(const auto itr = find(element); itr != children.end()){
 				cells.erase(cells.begin() + (itr - children.begin()));
@@ -90,7 +101,7 @@ export namespace Core::UI{
 		void tryLayout() override{
 			if(layoutState.isChanged()){
 				layout();
-			}else if(layoutState.isChildrenChanged()){
+			}else if(layoutState.isChildrenChanged()){//TODO accurate register change?
 				layoutChildren();
 			}
 		}
@@ -108,7 +119,7 @@ export namespace Core::UI{
 		T& emplaceInit(Init&& init){
 			std::unique_ptr<Element> ptr = std::make_unique<E>();
 			init(*static_cast<E*>(ptr.get()));
-			return addChildren(std::move(ptr));
+			return static_cast<T&>(addChildren(std::move(ptr)));
 		}
 
 	protected:

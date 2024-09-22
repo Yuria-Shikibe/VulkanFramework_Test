@@ -5,24 +5,21 @@ import Graphic.Batch.AutoDrawParam;
 import Graphic.Draw.Func;
 import Core.Vulkan.Vertex;
 
+
+
 void Core::UI::DefElementDrawer::draw(const Element& element) const {
 	using namespace Graphic;
 
-	Draw::DrawContext context{};
-	BatchAutoParam<Vulkan::Vertex_UI> ac{element.getScene()->renderer->batch, context.whiteRegion};
-
-	auto param = ac.get();
-
-	context.color = element.getCursorState().focused ? Colors::WHITE : Colors::YELLOW;
-	context.stroke = 2.f;
+	InstantBatchAutoParam param{static_cast<RendererUI*>(element.getScene()->renderer)->batch, Draw::WhiteRegion};
+	auto color = element.getCursorState().focused ? Colors::WHITE : Colors::YELLOW;
 
 
 	if(element.getCursorState().pressed){
-		context.color.a = 0.3f;
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, element.prop().getValidBound_absolute(), context.color);
+		color.a = 0.3f;
+		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, element.prop().getValidBound_absolute(), color);
 	}
-	context.color.a = 1.f;
-	Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, element.prop().getValidBound_absolute(), context.color);
+	color.a = 1.f;
+	Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(param, 2.f, element.prop().getValidBound_absolute(), color);
 
 }
 

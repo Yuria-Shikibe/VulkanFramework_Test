@@ -9,22 +9,31 @@ import std;
 
 namespace ext::algo{
 	export
-	template <std::input_iterator It, std::sentinel_for<It> Se, typename T, std::indirectly_unary_invocable<It> Proj = std::identity, typename Func = std::plus<>>
+	template <
+		std::input_iterator It,
+		std::sentinel_for<It> Se,
+		std::indirectly_unary_invocable<It> Proj = std::identity,
+		typename Func = std::plus<>,
+		typename T = std::indirect_result_t<Proj, It>>
 		requires requires(Func func, T v, It it, Proj proj){
-			{ std::invoke(func, std::move(v), std::invoke(proj, it))} -> std::convertible_to<T>;
+			{ std::invoke(func, std::move(v), std::invoke(proj, *it)) } -> std::convertible_to<T>;
 		}
-	constexpr T accumulate(It it, Se se, T initial, Func func, Proj proj = {}){
+	constexpr T accumulate(It it, Se se, T initial = {}, Func func = {}, Proj proj = {}){
 		for(; it != se; ++it){
-			initial = std::invoke(func, std::move(initial), std::invoke(proj, it));
+			initial = std::invoke(func, std::move(initial), std::invoke(proj, *it));
 		}
 
 		return initial;
 	}
 
 	export
-	template <std::ranges::input_range Rng, typename T, typename Proj = std::identity, typename Func = std::plus<>>
-	constexpr T accumulate(Rng&& se, T initial, Func func, Proj proj = {}){
-		return ext::algo::accumulate(std::ranges::begin(se), std::ranges::end(se), initial, func, proj);
+	template <
+		typename Rng,
+		typename Proj = std::identity, typename Func = std::plus<>,
+		typename T = std::indirect_result_t<Proj, std::ranges::iterator_t<Rng>>>
+	requires (!std::sentinel_for<T, Rng>)
+	constexpr T accumulate(Rng&& rng, T initial, Func func = {}, Proj proj = {}){
+		return ext::algo::accumulate(std::ranges::begin(rng), std::ranges::end(rng), std::move(initial), std::move(func), std::move(proj));
 	}
 
 	export

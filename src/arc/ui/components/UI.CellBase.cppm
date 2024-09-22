@@ -11,5 +11,9 @@ export namespace Core::UI{
 		Geom::Rect_Orthogonal<float> allocatedBound{};
 		float roomScale{1.f};
 		float contentScale{1.f};
+
+		constexpr void allocate(const Geom::Rect_Orthogonal<float> bound) noexcept{
+			allocatedBound = bound;
+		}
 	};
 }
