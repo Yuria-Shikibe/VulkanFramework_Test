@@ -13,11 +13,11 @@ void Core::UI::DefElementDrawer::draw(const Element& element) const {
 	InstantBatchAutoParam param{static_cast<RendererUI*>(element.getScene()->renderer)->batch, Draw::WhiteRegion};
 	auto color = element.getCursorState().focused ? Colors::WHITE : Colors::YELLOW;
 
-
 	if(element.getCursorState().pressed){
 		color.a = 0.3f;
 		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, element.prop().getValidBound_absolute(), color);
 	}
+
 	color.a = 1.f;
 	Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(param, 2.f, element.prop().getValidBound_absolute(), color);
 

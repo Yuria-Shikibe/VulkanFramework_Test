@@ -251,7 +251,7 @@ namespace Graphic{
 		const Core::Vulkan::Context* context{};
 		Core::Vulkan::CommandPool transientCommandPool{};
 
-		//OPTM make unit offset as a template argument after the framework has basically done
+		//OPTM make unit offset as a template constexpr argument after the framework has basically done
 		std::ptrdiff_t unitOffset{};
 
 		Core::Vulkan::DescriptorLayout layout{};
@@ -293,6 +293,11 @@ namespace Graphic{
 			}, sampler{sampler}{
 
 			for(auto& commands : units)commands = CommandUnit{*this};
+		}
+
+		void setSampler(VkSampler sampler) noexcept{
+			if(!sampler)throw std::invalid_argument("invalid null sampler");
+			this->sampler = sampler;
 		}
 
 		void bindBuffersTo(VkCommandBuffer commandBuffer, const std::size_t unitIndex){
@@ -357,7 +362,7 @@ namespace Graphic{
 
 		[[nodiscard]] explicit BasicBatch(const Core::Vulkan::Context& context, const std::size_t vertexSize, VkSampler sampler) :
 					BatchInterface{context, vertexSize, sampler}{
-			for(auto& frame : frames)static_cast<VerticesDataBase&>(frame) = VerticesDataBase{*this};
+			for(auto& frame : frames)static_cast<VerticesDataBase&>(frame) = {*this};
 		}
 
 	protected:
@@ -403,8 +408,6 @@ namespace Graphic{
 				frameData->transferDoneEvent.cmdSet(scopedCommand, dependencyInfo);
 			}
 		}
-
-		public:
 	};
 
 	template <std::derived_from<VerticesDataBase> VerticesData>

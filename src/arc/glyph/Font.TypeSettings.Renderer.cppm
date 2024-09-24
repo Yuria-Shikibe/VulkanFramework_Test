@@ -9,7 +9,7 @@ export import Font.TypeSettings;
 import Geom.Vector2D;
 
 import Graphic.BatchData;
-import Graphic.Batch;
+import Graphic.Batch.MultiThread;
 import Graphic.Batch.AutoDrawParam;
 import std;
 

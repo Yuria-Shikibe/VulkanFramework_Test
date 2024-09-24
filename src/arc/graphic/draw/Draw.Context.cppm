@@ -27,7 +27,7 @@ export namespace Graphic::Draw{
 	// using Vertex = Core::Vulkan::Vertex_World;
 	template <typename Vertex>
 	struct Drawer{
-		template <VertModifier<Vertex&> M>
+		template <VertexModifier<Vertex&> M>
 		static void fill(
 			const DrawParam<M>& param,
 			const Geom::Vec2& v00, const Geom::Vec2& v10, const Geom::Vec2& v11, const Geom::Vec2& v01,
@@ -39,7 +39,7 @@ export namespace Graphic::Draw{
 			generator(DefGenerator<Vertex>::value, param.modifier, v01, param.index, c01, param.uv->v00);
 		}
 
-		template <VertModifier<Vertex&> M>
+		template <VertexModifier<Vertex&> M>
 		static void rect(
 			const DrawParam<M>& param,
 			const Geom::Transform center,
@@ -64,7 +64,7 @@ export namespace Graphic::Draw{
 			);
 		}
 
-		template <VertModifier<Vertex&> M>
+		template <VertexModifier<Vertex&> M>
 		static void rectOrtho(
 			const DrawParam<M>& param,
 			const Geom::OrthoRectFloat& bound,
@@ -81,7 +81,7 @@ export namespace Graphic::Draw{
 
 		struct Line{
 			//TODO ortho lines
-			template <VertModifier<Vertex&> M>
+			template <VertexModifier<Vertex&> M>
 			static void line(
 				const DrawParam<M>& param,
 				const float stroke,
@@ -112,7 +112,7 @@ export namespace Graphic::Draw{
 				}
 			}
 
-			template <VertModifier<Vertex&> M>
+			template <VertexModifier<Vertex&> M>
 			static void line(
 				const DrawParam<M>& param,
 				const float stroke,
@@ -121,7 +121,7 @@ export namespace Graphic::Draw{
 				Line::line(param, stroke, src, dst, c, cap);
 			}
 
-			template <VertModifier<Vertex&> M>
+			template <VertexModifier<Vertex&> M>
 			static void lineAngleCenter(const DrawParam<M>& param,
 			                            const float stroke, const Geom::Transform trans, const float length, const Color& c,
 			                            const bool cap = true){
@@ -132,7 +132,7 @@ export namespace Graphic::Draw{
 				Line::line(param, stroke, trans.vec + vec, trans.vec - vec, c, c, cap);
 			}
 
-			template <VertModifier<Vertex&> M>
+			template <VertexModifier<Vertex&> M>
 			static void lineAngle(const DrawParam<M>& param,
 			                      const float stroke, const Geom::Transform trans, const float length, const Color& c,
 			                      const bool cap = true){
@@ -143,7 +143,7 @@ export namespace Graphic::Draw{
 			}
 
 
-			template <AutoParam M>
+			template <AutoAcquirableParam M>
 			static void rectOrtho(
 				M& auto_param,
 				const float stroke,
@@ -154,7 +154,7 @@ export namespace Graphic::Draw{
 				Line::line(++auto_param, stroke, rect.vert_10(), rect.vert_00(), color, color, cap);
 			}
 
-			template <AutoParam M>
+			template <AutoAcquirableParam M>
 			static void square(
 				M& auto_param,
 				const float stroke,
@@ -189,7 +189,7 @@ export namespace Graphic::Draw{
 				}(std::make_index_sequence<4>{});
 			}
 
-			template <AutoParam M>
+			template <AutoAcquirableParam M>
 			static void poly(
 				M& auto_param,
 				const float stroke,
@@ -217,7 +217,7 @@ export namespace Graphic::Draw{
 			}
 
 
-			template <AutoParam M, std::ranges::random_access_range Rng = std::array<Color, 1>>
+			template <AutoAcquirableParam M, std::ranges::random_access_range Rng = std::array<Color, 1>>
 				requires (std::ranges::sized_range<Rng> && std::convertible_to<const Color&, std::ranges::range_value_t<Rng>>)
 			static void poly(
 				M& auto_param,
@@ -297,7 +297,7 @@ export namespace Graphic::Draw{
 				);
 			}
 
-			template <AutoParam M>
+			template <AutoAcquirableParam M>
 			static void circle(M& auto_param,
 			                   const float stroke,
 			                   Geom::Vec2 pos, const float radius, const Color& color){

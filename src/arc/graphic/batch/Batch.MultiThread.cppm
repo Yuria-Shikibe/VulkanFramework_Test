@@ -2,7 +2,7 @@ module;
 
 #include <vulkan/vulkan.h>
 
-export module Graphic.Batch;
+export module Graphic.Batch.MultiThread;
 
 export import Graphic.Batch.Base;
 

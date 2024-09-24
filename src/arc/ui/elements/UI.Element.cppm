@@ -104,6 +104,8 @@ namespace Core::UI{
 	export struct ElemProperty{
 		std::string name{};
 
+
+		//TODO uses string view?
 		std::string elementTypeName{};
 
 		//position fields
@@ -119,7 +121,7 @@ namespace Core::UI{
 		Align::Spacing boarder{};
 
 		//state
-		bool activated{};
+		bool activated{}; //TODO as graphic property?
 		bool visible{true};
 		bool sleep{};
 		bool maintainFocusUntilMouseDrop{};
@@ -212,7 +214,7 @@ namespace Core::UI{
 			return cursorState;
 		}
 
-		void resize_unchecked(const Geom::Vec2 size){
+		void resize_quiet(const Geom::Vec2 size){
 			auto last = std::exchange(layoutState.acceptMask_inherent, SpreadDirection::none);
 			resize(size);
 			layoutState.acceptMask_inherent = last;
@@ -429,7 +431,7 @@ namespace Core::UI{
 		bool updateAbsSrc(const Geom::Vec2 parentAbsSrc) override{
 			if(Element::updateAbsSrc(parentAbsSrc)){
 				for (const auto & element : getChildren()){
-					element->updateAbsSrc(parentAbsSrc);
+					element->updateAbsSrc(absPos());
 				}
 				return true;
 			}

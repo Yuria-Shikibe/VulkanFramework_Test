@@ -5,7 +5,7 @@ module;
 export module Graphic.Renderer.World;
 
 export import Graphic.Renderer;
-export import Graphic.Batch;
+export import Graphic.Batch.MultiThread;
 
 import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.DynamicRendering;

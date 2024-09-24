@@ -1,4 +1,3 @@
-
 export module MainTest;
 
 import Core.Vulkan.Shader.Compile;
@@ -6,7 +5,7 @@ import Core.File;
 
 import Assets.Directories;
 
-import Graphic.Batch;
+import Graphic.Batch.MultiThread;
 
 
 
@@ -29,7 +28,7 @@ export namespace Test{
 		auto& bed = Core::Global::UI::getMainGroup();
 
 		bed.emplaceInit<Core::UI::Embryo_Unsaturated>([](Core::UI::Embryo_Unsaturated& embryo){
-			embryo.emplaceInit<Core::UI::Table>([](Core::UI::Table& v){
+			embryo.emplaceInit<Core::UI::FixedTable>([](Core::UI::FixedTable& v){
 				v.align = Align::Pos::top_left;
 
 				v.emplace<Core::UI::Element>().setSize(80.).setMargin(5);
@@ -49,10 +48,25 @@ export namespace Test{
 				v.emplace<Core::UI::Element>().setMargin(5);
 			});
 			embryo.endRow();
-			embryo.emplaceInit<Core::UI::ScrollPanel>([](Core::UI::ScrollPanel& v){
-				v.setItem<Core::UI::Element>([](Core::UI::Element& e){
-					e.prop().boarder.set(5.);
-					e.resize({200, 500});
+			embryo.emplaceInit<Core::UI::ScrollPanel>([](Core::UI::ScrollPanel& pane){
+				pane.setItem<Core::UI::FlexTable>([](Core::UI::FlexTable& v){
+					v.align = Align::Pos::top_left;
+
+					v.emplace<Core::UI::Element>().setSize(80.).setMargin(5);
+					v.emplace<Core::UI::Element>().setSize(60.).setMargin(5);
+					v.emplace<Core::UI::Element>().setMargin(5);
+					v.endRow();
+					v.emplace<Core::UI::Element>().setSize(30., 120.).setMargin(5);
+					v.emplace<Core::UI::Element>().setWidth(90).setMargin(5);
+					v.endRow();
+					v.emplace<Core::UI::Element>().setSize(100., 80.).setMargin(5);
+					v.emplace<Core::UI::Element>().setMargin(5);
+					v.emplace<Core::UI::Element>().setMargin(5);
+					v.endRow();
+					v.emplace<Core::UI::Element>().setMargin(5);
+					v.emplace<Core::UI::Element>().setMargin(5);
+					v.emplace<Core::UI::Element>().setWidth(120).setRatio_y(1.f).setMargin(5);
+					v.emplace<Core::UI::Element>().setMargin(5);
 				});
 			});
 		}).setScale({Geom::FromExtent, {0.f, 0.0f}, {0.2f, 1.f}}).setMargin(10).setAlign(Align::Pos::top_left);
@@ -78,13 +92,14 @@ export namespace Test{
 		// }).setScale({Geom::FromExtent, {0.f, 0.0f}, {0.2f, 0.8f}}).setMargin(10).setAlign(Align::Pos::top_right);
 	}
 
-	void compileAllShaders() {
+	void compileAllShaders(){
 		Core::Vulkan::ShaderRuntimeCompiler compiler{};
-		compiler.addMarco("MaximumAllowedSamplersSize", std::format("{}", Graphic::Batch_MultiThread::MaximumAllowedSamplersSize));
+		compiler.addMarco("MaximumAllowedSamplersSize",
+		                  std::format("{}", Graphic::Batch_MultiThread::MaximumAllowedSamplersSize));
 		const Core::Vulkan::ShaderCompilerWriter adaptor{compiler, Assets::Dir::shader_spv};
 
 		Core::File{Assets::Dir::shader_src}.forSubs([&](Core::File&& file){
-			if(file.extension().empty())return;
+			if(file.extension().empty()) return;
 			adaptor.compile(file);
 		});
 	}

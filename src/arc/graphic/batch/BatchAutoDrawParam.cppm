@@ -4,7 +4,7 @@ module;
 
 export module Graphic.Batch.AutoDrawParam;
 
-export import Graphic.Batch;
+export import Graphic.Batch.MultiThread;
 export import Graphic.Batch.Exclusive;
 export import Graphic.Draw.Interface;
 export import Graphic.BatchData;
@@ -82,10 +82,11 @@ namespace Graphic{
 
 	export
 	template <typename Vertex /*capture name*/ = void, typename T = std::identity>
-	struct InstantBatchAutoParam : Draw::DrawParam<T>{
+	class InstantBatchAutoParam : public Draw::DrawParam<T>{
 		Batch_Exclusive* batch{};
 		VkImageView imageView{};
 
+	public:
 		[[nodiscard]] InstantBatchAutoParam() = default;
 
 		[[nodiscard]] InstantBatchAutoParam(Batch_Exclusive& batch, const ImageViewRegion* region)

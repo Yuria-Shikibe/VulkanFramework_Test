@@ -15,7 +15,7 @@ import Core.Vulkan.EXT;
 
 import Core.File;
 import Graphic.Color;
-import Graphic.Batch;
+import Graphic.Batch.MultiThread;
 import Graphic.Pixmap;
 
 import Core.Input;
@@ -57,6 +57,7 @@ import ext.views;
 import ext.algo;
 import ext.algo.string_parse;
 import ext.event;
+import ext.algo.timsort;
 
 import Core.Vulkan.Vertex;
 
@@ -72,11 +73,13 @@ import Font.GlyphToRegion;
 import Font.TypeSettings;
 import Font.TypeSettings.Renderer;
 
+import Math.Rand;
 
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
 Graphic::ImageAtlas loadTex(){
+
     std::unordered_map<std::string, std::uint64_t> tags{};
 
     using namespace Core;
@@ -126,27 +129,37 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
 int main_(){
     using namespace std::literals;
 
-    std::vector<std::string> arr{
-        "12askjfhl;AShf;JASH:FJLHA:JLSF3", "", "345"
-    };
+    Math::Rand rand{};
 
-    const std::vector<std::tuple<std::tuple<int, std::string>, double>> arr1{};
+    std::vector<std::size_t> arr{};
 
-    auto v = std::as_const(arr1) | std::views::transform(ext::tuple_flatter<>{});
-
-    for (auto&& basic_strings : std::as_const(arr) | ext::views::part_if(&std::string::empty)){
-        for (auto& basic_string : basic_strings){
-            std::println("{}", basic_string);
-            // basic_string = "aabbcc";
-            std::println("{}", basic_string);
-        }
+    for(std::size_t i = 0; i < 100000000ull; ++i){
+        arr.push_back(rand.nextLong(100000000ull));
     }
 
-    for (const auto & string : arr){
-        std::println("{}", string);
+    std::cout << "genDone" << std::endl;
+
+    {
+        auto test = arr;
+        auto begin = std::chrono::high_resolution_clock::now();
+        ext::algo::timsort(test);
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
     }
 
-    // std::views::
+    std::cout << "tim sort done" << std::endl;
+
+    {
+        auto test = arr;
+        auto begin = std::chrono::high_resolution_clock::now();
+        std::ranges::sort(test);
+        auto end = std::chrono::high_resolution_clock::now();
+
+        std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
+    }
+
+    std::cout << "std sort done" << std::endl;
 
     return 0;
 }

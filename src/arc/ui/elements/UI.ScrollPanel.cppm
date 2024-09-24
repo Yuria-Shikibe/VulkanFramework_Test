@@ -122,10 +122,11 @@ export namespace Core::UI{
 			setItemSize();
 		}
 
-		template <typename T, std::invocable<T&> InitFunc>
+		template <typename T, Geom::Vector2D<bool> fillParent = {true, false}, std::invocable<T&> InitFunc>
 			requires (std::is_default_constructible_v<T>)
 		void setItem(InitFunc&& func){
 			this->item = std::make_unique<T>();
+			item->prop().fillParent = fillParent;
 			func(*static_cast<T*>(this->item.get()));
 			modifyChildren(this->item.get());
 			setItemSize();
@@ -152,7 +153,7 @@ export namespace Core::UI{
 
 	private:
 		void setItemSize() const{
-			if(!item->prop().fillParent.x || !item->prop().fillParent.y)return;
+			if(!item->prop().fillParent.x && !item->prop().fillParent.y)return;
 
 			const auto [vx, vy] = getViewportSize();
 			const auto [ox, oy] = getItemSize();
@@ -208,7 +209,7 @@ export namespace Core::UI{
 		}
 
 		[[nodiscard]] float vertBarSLength() const {
-			const auto h = property.getValidHeight();
+			const auto h = getViewportSize().y;
 			return Math::clampPositive(Math::min(h / getItemSize().y, 1.0f) * h);
 		}
 

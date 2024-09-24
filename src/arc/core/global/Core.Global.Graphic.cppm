@@ -6,7 +6,7 @@ export module Core.Global.Graphic;
 
 export import Graphic.Effect.Manager;
 export import Graphic.Renderer.World;
-export import Graphic.Batch;
+export import Graphic.Batch.MultiThread;
 
 export namespace Core::Global{
 	Graphic::EffectManager mainEffectManager{};

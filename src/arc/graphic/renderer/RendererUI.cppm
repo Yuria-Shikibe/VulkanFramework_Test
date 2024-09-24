@@ -24,7 +24,7 @@ import Core.Vulkan.DynamicRendering;
 import Core.Vulkan.Preinstall;
 import Core.Vulkan.EXT;
 
-import Graphic.Batch;
+import Graphic.Batch.MultiThread;
 import Graphic.Batch.Exclusive;
 
 import Geom.Rect_Orthogonal;

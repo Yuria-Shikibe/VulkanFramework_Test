@@ -4,7 +4,7 @@ import Core.UI.Element;
 
 void Core::UI::PassiveCell::applyBoundToElement(Element* element) const noexcept{
 	const Geom::Vec2 size = allocatedBound.getSize() * sizeScale.getSize() * roomScale;
-	element->resize_unchecked((size - margin.getSize()));
+	element->resize_quiet((size - margin.getSize()));
 }
 
 void Core::UI::PassiveCell::applyPosToElement(Element* element, const Geom::Vec2 absSrc) const{

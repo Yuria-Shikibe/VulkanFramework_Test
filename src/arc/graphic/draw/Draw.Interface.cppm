@@ -8,25 +8,32 @@ export import Graphic.ImageRegion;
 
 export namespace Graphic::Draw{
 	template <typename M, typename Vertex>
-	concept VertModifier = (std::same_as<std::decay_t<M>, std::identity> || std::regular_invocable<Vertex>);
+	concept VertexModifier = std::regular_invocable<M, Vertex>;
 
 	template <typename T, typename... Args>
-		requires (std::is_default_constructible_v<T> && std::conjunction_v<std::is_trivially_copy_assignable<Args>...>)
-	struct VertexGenerator{
-		std::tuple<Args T::*...> projections{};
+		requires (std::is_default_constructible_v<T> && (std::is_trivially_copy_assignable_v<Args> && ...))
+	struct VertexProjection{
+	private:
+		using projectionArgs = std::tuple<Args T::*...>;
 
-		template <typename... MptrArgs>
-		explicit constexpr VertexGenerator(MptrArgs... args) noexcept : projections{args...}{}
+		template <std::size_t I>
+		using argAt = typename ext::mptr_info<std::tuple_element_t<I, projectionArgs>>::value_type;
+
+		projectionArgs projections{};
+
 
 		template <std::size_t I, typename Arg>
-		void set(T& t, const Arg& arg) const{
-			t.*std::get<I>(projections) = arg;
+		constexpr void set(T& t, const Arg& arg) const noexcept(std::is_nothrow_assignable_v<argAt<I>, Arg>){
+			static_assert(std::is_lvalue_reference_v<std::invoke_result_t<std::tuple_element_t<I, projectionArgs>, T&>>, "must assign to a valid lvalue");
+			std::invoke(std::get<I>(projections), t) = arg;
 		}
 
-		T& operator()(void* place, const Args&... args) const{
-			new(place) T{};
+	public:
+		template <typename... MptrArgs>
+		explicit constexpr VertexProjection(const MptrArgs&... args) noexcept : projections{args...}{}
 
-			T& t = *static_cast<T*>(place);
+		constexpr T& operator()(void* place, const Args&... args) const noexcept(std::is_nothrow_constructible_v<T, const Args& ...>){
+			T& t = *new(place) T{};
 
 			[&]<std::size_t ... I>(std::index_sequence<I...>){
 				(this->template set<I>(t, args), ...);
@@ -35,15 +42,15 @@ export namespace Graphic::Draw{
 			return t;
 		}
 
-		template <VertModifier<T&> ModifyCallable = std::identity>
-		void operator()(void* place, ModifyCallable func, const Args&... args) const{
+		template <VertexModifier<T&> ModifyCallable = std::identity>
+		constexpr void operator()(void* place, ModifyCallable func, const Args&... args) const noexcept(std::is_nothrow_constructible_v<T, const Args& ...>){
 			std::invoke(func, this->operator()(place, args...));
 		}
 	};
 
 	template <typename... Args>
-	VertexGenerator(Args...) ->
-		VertexGenerator<
+	VertexProjection(Args...) ->
+		VertexProjection<
 			typename ext::mptr_info<std::tuple_element_t<0, std::tuple<Args...>>>::class_type,
 			typename ext::mptr_info<Args>::value_type...>;
 
@@ -53,12 +60,11 @@ export namespace Graphic::Draw{
 	struct DepthCreator : ModifierBase<Core::Vulkan::Vertex_World>{
 		float depth{};
 
-		void operator()(type& v) const{
+		constexpr void operator()(type& v) const noexcept{
 			v.depth = depth;
 		}
 	};
 
-	static_assert(VertModifier<std::identity, void>);
 
 	template <typename T>
 	struct SeqGenerator{
@@ -68,10 +74,10 @@ export namespace Graphic::Draw{
 
 		[[nodiscard]] explicit SeqGenerator(void* p) : t{static_cast<T*>(p)}{}
 
-		template <typename... Args, VertModifier<T&> ModifyCallable = std::identity>
-		void operator()(const VertexGenerator<T, std::decay_t<Args>...>& Generator, ModifyCallable&& modifier,
+		template <typename... Args, VertexModifier<T&> ModifyCallable = std::identity>
+		constexpr void operator()(const VertexProjection<T, std::decay_t<Args>...>& Generator, ModifyCallable modifier,
 		                const Args&... args){
-			Generator.template operator()<ModifyCallable>(t, modifier, args...);
+			Generator(t, modifier, args...);
 			++t;
 		}
 	};
@@ -88,17 +94,17 @@ export namespace Graphic::Draw{
 
 	template <>
 	struct DefGenerator<Core::Vulkan::Vertex_UI>{
-		static constexpr VertexGenerator value{
+		static constexpr VertexProjection value{
 				&Core::Vulkan::Vertex_UI::position,
 				&Core::Vulkan::Vertex_UI::textureParam,
 				&Core::Vulkan::Vertex_UI::color,
 				&Core::Vulkan::Vertex_UI::texCoord,
-			};;
+			};
 	};
 
 	template <>
 	struct DefGenerator<Core::Vulkan::Vertex_World>{
-		static constexpr VertexGenerator value{
+		static constexpr VertexProjection value{
 				&Core::Vulkan::Vertex_World::position,
 				&Core::Vulkan::Vertex_World::textureParam,
 				&Core::Vulkan::Vertex_World::color,
@@ -111,11 +117,11 @@ export namespace Graphic::Draw{
 		void* dataPtr{};
 		M modifier{};
 		Core::Vulkan::TextureIndex index{};
-		const Graphic::UVData* uv{};
+		const UVData* uv{}; //TODO using value instead of indirect value?
 	};
 
 	template <typename M>
-	concept AutoParam = requires(M& m){
+	concept AutoAcquirableParam = requires(M& m){
 		requires ext::spec_of<M, DrawParam>;
 		{ ++m } -> std::same_as<M&>;
 	};
