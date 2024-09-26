@@ -15,6 +15,7 @@ namespace Core::UI{
 		using CellAdaptor::CellAdaptor;
 
 		void apply(const Geom::Vec2 absPos) const{
+			element->layoutState.restrictedByParent = true;
 			removeRestrict();
 			cell.applyBoundToElement(element);
 			restrictSize();

@@ -25,8 +25,6 @@ export namespace Core::UI{
 	protected:
 		constexpr void restrictSize() const noexcept{
 			element->prop().clampedSize.setMaximumSize(cell.allocatedBound.getSize());
-			//TODO move this to other place?
-			element->layoutState.restrictedByParent = true;
 		}
 
 		constexpr void removeRestrict() const noexcept{
@@ -49,7 +47,14 @@ export namespace Core::UI{
 
 
 	public:
-		using Group::Group;
+		[[nodiscard]] UniversalGroup(){
+			interactivity = Interactivity::childrenOnly;
+		}
+
+		[[nodiscard]] explicit UniversalGroup(const std::string_view tyName)
+			: Group{tyName}{
+			interactivity = Interactivity::childrenOnly;
+		}
 
 		[[nodiscard]] const std::vector<Adaptor>& getCells() const noexcept{
 			return cells;
@@ -71,13 +76,13 @@ export namespace Core::UI{
 		}
 
 		T& addChildren(std::unique_ptr<Element>&& element) override{
-			modifyChildren(element.get());
 			element->layoutState.acceptMask_context -= SpreadDirection::child;
 
 			auto& cell = cells.emplace_back(element.get(), defaultCell);
 			children.push_back(std::move(element));
 
-			layoutState.setSelfChanged();
+			// layoutState.setSelfChanged();
+			notifyLayoutChanged(SpreadDirection::upper);
 
 			return cell.cell;
 		}
@@ -111,6 +116,7 @@ export namespace Core::UI{
 		template <std::derived_from<Element> E, typename... Args>
 		T& emplace(Args&& ...args){
 			std::unique_ptr<Element> ptr = std::make_unique<E>(std::forward<Args>(args)...);
+			modifyChildren(ptr.get());
 			return addChildren(std::move(ptr));
 		}
 
@@ -118,6 +124,7 @@ export namespace Core::UI{
 			requires (std::is_default_constructible_v<E>)
 		T& emplaceInit(Init&& init){
 			std::unique_ptr<Element> ptr = std::make_unique<E>();
+			modifyChildren(ptr.get());
 			init(*static_cast<E*>(ptr.get()));
 			return static_cast<T&>(addChildren(std::move(ptr)));
 		}

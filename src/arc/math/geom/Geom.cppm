@@ -9,12 +9,12 @@ import Math.Interpolation;
 
 import Geom.Vector2D;
 
-import Geom.Shape;
-import Geom.Shape.Circle;
+// import Geom.Shape;
+// import Geom.Shape.Circle;
 import Geom.Shape.RectBox;
 import Geom.Rect_Orthogonal;
 
-using namespace Geom::Shape;
+// using namespace Geom::Shape;
 
 export namespace Geom {
 	constexpr Vec2 intersectCenterPoint(const QuadBox& subject, const QuadBox& object) {
@@ -171,7 +171,7 @@ export namespace Geom {
 		return true;
 	}
 
-	template <ext::Derived<QuadBox> T>
+	template <ext::derived<QuadBox> T>
 	[[nodiscard]] constexpr Vec2 nearestEdgeNormal(const Vec2 p, const T& rectangle) {
 		float minDistance = std::numeric_limits<float>::max();
 		Vec2 closestEdgeNormal{};
@@ -191,7 +191,7 @@ export namespace Geom {
 		return closestEdgeNormal;
 	}
 
-	template <ext::Derived<QuadBox> T>
+	template <ext::derived<QuadBox> T>
 	[[nodiscard]] constexpr Vec2 avgEdgeNormal(const Vec2 p, const T& rectangle) {
 		Vec2 closestEdgeNormal{};
 
@@ -262,8 +262,8 @@ export namespace Geom {
 		return distanceSquared <= radius * radius;
 	}
 
-	template <ext::number T>
-	bool overlap(const Circle<T>& circle, const Rect_Orthogonal<T>& rect) {
-		return Geom::overlap<T>(circle.getCX(), circle.getCY(), circle.getRadius(), rect);
-	}
+	// template <ext::number T>
+	// bool overlap(const Circle<T>& circle, const Rect_Orthogonal<T>& rect) {
+	// 	return Geom::overlap<T>(circle.getCX(), circle.getCY(), circle.getRadius(), rect);
+	// }
 }

@@ -46,6 +46,8 @@ export namespace Core::UI{
 		super = 1u << 1,
 		child = 1u << 2,
 
+		child_item = 1u << 3,
+
 		all = local | super | child,
 
 		lower = local | child,
@@ -123,7 +125,7 @@ export namespace Core::UI{
 			}
 		}
 
-		constexpr bool notifyFromChildren() noexcept{
+		constexpr bool tryNotifyFromChildren() noexcept{
 			if(acceptMask_context & SpreadDirection::child && acceptMask_inherent & SpreadDirection::child){
 				childrenChanged = true;
 				return true;

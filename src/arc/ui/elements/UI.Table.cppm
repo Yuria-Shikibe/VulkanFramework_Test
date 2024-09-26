@@ -27,11 +27,11 @@ export namespace Core::UI{
 
 	protected:
 		void arrangeLayout(){
-			grid = Util::countRowAndColumn_toVector(cells, &TableCell::endRow);
+			grid = Util::countRowAndColumn_toVector(cells, &TableCellAdaptor::endRow);
 			if(grid.empty())return;
 
 			TableLayoutInfo layoutInfo{std::ranges::max(grid), grid.size()};
-			layoutInfo.preRegisterAcquiredSize(cells);
+			layoutInfo.preRegisterAcquiredSize<false>(cells);
 
 			//Get dependencies
 			const auto dependencyCount = layoutInfo.getDependencyCount();
@@ -57,11 +57,16 @@ export namespace Core::UI{
 		}
 	};
 
+	template <bool reguardItemSize>
 	struct FlexTable : BasicTable{
+		static constexpr std::string_view TypeNameStr{
+			reguardItemSize ? "FlexTable<true>" : "FlexTable<false>"
+		};
+
 		Geom::Vec2 minimumExtendedSize{};
 
-		[[nodiscard]] FlexTable() : BasicTable{"FlexTable"}{
-
+		[[nodiscard]] FlexTable() : BasicTable{TypeNameStr}{
+			if constexpr (reguardItemSize)layoutState.ignoreChildren();
 		}
 
 		void layout() override{
@@ -72,11 +77,11 @@ export namespace Core::UI{
 
 	protected:
 		void arrangeLayout(){
-			grid = Util::countRowAndColumn_toVector(cells, &TableCell::endRow);
+			grid = Util::countRowAndColumn_toVector(cells, &TableCellAdaptor::endRow);
 			if(grid.empty())return;
 
 			TableLayoutInfo layoutInfo{std::ranges::max(grid), grid.size()};
-			layoutInfo.preRegisterAcquiredSize(cells);
+			layoutInfo.preRegisterAcquiredSize<reguardItemSize>(cells);
 
 			//Get dependencies
 			const auto dependencyCount = layoutInfo.getDependencyCount();
@@ -121,4 +126,7 @@ export namespace Core::UI{
 			}
 		}
 	};
+
+	using FlexTable_Dynamic = FlexTable<true>;
+	using FlexTable_Static = FlexTable<false>;
 }

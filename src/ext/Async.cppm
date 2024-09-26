@@ -31,7 +31,7 @@ export namespace ext {
 		}
 	};
 
-	template <typename T = void, ext::Derived<TaskHandler> Handler = TaskHandler>
+	template <typename T = void, ext::derived<TaskHandler> Handler = TaskHandler>
 	class Task {
 	protected:
 		Handler* handler{nullptr};
@@ -68,7 +68,7 @@ export namespace ext {
 		}
 	};
 
-	template <typename T = void, ext::Derived<TaskHandler> Handler = TaskHandler>
+	template <typename T = void, ext::derived<TaskHandler> Handler = TaskHandler>
 	class ProgressTask : public Task<T, Handler>{
 	protected:
 		float taskProgress = 0;

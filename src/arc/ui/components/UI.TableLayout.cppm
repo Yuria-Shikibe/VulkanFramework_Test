@@ -6,6 +6,7 @@ export module Core.UI.TableLayout;
 
 export import Core.UI.UniversalGroup;
 export import Core.UI.Cell;
+export import Core.UI.StatedLength;
 
 import std;
 import ext.views;
@@ -14,10 +15,15 @@ import ext.algo;
 import Core.UI.Test;
 
 export namespace Core::UI{
-	struct TableCell : CellAdaptor<MasteringCell>{
+	struct TableCellAdaptor : CellAdaptor<TableCell>{
 		using CellAdaptor::CellAdaptor;
 
 		void apply(const Geom::Vec2 absPos) const{
+			if(!cell.size.x.external() && !cell.size.y.external()){
+				element->layoutState.restrictedByParent = true;
+			}
+
+			removeRestrict();
 			cell.applyBoundToElement(element);
 			restrictSize();
 			cell.applyPosToElement(element, absPos);
@@ -37,7 +43,7 @@ export namespace Core::UI{
 		std::vector<StatedLength> maxSizes{};
 
 	public:
-		using CellType = TableCell;
+		using CellType = TableCellAdaptor;
 
 		std::vector<RowInfo> rowInfos{};
 
@@ -84,12 +90,12 @@ export namespace Core::UI{
 			return {(atColumn(column)), atRow(row)};
 		}
 
-		// template <std::derived_from<TableCell> T>
+		template <bool preAcquireSize = false>
 		void preRegisterAcquiredSize(const std::vector<CellType>& cells){
 			auto zip =
 				std::views::zip(
 					rowInfos | std::views::enumerate,
-					cells | ext::views::part_if(&TableCell::endRow)
+					cells | ext::views::part_if(&TableCellAdaptor::endRow)
 				);
 			//pre register acquire state
 
@@ -101,18 +107,20 @@ export namespace Core::UI{
 				for(const auto& [column, cell] : rowCells | std::views::enumerate){
 					auto acquiredSize = cell.cell.size;
 
-					{
+					if constexpr (preAcquireSize){
 						const bool xExternal = acquiredSize.x.external();
 						const bool yExternal = acquiredSize.y.external();
 
 						if(xExternal || yExternal){
-							auto usedSize = acquiredSize.cropMasterRatio();
+							const auto usedSize = acquiredSize.cropMasterRatio();
 							//set basic size
-							cell.element->resize_quiet(usedSize.getConcreteSize());
+							// cell.element->resize_quiet(usedSize.getConcreteSize());
 
-							const auto [ax, ay] = cell.element->requestSpace(usedSize.x.mastering(), usedSize.y.mastering());
-							if(xExternal) acquiredSize.x.setConcreteSize(ax);
-							if(yExternal) acquiredSize.x.setConcreteSize(ay);
+							auto result = cell.element->requestSpace(usedSize);
+
+							result += cell.cell.getMarginSize();
+							if(xExternal) acquiredSize.x.setConcreteSize(result.x);
+							if(yExternal) acquiredSize.y.setConcreteSize(result.y);
 						}
 					}
 
@@ -196,7 +204,7 @@ export namespace Core::UI{
 			auto zip =
 				std::views::zip(
 					rowInfos | std::views::enumerate,
-					cells | ext::views::part_if(&TableCell::endRow)
+					cells | ext::views::part_if(&TableCellAdaptor::endRow)
 				)
 				| std::views::transform(ext::tuple_flatter<false>{});
 
@@ -219,7 +227,13 @@ export namespace Core::UI{
 						rawSize.y = curMaxSize.y;
 					}
 
-					cell.cell.allocate({Geom::FromExtent, Util::flipY(offset, 0, rawSize.y), rawSize});
+					const auto off = Util::flipY(offset, 0, curMaxSize.y);
+
+					Rect externalBound{Geom::FromExtent, off, curMaxSize};
+
+					auto boundOffset = Align::getOffsetOf(cell.cell.insaturateAlign, rawSize, externalBound);
+
+					cell.cell.allocate({Geom::FromExtent, boundOffset, rawSize});
 					cell.cell.applyBoundToElement(cell.element);
 					//TODO allocated bound align to the cell
 
@@ -237,9 +251,9 @@ export namespace Core::UI{
 		}
 	};
 
-	struct BasicTable : UniversalGroup<MasteringCell, TableCell>{
-		Align::Pos align = Align::Pos::center;
+	struct BasicTable : UniversalGroup<TableCellAdaptor::CellType, TableCellAdaptor>{
 		std::vector<std::uint32_t> grid{};
+		Align::Pos align = Align::Pos::center;
 
 		auto& endRow(){
 			if(cells.empty())return *this;

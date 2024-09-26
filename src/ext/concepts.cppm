@@ -34,7 +34,7 @@ namespace ext {
     concept number = std::is_arithmetic_v<T>;
 
     export template <class DerivedT, class Base>
-    concept Derived = std::derived_from<DerivedT, Base>;
+    concept derived = std::derived_from<DerivedT, Base>;
 
     export template <class DerivedT, class... Bases>
     concept DerivedMulti = (std::derived_from<Bases, DerivedT> && ...);

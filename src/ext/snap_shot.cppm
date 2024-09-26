@@ -19,6 +19,11 @@ export namespace ext{
 		requires (std::is_copy_assignable_v<T>)
 	struct snap_shot{
 		static constexpr bool is_nothrow_copy_assignable = std::is_nothrow_copy_assignable_v<T>;
+		static constexpr bool is_nothrow_equality_comparable = requires(const T& t){
+			requires std::equality_comparable<T>;
+			{ t == t } noexcept;
+		};
+
 		using value_type = T;
 
 		T base{};
@@ -32,6 +37,18 @@ export namespace ext{
 			temp = base;
 		}
 
+		constexpr bool try_resume() noexcept(is_nothrow_copy_assignable && is_nothrow_equality_comparable) requires (std::equality_comparable<T>) {
+			if(temp == base)return false;
+			resume();
+			return true;
+		}
+
+		constexpr bool try_apply() noexcept(is_nothrow_copy_assignable && is_nothrow_equality_comparable) requires (std::equality_comparable<T>) {
+			if(temp == base)return false;
+			apply();
+			return true;
+		}
+
 		template <typename R>
 		constexpr void resumeProj(R T::* mptr) requires requires{
 			requires std::is_copy_assignable_v<std::invoke_result_t<decltype(mptr), T&>>;
@@ -43,7 +60,7 @@ export namespace ext{
 			base = temp;
 		}
 
-		constexpr void apply() && noexcept(std::is_nothrow_move_assignable_v<T>) requires std::is_move_assignable_v<T> {
+		constexpr void apply() && noexcept(std::is_nothrow_move_assignable_v<T>) requires (std::is_move_assignable_v<T>) {
 			base = std::move(temp);
 		}
 
@@ -79,9 +96,9 @@ export namespace ext{
 
 		constexpr snap_shot& operator=(snap_shot&& other) noexcept = default;
 
-		constexpr friend bool operator==(const snap_shot& lhs, const snap_shot& rhs) noexcept(requires(const T& t){
-			{ t == t } noexcept;
-		}) requires (std::equality_comparable<T>){
+		constexpr friend bool operator==(const snap_shot& lhs, const snap_shot& rhs)
+			noexcept(is_nothrow_equality_comparable)
+			requires (std::equality_comparable<T>){
 			return lhs.base == rhs.base;
 		}
 	};

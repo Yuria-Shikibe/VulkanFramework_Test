@@ -58,6 +58,7 @@ import ext.algo;
 import ext.algo.string_parse;
 import ext.event;
 import ext.algo.timsort;
+import ext.heterogeneous;
 
 import Core.Vulkan.Vertex;
 
@@ -90,7 +91,7 @@ Graphic::ImageAtlas loadTex(){
 
     auto& page = fontPage.createPage(imageAtlas.context);
 
-    page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {0., 1., 1., 1.});
+    page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {1., 1., 1., 0.});
 
     auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{Assets::Dir::texture.find("white.png")});
     region.shrink(15);
@@ -125,41 +126,64 @@ Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
     return fontManager;
 }
 
+struct TestT{
+    int v1{};
+    int rank{};
+};
 
 int main_(){
-    using namespace std::literals;
+    ext::projection_priority_queue<decltype(&TestT::rank), std::vector<TestT>, std::greater<>>
+        queue{&TestT::rank};
 
-    Math::Rand rand{};
+    queue.push({666, 57457686});
+    queue.push({514, 2});
+    queue.push({114, 1});
+    queue.push({666, 3});
+    queue.push({666, 151253});
+    queue.push({12390123, 0});
 
-    std::vector<std::size_t> arr{};
-
-    for(std::size_t i = 0; i < 100000000ull; ++i){
-        arr.push_back(rand.nextLong(100000000ull));
+    while(!queue.empty()){
+        std::println("{}", queue.top().rank);
+        queue.pop();
     }
 
-    std::cout << "genDone" << std::endl;
-
-    {
-        auto test = arr;
-        auto begin = std::chrono::high_resolution_clock::now();
-        ext::algo::timsort(test);
-        auto end = std::chrono::high_resolution_clock::now();
-
-        std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
-    }
-
-    std::cout << "tim sort done" << std::endl;
-
-    {
-        auto test = arr;
-        auto begin = std::chrono::high_resolution_clock::now();
-        std::ranges::sort(test);
-        auto end = std::chrono::high_resolution_clock::now();
-
-        std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
-    }
-
-    std::cout << "std sort done" << std::endl;
+    // using namespace std::literals;
+    // auto gen = std::mt19937{std::random_device{}()};
+    // gen.seed(10);
+    // for(int i = 0; i < 10; ++i){
+    //     std::println("{}", gen());
+    // }
+    // Math::Rand rand{};
+    //
+    // std::vector<std::size_t> arr{};
+    //
+    // for(std::size_t i = 0; i < 100000000ull; ++i){
+    //     arr.push_back(rand.nextLong(100000000ull));
+    // }
+    //
+    // std::cout << "genDone" << std::endl;
+    //
+    // {
+    //     auto test = arr;
+    //     auto begin = std::chrono::high_resolution_clock::now();
+    //     ext::algo::timsort(test);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //
+    //     std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
+    // }
+    //
+    // std::cout << "tim sort done" << std::endl;
+    //
+    // {
+    //     auto test = arr;
+    //     auto begin = std::chrono::high_resolution_clock::now();
+    //     std::ranges::sort(test);
+    //     auto end = std::chrono::high_resolution_clock::now();
+    //
+    //     std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
+    // }
+    //
+    // std::cout << "std sort done" << std::endl;
 
     return 0;
 }
@@ -175,8 +199,6 @@ int main(){
 
     Global::postInit();
 
-    Test::initDefUI();
-
     using namespace Core::Global;
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
@@ -184,8 +206,11 @@ int main(){
 
     Font::FontManager fontManager = initFontManager(imageAtlas);
 
-    std::shared_ptr<Font::TypeSettings::Layout> layout{new Font::TypeSettings::Layout};
-    std::shared_ptr<Font::TypeSettings::Layout> fps{new Font::TypeSettings::Layout};
+    Test::initDefUI();
+
+
+    std::shared_ptr<Font::TypeSettings::GlyphLayout> layout{new Font::TypeSettings::GlyphLayout};
+    std::shared_ptr<Font::TypeSettings::GlyphLayout> fps{new Font::TypeSettings::GlyphLayout};
     layout->setAlign(Align::Pos::right);
 
     Font::TypeSettings::globalInstantParser.requestParseInstantly(layout, file.readString());

@@ -33,9 +33,9 @@ namespace Font{
 	//TODO builtin fontsizes
 	export inline ext::string_hash_map<GlyphSizeType> fontSize{};
 
-	export namespace TypeSettings{
-		constexpr GlyphSizeType DefaultSize{0, 48};
-		constexpr Graphic::Color DefaultColor{Graphic::Colors::WHITE};
+	namespace TypeSettings{
+		export constexpr GlyphSizeType DefaultSize{0, 48};
+		export constexpr Graphic::Color DefaultColor{Graphic::Colors::WHITE};
 
 		// using T = int;
 		// using Cont = std::vector<T>;
@@ -248,7 +248,7 @@ namespace Font{
 			}
 		};
 
-		struct Layout{
+		export struct GlyphLayout{
 			struct Row{
 				float baselineHeight{};
 				Geom::Vec2 src{};
@@ -260,12 +260,21 @@ namespace Font{
 				}
 			};
 
+			std::string text{};
+			std::vector<Row> elements{};
+			std::shared_mutex capture{};
+
+			Geom::Vec2 maximumSize{};
 			Geom::Vec2 minimumSize{};
 			Geom::Vec2 size{};
 			Align::Pos align{};
 
-			float drawScale{};
+			float drawScale{1.f};
 			bool isCompressed{};
+
+			[[nodiscard]] constexpr Geom::Vec2 getDrawSize() const noexcept{
+				return size.copy().scl(drawScale);
+			}
 
 			void setAlign(Align::Pos align){
 				std::unique_lock lk{capture};
@@ -291,33 +300,49 @@ namespace Font{
 				}
 			}
 
-			Geom::Vec2 maximumSize{};
-			std::string text{};
+			[[nodiscard]] GlyphLayout() = default;
 
-			std::vector<Row> elements{};
-
-			std::shared_mutex capture{};
-
-			[[nodiscard]] Layout() = default;
-
-			[[nodiscard]] bool requiresLayout(const std::string_view text, const Geom::Vec2 size) const{
+			[[nodiscard]] bool isLayoutChanged(const std::string_view text, const Geom::Vec2 size) const{
 				return size != maximumSize || this->text != text;
 			}
 
-			void reset(std::string&& text, const Geom::Vec2 size){
-				std::unique_lock lk{capture};
-				std::ranges::for_each(elements, &std::vector<Element>::clear, &Row::glyphs);
-				this->text = std::move(text);
-				maximumSize = size;
+			template <bool multiThread = false>
+			bool resetSize(const Geom::Vec2 size){
+				if constexpr (multiThread){
+					std::unique_lock lk{capture};
+					if(maximumSize.equalsTo(size))return false;
+					std::ranges::for_each(elements, &std::vector<Element>::clear, &Row::glyphs);
+					maximumSize = size;
+					isCompressed = false;
+					return true;
+				}else{
+					if(maximumSize.equalsTo(size))return false;
+					std::ranges::for_each(elements, &std::vector<Element>::clear, &Row::glyphs);
+					maximumSize = size;
+					isCompressed = false;
+					return true;
+				}
+			}
+
+			template <bool multiThread = false>
+			void reset(std::string&& newText, const Geom::Vec2 size){
+				if constexpr (multiThread){
+					std::unique_lock lk{capture};
+					resetSize<false>(size);
+					text = std::move(newText);
+				}else{
+					resetSize<false>(size);
+					text = std::move(newText);
+				}
 			}
 		};
 
-		struct TokenModifier{
-			using FuncType = void(const std::vector<std::string_view>&, Context&, const std::shared_ptr<Layout>&);
+		export struct TokenModifier{
+			using FuncType = void(const std::vector<std::string_view>&, Context&, const std::shared_ptr<GlyphLayout>&);
 			std::function<FuncType> modifier{};
 
 			void operator()(const std::vector<std::string_view>& tokens, Context& context,
-			                const std::shared_ptr<Layout>& target) const{
+			                const std::shared_ptr<GlyphLayout>& target) const{
 				modifier(tokens, context, target);
 			}
 
@@ -332,18 +357,23 @@ namespace Font{
 				: modifier{std::forward<Func>(modifier)}{}
 		};
 
-		struct Parser{
+		export struct Parser{
 			// ext::StringHashMap<>
 
 			ext::TaskQueue<void()> taskQueue{};
 
 			ext::string_hash_map<TokenModifier> modifiers{};
 
-			void parse(Context& context, const std::shared_ptr<Layout>& target) const;
+			void parse(Context& context, const std::shared_ptr<GlyphLayout>& target) const;
+
+			void parse(const std::shared_ptr<GlyphLayout>& target) const{
+				Context context{};
+				parse(context, target);
+			}
 
 			struct ParseInstance{
 				const Parser* parser{};
-				std::weak_ptr<Layout> layout{};
+				std::weak_ptr<GlyphLayout> layout{};
 				mutable Context context{};
 
 				void operator()() const{
@@ -355,10 +385,10 @@ namespace Font{
 			};
 
 			[[nodiscard]] std::optional<decltype(taskQueue)::Future> requestParse(
-				const std::shared_ptr<Layout>& target,
+				const std::shared_ptr<GlyphLayout>& target,
 				std::string&& text,
 				const Geom::Vec2 size = Geom::maxVec2<float>){
-				if(target->requiresLayout(text, size)){
+				if(target->isLayoutChanged(text, size)){
 					target->reset(std::move(text), size);
 					return {taskQueue.push(ParseInstance{this, target})};
 				}
@@ -367,14 +397,48 @@ namespace Font{
 			}
 
 			void requestParseInstantly(
-				const std::shared_ptr<Layout>& target,
+				const std::shared_ptr<GlyphLayout>& target,
 				std::string&& text,
 				const Geom::Vec2 size = Geom::maxVec2<float>) const{
-				if(target->requiresLayout(text, size)){
+				if(target->isLayoutChanged(text, size)){
 					target->reset(std::move(text), size);
 					ParseInstance{this, target}.operator()();
 				}
 			}
+
+			std::optional<decltype(taskQueue)::Future> requestParseDepends(
+				const std::shared_ptr<GlyphLayout>& target,
+				std::string&& text,
+				const Geom::Vec2 size = Geom::maxVec2<float>){
+				if(target->isLayoutChanged(text, size)){
+					auto sz = text.size();
+					target->reset(std::move(text), size);
+					if(sz < 100){
+						ParseInstance{this, target}.operator()();
+					}else{
+						return {taskQueue.push(ParseInstance{this, target})};
+					}
+				}
+
+				return std::nullopt;
+			}
+
+			void parse(
+				const std::shared_ptr<GlyphLayout>& target,
+				std::string&& text,
+				const Geom::Vec2 size = Geom::maxVec2<float>
+				) const{
+				target->reset(std::move(text), size);
+				ParseInstance{this, target}.operator()();
+			}
+
+
+			// void resizeParse(
+			// 	const std::shared_ptr<GlyphLayout>& target, const Geom::Vec2 size = Geom::maxVec2<float>
+			// 	) const{
+			// 	target->reset(std::move(text), size);
+			// 	ParseInstance{this, target}.operator()();
+			// }
 		};
 	}
 
@@ -414,22 +478,22 @@ namespace Font{
 				return result;
 			}
 
-			export void beginSubscript(Context& context, const std::shared_ptr<Layout>& target){
+			export void beginSubscript(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				context.pushScaledOffset({-0.025f, -0.105f});
 				context.pushScaledSize(0.45f);
 			}
 
-			export void beginSuperscript(Context& context, const std::shared_ptr<Layout>& target){
+			export void beginSuperscript(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				context.pushScaledOffset({-0.025f, 0.525f});
 				context.pushScaledSize(0.45f);
 			}
 
-			export void endScript(Context& context, const std::shared_ptr<Layout>& target){
+			export void endScript(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				context.popOffset();
 				context.sizeHistory.pop();
 			}
 
-			bool endLine(Context& context, const std::shared_ptr<Layout>& target){
+			bool endLine(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				float lastLineDescender;
 
 				if(target->elements.size() > 1){
@@ -464,15 +528,16 @@ namespace Font{
 				return true;
 			}
 
-			void beginParse(Context& context, const std::shared_ptr<Layout>& target){
+			void beginParse(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				target->elements.emplace_back();
 				context.heightRemain = target->maximumSize.y;
 			}
 
-			void endParse(Context& context, const std::shared_ptr<Layout>& target){
+			void endParse(Context& context, const std::shared_ptr<GlyphLayout>& target){
 				if(target->elements.empty()) return;
 				// context.maxSize.y += target->elements.front().bound.ascender;
 				context.maxSize.y += target->elements.back().bound.descender;
+				if(target->isCompressed)context.maxSize.y = std::min(target->maximumSize.y, context.maxSize.y);
 
 				target->size = context.maxSize;
 				target->size.max(target->minimumSize);
@@ -489,7 +554,7 @@ namespace Font{
 				const FormattableText& formattableText,
 				const std::string_view::size_type index,
 				Context& context,
-				const std::shared_ptr<Layout>& target){
+				const std::shared_ptr<GlyphLayout>& target){
 				auto&& tokens = formattableText.getTokenGroup(index, lastTokenItr);
 				lastTokenItr = tokens.end();
 
@@ -502,7 +567,7 @@ namespace Font{
 				}
 			}
 
-			Layout::Row& getCurrentRow(const std::size_t row, const Context& context, const std::shared_ptr<Layout>& target){
+			GlyphLayout::Row& getCurrentRow(const std::size_t row, const Context& context, const std::shared_ptr<GlyphLayout>& target){
 				if(row >= target->elements.size()){
 					auto& newLine = target->elements.emplace_back();
 					newLine.src = context.penPos;
@@ -527,7 +592,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 	{
 		Parser parser;
 		parser.modifiers["size"] = [](const std::vector<std::string_view>& args, Context& context,
-		                              const std::shared_ptr<Layout>& target){
+		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.sizeHistory.pop();
 				return;
@@ -547,7 +612,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		};
 
 		parser.modifiers["scl"] = [](const std::vector<std::string_view>& args, Context& context,
-		                             const std::shared_ptr<Layout>& target){
+		                             const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.sizeHistory.pop();
 				return;
@@ -560,7 +625,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		parser.modifiers["s"] = parser.modifiers["size"];
 
 		parser.modifiers["color"] = [](const std::vector<std::string_view>& args, Context& context,
-		                               const std::shared_ptr<Layout>& target){
+		                               const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.colorHistory.pop();
 				return;
@@ -585,7 +650,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		parser.modifiers["c"] = parser.modifiers["color"];
 
 		parser.modifiers["off"] = [](const std::vector<std::string_view>& args, Context& context,
-		                             const std::shared_ptr<Layout>& target){
+		                             const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.popOffset();
 				return;
@@ -603,7 +668,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		};
 
 		parser.modifiers["offs"] = [](const std::vector<std::string_view>& args, Context& context,
-		                              const std::shared_ptr<Layout>& target){
+		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.popOffset();
 				return;
@@ -621,7 +686,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		};
 
 		parser.modifiers["font"] = [](const std::vector<std::string_view>& args, Context& context,
-		                              const std::shared_ptr<Layout>& target){
+		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.fontHistory.pop();
 				return;
@@ -641,18 +706,18 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 
 		parser.modifiers["_"] = parser.modifiers["sub"] = [](const std::vector<std::string_view>& args,
 		                                                     Context& context,
-		                                                     const std::shared_ptr<Layout>& target){
+		                                                     const std::shared_ptr<GlyphLayout>& target){
 			Func::beginSubscript(context, target);
 		};
 
 		parser.modifiers["^"] = parser.modifiers["sup"] = [](const std::vector<std::string_view>& args,
 		                                                     Context& context,
-		                                                     const std::shared_ptr<Layout>& target){
+		                                                     const std::shared_ptr<GlyphLayout>& target){
 			Func::beginSuperscript(context, target);
 		};
 
 		parser.modifiers["\\"] = parser.modifiers["\\sup"] = parser.modifiers["\\sub"] = [](
-			const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<Layout>& target){
+			const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<GlyphLayout>& target){
 				Func::endScript(context, target);
 			};
 
@@ -763,7 +828,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 	codes.shrink_to_fit();
 }
 
-void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<Layout>& target) const{
+void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<GlyphLayout>& target) const{
 	target->elements.clear();
 	target->size = {};
 

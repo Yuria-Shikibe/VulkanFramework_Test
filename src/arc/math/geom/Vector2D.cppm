@@ -696,7 +696,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr bool isZero() const noexcept {
-			return length2() == static_cast<T>(0);
+			return x == static_cast<T>(0) && y == static_cast<T>(0);
 		}
 
 		[[nodiscard]] constexpr bool isZero(const T margin) const noexcept{

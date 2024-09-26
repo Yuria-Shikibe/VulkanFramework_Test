@@ -23,6 +23,17 @@ void Core::UI::DefElementDrawer::draw(const Element& element) const {
 
 }
 
+Graphic::Batch_Exclusive& Core::UI::Element::getBatch() const noexcept{
+#if DEBUG_CHECK
+	if(!getScene())throw std::logic_error("nullptr scene");
+#endif
+	return getScene()->renderer->batch;
+}
+
+void Core::UI::Element::registerAsyncTask(){
+
+}
+
 void Core::UI::Element::notifyRemove(){
 	clearExternalReferences();
 	parent->postRemove(this);
@@ -50,11 +61,15 @@ bool Core::UI::Element::containsPos(const Geom::Vec2 absPos) const noexcept{
 
 void Core::UI::Element::notifyLayoutChanged(const SpreadDirection toDirection){
 	if(toDirection & SpreadDirection::local)layoutState.setSelfChanged();
-	if(toDirection & SpreadDirection::super && parent){
-		if(parent->layoutState.notifyFromChildren()){
-			parent->notifyLayoutChanged(toDirection - SpreadDirection::child);
+
+	if(parent){
+		if(toDirection & SpreadDirection::super || toDirection & SpreadDirection::child_item){
+			if(parent->layoutState.tryNotifyFromChildren() || toDirection & SpreadDirection::child_item){
+				parent->notifyLayoutChanged(toDirection - SpreadDirection::child);
+			}
 		}
 	}
+
 	if(toDirection & SpreadDirection::child){
 		for (auto && element : getChildren()){
 			if(element->layoutState.notifyFromParent()){

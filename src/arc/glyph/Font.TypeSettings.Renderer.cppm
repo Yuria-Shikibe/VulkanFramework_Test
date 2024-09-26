@@ -21,20 +21,20 @@ import Core.Vulkan.Vertex;
 
 export namespace Font::TypeSettings{
 
-	void draw(Graphic::Batch_Exclusive& batch, const std::shared_ptr<Layout>& layout, const Geom::Vec2 offset){
+	void draw(Graphic::Batch_Exclusive& batch, const std::shared_ptr<GlyphLayout>& layout, const Geom::Vec2 offset){
 		using namespace Graphic;
 
-		Draw::DrawContext context{};
-		Graphic::BatchAutoParam_Exclusive<Core::Vulkan::Vertex_UI> ac{batch, context.whiteRegion};
-		auto param = ac.get();
-
-		context.color = Graphic::Colors::WHITE;
-		context.color.a = 0.45f;
+		// Draw::DrawContext context{};
+		// Graphic::BatchAutoParam_Exclusive<Core::Vulkan::Vertex_UI> ac{batch, context.whiteRegion};
+		// auto param = ac.get();
+		//
+		// context.color = Graphic::Colors::WHITE;
+		// context.color.a = 0.45f;
 
 
 		for (const auto& row : layout->elements){
 			const auto lineOff = row.src + offset;
-			Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, row.getRectBound().move(offset), context.color);
+			// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, row.getRectBound().move(offset), context.color);
 
 			for (auto && glyph : row.glyphs){
 				if(!glyph.glyph->imageView)continue;
@@ -47,15 +47,15 @@ export namespace Font::TypeSettings{
 					Core::Vulkan::Vertex_UI{glyph.v01().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v00},
 				};
 
-				Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{glyph.src, glyph.end}.move(lineOff), context.color);
+				// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{glyph.src, glyph.end}.move(lineOff), context.color);
 
 			}
 
 		}
 
-		context.color = Graphic::Colors::PALE_GREEN;
+		// context.color = Graphic::Colors::PALE_GREEN;
 
-		Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{layout->size}.move(offset), context.color);
-		// Draw::Drawer<Core::Vulkan::Vertex_UI>::rectOrtho(++param, Geom::OrthoRectFloat{layout->size}.move(offset), context.color);
+		// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{layout->size}.move(offset), context.color);
+
 	}
 }

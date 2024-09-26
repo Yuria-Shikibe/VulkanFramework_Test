@@ -60,8 +60,12 @@ export namespace Core::UI{
 		struct Scroll final : PosedEvent{
 			[[nodiscard]] Scroll() = default;
 
-			[[nodiscard]] explicit Scroll(const Geom::Vec2& pos)
+			[[nodiscard]] explicit Scroll(const Geom::Vec2 pos)
 				: PosedEvent{pos}{}
+
+			[[nodiscard]] Scroll(const Geom::Vec2& pos, int mode)
+				: PosedEvent{pos},
+				  mode{mode}{}
 
 			int mode{};
 		};

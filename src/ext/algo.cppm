@@ -1,5 +1,6 @@
 module;
 
+#include <cassert>
 // #include <type_traits>
 
 export module ext.algo;
@@ -39,7 +40,7 @@ namespace ext::algo{
 	export
 	template <typename Range>
 		requires ext::range_of<Range>
-	auto partBy(Range&& range, ext::Invokable<bool(const std::ranges::range_value_t<Range>&)> auto&& pred){
+	auto partBy(Range&& range, std::indirect_unary_predicate<std::ranges::iterator_t<Range>> auto pred){
 		return std::make_pair(range | std::ranges::views::filter(pred),
 			range | std::ranges::views::filter(std::not_fn(pred)));
 	}
@@ -62,9 +63,7 @@ namespace ext::algo{
 	template <typename Itr, typename Sentinel>
 	constexpr void itrRangeOrderCheck(const Itr& itr, const Sentinel& sentinel){
 		if constexpr(itrRangeOrderCheckable<Itr, Sentinel>){
-			if(!(itr <= sentinel)){
-				throw std::runtime_error{"iterator transposed"};
-			}
+			assert(itr <= sentinel);
 		}
 	}
 
@@ -87,7 +86,7 @@ namespace ext::algo{
 	>
 	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
 	[[nodiscard]] constexpr Itr
-		remove_if_unstable_impl(Itr first, Sentinel sentinel, Pred&& pred, const Proj porj = {}){
+		remove_if_unstable_impl(Itr first, Sentinel sentinel, Pred pred, const Proj porj = {}){
 		algo::itrRangeOrderCheck(first, sentinel);
 
 		Itr firstFound = std::ranges::find_if(first, sentinel, pred, porj);
@@ -136,21 +135,26 @@ namespace ext::algo{
 
 	template <bool replace, std::permutable Itr, std::permutable Sentinel, typename Proj = std::identity,
 	          std::indirect_unary_predicate<std::projected<Itr, Proj>> Pred>
-	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
-	[[nodiscard]] constexpr Itr remove_unique_if_unstable_impl(Itr first, Sentinel sentinel, Pred&& pred,
+	requires requires(Sentinel sentinel){
+		requires std::bidirectional_iterator<Sentinel>;
+		requires std::sentinel_for<Sentinel, Itr>;
+	}
+	[[nodiscard]] constexpr Itr remove_unique_if_unstable_impl(Itr first, Sentinel sentinel, Pred pred,
 		const Proj porj = {}){
 		algo::itrRangeOrderCheck(first, sentinel);
 
 		Itr firstFound = std::ranges::find_if(first, sentinel, pred, porj);
 		if(firstFound != sentinel){
-			--sentinel;
+			auto prev = std::prev(std::move(sentinel));
 
-			if(firstFound != sentinel){
+			if(firstFound != prev){
 				if(pred(std::invoke(porj, *firstFound))){
-					algo::swapItr<replace>(sentinel, firstFound);
+					algo::swapItr<replace>(prev, firstFound);
 				}
 				++firstFound;
 			}
+
+			return prev;
 		}
 
 		return sentinel;
@@ -202,7 +206,7 @@ namespace ext::algo{
 	export
 	template <bool replace = false, std::ranges::random_access_range Rng, typename Proj = std::identity,
 	          std::indirect_unary_predicate<std::projected<std::ranges::iterator_t<Rng>, Proj>> Pred>
-	[[nodiscard]] constexpr auto remove_if_unstable(Rng& range, Pred&& pred, const Proj porj = {}){
+	[[nodiscard]] constexpr auto remove_if_unstable(Rng& range, Pred pred, const Proj porj = {}){
 		return std::ranges::borrowed_subrange_t<Rng>{
 				algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred,
 					porj),
@@ -211,7 +215,7 @@ namespace ext::algo{
 	}
 
 	export
-	template <bool replace = false, std::ranges::random_access_range Rng, typename Ty, typename Proj = std::identity>
+	template <bool replace = true, std::ranges::random_access_range Rng, typename Ty, typename Proj = std::identity>
 		requires requires(Rng rng){
 			requires std::ranges::sized_range<Rng>;
 			rng.erase(std::ranges::begin(rng), std::ranges::end(rng)); requires std::ranges::sized_range<Rng>;
@@ -225,13 +229,13 @@ namespace ext::algo{
 	}
 
 	export
-	template <bool replace = false, std::ranges::random_access_range Rng, typename Proj = std::identity,
+	template <bool replace = true, std::ranges::random_access_range Rng, typename Proj = std::identity,
 	          std::indirect_unary_predicate<std::projected<std::ranges::iterator_t<Rng>, Proj>> Pred>
 		requires requires(Rng rng){
 			requires std::ranges::sized_range<Rng>;
 			rng.erase(std::ranges::begin(rng), std::ranges::end(rng)); requires std::ranges::sized_range<Rng>;
 		}
-	constexpr decltype(auto) erase_if_unstable(Rng& range, Pred&& pred, const Proj porj = {}){
+	constexpr decltype(auto) erase_if_unstable(Rng& range, Pred pred, const Proj porj = {}){
 		auto oldSize = range.size();
 		range.erase(
 			algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj),
@@ -240,7 +244,7 @@ namespace ext::algo{
 	}
 
 	export
-	template <bool replace = false, std::ranges::random_access_range Rng, typename Ty, typename Proj = std::identity>
+	template <bool replace = true, std::ranges::random_access_range Rng, typename Ty, typename Proj = std::identity>
 		requires requires(Rng rng){
 			requires std::ranges::sized_range<Rng>;
 			rng.erase(std::ranges::begin(rng), std::ranges::end(rng)); requires std::ranges::sized_range<Rng>;
@@ -255,7 +259,7 @@ namespace ext::algo{
 	}
 
 	export
-	template <bool replace = false, std::ranges::random_access_range Rng, typename Proj = std::identity,
+	template <bool replace = true, std::ranges::random_access_range Rng, typename Proj = std::identity,
 	          std::indirect_unary_predicate<std::projected<std::ranges::iterator_t<Rng>, Proj>> Pred>
 		requires requires(Rng rng){
 			requires std::ranges::sized_range<Rng>;

@@ -25,7 +25,7 @@ export namespace Core::UI{
 		ext::snap_shot<Geom::Vec2> scroll{};
 
 		[[nodiscard]] std::span<const std::unique_ptr<Element>> getChildren() const noexcept override{
-			return {&item, 1};
+			return item ? std::span{&item, 1} : std::span{static_cast<const std::unique_ptr<Element>*>(nullptr), 0};
 		}
 
 		[[nodiscard]] ScrollPanel() : Group{TypeName}{
@@ -55,7 +55,13 @@ export namespace Core::UI{
 			});
 
 			events().on<Event::Scroll>([this](const Event::Scroll& e){
-				scrollTargetVelocity = e.pos * getVelClamp();
+				auto cmp = e.pos;
+
+				if(e.mode == Ctrl::Mode::Shift){
+					cmp.swapXY();
+				}
+
+				scrollTargetVelocity = cmp * getVelClamp();
 				scrollVelocity = scrollTargetVelocity.scl(VelocityScale, VelocityScale);
 			});
 
@@ -98,18 +104,14 @@ export namespace Core::UI{
 		}
 
 		bool resize(const Geom::Vec2 size) override{
-			auto clamp = getVelClamp();
+			// const auto clamp = getVelClamp();
 			if(Element::resize(size)){
 				setItemSize();
 
-				auto curClamp = getVelClamp();
+				// const auto curClamp = getVelClamp();
 
-				if(clamp != curClamp || Util::tryModify(
-					scroll.base,
-					scroll.base.copy() * getVelClamp())){
-					scroll.resume();
-					updateChildrenAbsSrc();
-				}
+				scroll.resume();
+				updateChildrenAbsSrc();
 
 				return true;
 			}
@@ -127,8 +129,8 @@ export namespace Core::UI{
 		void setItem(InitFunc&& func){
 			this->item = std::make_unique<T>();
 			item->prop().fillParent = fillParent;
-			func(*static_cast<T*>(this->item.get()));
 			modifyChildren(this->item.get());
+			func(*static_cast<T*>(this->item.get()));
 			setItemSize();
 		}
 

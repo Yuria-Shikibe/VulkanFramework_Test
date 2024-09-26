@@ -89,7 +89,7 @@ namespace Geom{
 
 	export
 	template <typename ItemTy, ext::number T = float, bool sync = true, bool strict = false>
-		requires ext::Derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
+		requires ext::derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
 	class QuadTree : MtxBase<sync, strict>{
 	public:
 		using Rect = Geom::Rect_Orthogonal<T>;

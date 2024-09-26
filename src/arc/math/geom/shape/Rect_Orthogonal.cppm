@@ -1,6 +1,6 @@
 module;
 
-#include "../src/ext/assume.hpp"
+// #include "../src/ext/assume.hpp"
 
 export module Geom.Rect_Orthogonal;
 
@@ -11,8 +11,11 @@ import Math;
 import Geom.Vector2D;
 
 export namespace Geom{
+
 	struct FromExtentTag{};
 	constexpr FromExtentTag FromExtent{};
+
+	//TODO make size as a vector?
 
 	/**
 	 * \brief width, height should be always non-negative.
@@ -26,8 +29,7 @@ export namespace Geom{
 		Vector2D<T> src{};
 		
 	private:
-		T width{0};
-		T height{0};
+		Vector2D<T> size_{};
 
 	public:
 		constexpr Rect_Orthogonal(const T srcX, const T srcY, const T width, const T height) noexcept
@@ -77,11 +79,7 @@ export namespace Geom{
 		friend constexpr bool operator==(const Rect_Orthogonal& lhs, const Rect_Orthogonal& rhs) noexcept = default;
 
 		friend std::ostream& operator<<(std::ostream& os, const Rect_Orthogonal& obj) noexcept{
-			return os
-			       << "srcX: " << obj.src.x
-			       << " srcY: " << obj.src.y
-			       << " width: " << obj.width
-			       << " height: " << obj.height;
+			return os << std::format("[{}, {}, {}, {}]", obj.src.x, obj.src.y, obj.size_.x, obj.size_.y);
 		}
 
 		[[nodiscard]] constexpr T getSrcX() const noexcept{
@@ -96,9 +94,6 @@ export namespace Geom{
 			return {getEndX(), getEndY()};
 		}
 
-		constexpr void setSrcX(const T x) noexcept{
-			this->src.x = x;
-		}
 
 		Rect_Orthogonal& expandBy(const Rect_Orthogonal& other) noexcept{
 			Geom::Vector2D<T> min{Math::min(getSrcX(), other.getSrcX()), Math::min(getSrcY(), other.getSrcY())};
@@ -113,28 +108,16 @@ export namespace Geom{
 			return src.y;
 		}
 
-		constexpr void setSrcY(const T y) noexcept{
-			src.y = y;
-		}
-
 		[[nodiscard]] constexpr T getWidth() const noexcept{
-			return width;
+			return size_.x;
 		}
 
 		[[nodiscard]] constexpr Vector2D<T> getSize() const noexcept{
-			return {width, height};
+			return size_;
 		}
 
 		[[nodiscard]] constexpr T getHeight() const noexcept{
-			return height;
-		}
-
-		[[deprecated]] [[nodiscard]] constexpr T* getWidthRaw() noexcept{
-			return &width;
-		}
-
-		[[deprecated]] [[nodiscard]] constexpr T* getHeightRaw() noexcept{
-			return &height;
+			return size_.y;
 		}
 
 		template <ext::number T_>
@@ -142,22 +125,22 @@ export namespace Geom{
 			return Rect_Orthogonal<T_>{
 				static_cast<T_>(src.x),
 				static_cast<T_>(src.y),
-				static_cast<T_>(width),
-				static_cast<T_>(height),
+				static_cast<T_>(size_.x),
+				static_cast<T_>(size_.y),
 			};
 		}
 
 		template <ext::number N>
 		constexpr auto& setWidth(const N w) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
-				this->width = static_cast<T>(w);
+				size_.x = static_cast<T>(w);
 			}else {
 				if(w >= 0){
-					this->width = static_cast<T>(w);
+					size_.x = static_cast<T>(w);
 				}else{
 					T abs = -static_cast<T>(w);
 					src.x -= abs;
-					this->width = abs;
+					size_.x = abs;
 				}
 			}
 
@@ -167,14 +150,14 @@ export namespace Geom{
 		template <ext::number N>
 		constexpr auto& setHeight(const N h) noexcept{
 			if constexpr(std::is_unsigned_v<N>) {
-				this->height = static_cast<T>(h);
+				size_.y = static_cast<T>(h);
 			}else {
 				if(h >= 0){
-					this->height = static_cast<T>(h);
+					size_.y = static_cast<T>(h);
 				}else{
 					T abs = -static_cast<T>(h);
 					src.y -= abs;
-					this->height = abs;
+					size_.y = abs;
 				}
 			}
 
@@ -182,34 +165,34 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires ext::signed_number<T> {
-			this->setWidth<T>(width + x);
-			this->setHeight<T>(height + y);
+			this->setWidth<T>(size_.x + x);
+			this->setHeight<T>(size_.y + y);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& addWidth(const T x) noexcept{
-			this->setWidth<T>(width + x);
+			this->setWidth<T>(size_.x + x);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& addHeight(const T y) noexcept{
-			this->setHeight<T>(height + y);
+			this->setHeight<T>(size_.y + y);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& shrinkBy(const typename Vector2D<T>::PassType directionAndSize) noexcept{
-			const T minX = Math::min(directionAndSize.x, width);
-			width -= minX;
+			const T minX = Math::min(directionAndSize.x, size_.x);
+			size_.x -= minX;
 
 			if(directionAndSize.x > 0){
 				src.x += minX;
 			}
 
-			const T minY = Math::min(directionAndSize.y, height);
-			height -= minY;
+			const T minY = Math::min(directionAndSize.y, size_.y);
+			size_.y -= minY;
 
 			if(directionAndSize.y > 0){
 				src.y += minY;
@@ -221,20 +204,20 @@ export namespace Geom{
 		template <ext::number N>
 		constexpr Rect_Orthogonal& addSize(const N x, const N y) noexcept{
 			using S = std::make_signed_t<T>;
-			this->setWidth<S>(static_cast<S>(width) + static_cast<S>(x));
-			this->setHeight<S>(static_cast<S>(height) + static_cast<S>(y));
+			this->setWidth<S>(static_cast<S>(size_.x) + static_cast<S>(x));
+			this->setHeight<S>(static_cast<S>(size_.y) + static_cast<S>(y));
 
 			return *this;
 		}
 
 		constexpr void setLargerWidth(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
-				if(v > width) {
+				if(v > size_.x) {
 					this->setWidth<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
-				if(abs > width) {
+				if(abs > size_.x) {
 					this->setWidth<T>(v);
 				}
 			}
@@ -243,12 +226,12 @@ export namespace Geom{
 
 		constexpr void setLargerHeight(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
-				if(v > height) {
+				if(v > size_.y) {
 					this->setHeight<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
-				if(abs > height) {
+				if(abs > size_.y) {
 					this->setHeight<T>(v);
 				}
 			}
@@ -256,12 +239,12 @@ export namespace Geom{
 
 		constexpr void setShorterWidth(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
-				if(v < width) {
+				if(v < size_.x) {
 					this->setWidth<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
-				if(abs < width) {
+				if(abs < size_.x) {
 					this->setWidth<T>(v);
 				}
 			}
@@ -270,12 +253,12 @@ export namespace Geom{
 
 		constexpr void setShorterHeight(const T v) noexcept{
 			if constexpr(std::is_unsigned_v<T>) {
-				if(v < height) {
+				if(v < size_.y) {
 					this->setHeight<T>(v);
 				}
 			}else {
 				T abs = static_cast<T>(v < 0 ? -v : v);
-				if(abs < height) {
+				if(abs < size_.y) {
 					this->setHeight<T>(v);
 				}
 			}
@@ -283,8 +266,8 @@ export namespace Geom{
 
 		[[nodiscard]] constexpr bool containsStrict(const Rect_Orthogonal& other) const noexcept{
 			return
-				other.src.x > src.x && other.src.x + other.width < src.x + width &&
-				other.src.y > src.y && other.src.y + other.height < src.y + height;
+				other.src.x > src.x && other.src.x + other.size_.x < src.x + size_.x &&
+				other.src.y > src.y && other.src.y + other.size_.y < src.y + size_.y;
 		}
 
 		[[nodiscard]] constexpr bool containsLoose(const Rect_Orthogonal& other) const noexcept{
@@ -332,19 +315,19 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr T getEndX() const noexcept{
-			return src.x + width;
+			return src.x + size_.x;
 		}
 
 		[[nodiscard]] constexpr T getEndY() const noexcept{
-			return src.y + height;
+			return src.y + size_.y;
 		}
 
 		[[nodiscard]] constexpr T getCenterX() const noexcept{
-			return src.x + width / TWO;
+			return src.x + size_.x / TWO;
 		}
 
 		[[nodiscard]] constexpr T getCenterY() const noexcept{
-			return src.y + height / TWO;
+			return src.y + size_.y / TWO;
 		}
 
 		[[nodiscard]] constexpr Vector2D<T> getCenter() const noexcept{
@@ -352,7 +335,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr T maxDiagonalSqLen() const noexcept{
-			return width * width + height * height;
+			return size_.x * size_.x + size_.y * size_.y;
 		}
 
 		constexpr Rect_Orthogonal& setSrc(const T x, const T y) noexcept{
@@ -394,8 +377,8 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& setSize(const Rect_Orthogonal& other) noexcept{
-			this->setWidth(other.width);
-			this->setHeight(other.height);
+			this->setWidth(other.size_.x);
+			this->setHeight(other.size_.y);
 
 			return *this;
 		}
@@ -433,8 +416,8 @@ export namespace Geom{
 
 		template <ext::number T1, ext::number T2>
 		constexpr Rect_Orthogonal& sclSize(const T1 xScl, const T2 yScl) noexcept{
-			width = static_cast<T>(static_cast<T1>(width) * xScl);
-			height = static_cast<T>(static_cast<T1>(height) * yScl);
+			size_.x = static_cast<T>(static_cast<T1>(size_.x) * xScl);
+			size_.y = static_cast<T>(static_cast<T1>(size_.y) * yScl);
 
 			return *this;
 		}
@@ -473,12 +456,12 @@ export namespace Geom{
 
 		template <std::integral N>
 		Rect_Orthogonal<N> trac() noexcept{
-			return Rect_Orthogonal<N>{Math::trac<N>(src.x), Math::trac<N>(src.y), Math::trac<N>(width), Math::trac<N>(height)};
+			return Rect_Orthogonal<N>{Math::trac<N>(src.x), Math::trac<N>(src.y), Math::trac<N>(size_.x), Math::trac<N>(size_.y)};
 		}
 
 		template <std::integral N>
 		Rect_Orthogonal<N> round() noexcept{
-			return Rect_Orthogonal<N>{Math::round<N>(src.x), Math::round<N>(src.y), Math::round<N>(width), Math::round<N>(height)};
+			return Rect_Orthogonal<N>{Math::round<N>(src.x), Math::round<N>(src.y), Math::round<N>(size_.x), Math::round<N>(size_.y)};
 		}
 
 		constexpr Rect_Orthogonal& setSize(const typename Vector2D<T>::PassType v) noexcept{
@@ -486,23 +469,23 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& setCenter(const T x, const T y) noexcept{
-			this->setSrc(x - width / TWO, y - height / TWO);
+			this->setSrc(x - size_.x / TWO, y - size_.y / TWO);
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& setCenter(const typename Vector2D<T>::PassType v) noexcept{
-			this->setSrc(v.x - width / TWO, v.y - height / TWO);
+			this->setSrc(v.x - size_.x / TWO, v.y - size_.y / TWO);
 
 			return *this;
 		}
 
 		[[nodiscard]] constexpr float xOffsetRatio(const T x) const noexcept{
-			return Math::curve(x, static_cast<float>(src.x), static_cast<float>(src.x + width));
+			return Math::curve(x, static_cast<float>(src.x), static_cast<float>(src.x + size_.x));
 		}
 
 		[[nodiscard]] constexpr float yOffsetRatio(const T y) const noexcept{
-			return Math::curve(y, static_cast<float>(src.y), static_cast<float>(src.y + height));
+			return Math::curve(y, static_cast<float>(src.y), static_cast<float>(src.y + size_.y));
 		}
 
 		[[nodiscard]] constexpr Vec2 offsetRatio(const Vec2& v) noexcept{
@@ -514,23 +497,23 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr Vector2D<T> vert_10() const noexcept{
-			return { src.x + width, src.y };
+			return { src.x + size_.x, src.y };
 		}
 
 		[[nodiscard]] constexpr Vector2D<T> vert_01() const noexcept{
-			return { src.x, src.y + height };
+			return { src.x, src.y + size_.y };
 		}
 
 		[[nodiscard]] constexpr Vector2D<T> vert_11() const noexcept{
-			return { src.x + width, src.y + height };
+			return { src.x + size_.x, src.y + size_.y };
 		}
 
 		[[nodiscard]] constexpr T area() const noexcept{
-			return width * height;
+			return size_.x * size_.y;
 		}
 
 		[[nodiscard]] constexpr float ratio() const noexcept{
-			return static_cast<float>(width) / static_cast<float>(height);
+			return static_cast<float>(size_.x) / static_cast<float>(size_.y);
 		}
 
 		constexpr Rect_Orthogonal& setVert(const T srcX, const T srcY, const T endX, const T endY) noexcept{
@@ -538,8 +521,8 @@ export namespace Geom{
 			auto [minY, maxY] = Math::minmax(srcY, endY);
 			this->src.x = minX;
 			this->src.y = minY;
-			width = maxX - minX;
-			height = maxY - minY;
+			size_.x = maxX - minX;
+			size_.y = maxY - minY;
 
 			return *this;
 		}
@@ -549,7 +532,7 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& expand(const T x, const T y) noexcept{
-			return this->set(src.x - x, src.y - y, width + x * TWO,  height + y * TWO);
+			return this->set(src.x - x, src.y - y, size_.x + x * TWO,  size_.y + y * TWO);
 		}
 
 		/**
@@ -558,17 +541,17 @@ export namespace Geom{
 		 * @return
 		 */
 		constexpr Rect_Orthogonal& shrinkX(T marginX) noexcept{
-			marginX = Math::min(marginX, width / TWO);
+			marginX = Math::min(marginX, size_.x / TWO);
 			src.x += marginX;
-			width -= marginX * TWO;
+			size_.x -= marginX * TWO;
 
 			return *this;
 		}
 
 		constexpr Rect_Orthogonal& shrinkY(T marginY) noexcept{
-			marginY = Math::min(marginY, height / TWO);
+			marginY = Math::min(marginY, size_.y / TWO);
 			src.y += marginY / TWO;
-			height -= marginY * TWO;
+			size_.y -= marginY * TWO;
 
 			return *this;
 		}

@@ -4,7 +4,7 @@ import Core.Ctrl.KeyPack;
 import Graphic.Renderer.UI;
 import Core.UI.Event;
 import ext.concepts;
-
+import ext.algo;
 
 
 void iterateAll_DFSImpl(const Core::UI::Scene& scene, std::vector<Core::UI::Element*>& selected, Core::UI::Element* current){
@@ -17,6 +17,14 @@ void iterateAll_DFSImpl(const Core::UI::Scene& scene, std::vector<Core::UI::Elem
 	for(const auto& child : current->getChildren() | std::views::reverse){
 		iterateAll_DFSImpl(scene, selected, child.get());
 	}
+}
+
+void Core::UI::Scene::joinTasks(){
+	for (auto && asyncTaskOwner : asyncTaskOwners){
+		asyncTaskOwner->getFuture();
+	}
+
+	asyncTaskOwners.clear();
 }
 
 std::vector<Core::UI::Element*> Core::UI::Scene::dfsFindDeepestElement(Element* target) const{
@@ -38,17 +46,33 @@ Core::UI::Scene::~Scene(){
 	delete root.handle;
 }
 
+void Core::UI::Scene::registerAsyncTaskElement(Element* element){
+	// if constexpr (DEBUG_CHECK){
+	// 	if(std::ranges::contains(asyncTaskOwners, element)){
+	// 		throw std::invalid_argument("duplicated async task owner");
+	// 	}
+	// }
+	asyncTaskOwners.insert(element);
+}
+
+void Core::UI::Scene::registerIndependentLayout(Element* element){
+	// if constexpr (DEBUG_CHECK){
+	// 	if(std::ranges::contains(independentLayout, element)){
+	// 		throw std::invalid_argument("duplicated async task owner");
+	// 	}
+	// }
+	independentLayout.insert(element);
+}
+
 void Core::UI::Scene::dropAllFocus(const Element* target){
 	if(currentCursorFocus == target)currentCursorFocus = nullptr;
 	if(currentScrollFocus == target)currentScrollFocus = nullptr;
+	std::erase(lastInbounds, target);
+	asyncTaskOwners.erase(const_cast<Element*>(target));
+	independentLayout.erase(const_cast<Element*>(target));
 }
 
-
-
 void Core::UI::Scene::trySwapFocus(Element* newFocus){
-
-
-
 	if(newFocus == currentCursorFocus)return;
 
 	if(currentCursorFocus){
@@ -140,8 +164,13 @@ void Core::UI::Scene::update(const float delta_in_ticks) const{
 	root->update(delta_in_ticks);
 }
 
-void Core::UI::Scene::layout() const{
+void Core::UI::Scene::layout(){
 	root->tryLayout();
+
+	for (const auto layout : independentLayout){
+		layout->tryLayout();
+	}
+	independentLayout.clear();
 }
 
 void Core::UI::Scene::draw() const{

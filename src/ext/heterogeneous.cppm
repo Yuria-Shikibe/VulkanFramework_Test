@@ -8,6 +8,49 @@ import std;
 import ext.meta_programming;
 
 export namespace ext::transparent{
+	template <typename T, typename Proj, typename Comp = std::less<std::invoke_result_t<Proj, const T&>>>
+		requires requires(T a, T b, Proj proj, Comp comp){
+			{ std::invoke(comp, std::invoke(proj, a), std::invoke(proj, b)) } -> std::convertible_to<bool>;
+		}
+	struct projection_comp{
+		using proj_value_type = std::invoke_result_t<Proj, const T&>;
+		using is_transparent = void;
+
+		[[no_unique_address]] Proj proj{};
+		[[no_unique_address]] Comp comp{};
+
+		[[nodiscard]] constexpr projection_comp() = default;
+
+		template <typename P>
+			requires std::constructible_from<Proj, P>
+		[[nodiscard]] constexpr projection_comp(P&& proj, Comp&& comp = {})
+			: proj{std::forward<P>(proj)},
+			  comp{std::move(comp)}{}
+
+		constexpr bool operator()(const proj_value_type& a, const proj_value_type& b) const noexcept {
+			return std::invoke(comp, a, b);
+		}
+
+		constexpr bool operator()(const T& a, const T& b) const noexcept {
+			return std::invoke(comp, std::invoke(proj, a), std::invoke(proj, b));
+		}
+
+		constexpr bool operator()(const proj_value_type& a, const T& b) const noexcept {
+			return this->operator()(std::invoke(proj, a), b);
+		}
+
+		constexpr bool operator()(const T& a, const proj_value_type& b) const noexcept {
+			return this->operator()(a, std::invoke(proj, b));
+		}
+	};
+
+	template <typename T, typename Comp>
+		requires (std::is_member_pointer_v<T> || std::is_member_pointer_v<T>)
+	projection_comp(T, Comp&&) -> projection_comp<typename mptr_info<T>::class_type, T, std::decay_t<Comp>>;
+
+	template <typename T>
+		requires (std::is_member_pointer_v<T> || std::is_member_pointer_v<T>)
+	projection_comp(T) -> projection_comp<typename mptr_info<T>::class_type, T, std::less<typename mptr_info<T>::value_type>>;
 
 	struct string_equal_to{
 		using is_transparent = void;
@@ -100,6 +143,14 @@ export namespace ext::transparent{
 }
 
 namespace ext{
+
+	export
+	template <typename T, typename Cont = std::vector<typename mptr_info<T>::class_type>, typename Comp = std::less<>>
+		requires (std::is_member_pointer_v<T> || std::is_member_pointer_v<T>)
+	using projection_priority_queue =
+		std::priority_queue<typename mptr_info<T>::class_type, Cont, transparent::projection_comp<typename mptr_info<T>::class_type, T, Comp>>;
+
+
 	template <typename T, auto T::* ptr>
 		requires (ext::default_hashable<typename mptr_info<decltype(ptr)>::value_type>)
 	struct projection_hash{

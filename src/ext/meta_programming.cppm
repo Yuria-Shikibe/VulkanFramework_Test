@@ -162,15 +162,15 @@ namespace ext{
 
 export namespace ext{
 	template <typename SuperTuple, typename... Args>
-	constexpr decltype(auto) makeTuple_with_def(SuperTuple&& defaultArgs, Args&&... args){
+	constexpr decltype(auto) make_tuple_with_def(SuperTuple&& defaultArgs, Args&&... args){
 		return ext::makeTuple_withDef_impl(std::make_tuple(std::forward<Args>(args)...),
 		                                   std::forward<SuperTuple>(defaultArgs),
 		                                   std::make_index_sequence<std::tuple_size_v<std::decay_t<SuperTuple>>>());
 	}
 
 	template <typename SuperTuple, typename... Args>
-	constexpr decltype(auto) makeTuple_with_def(Args&&... args){
-		return ext::makeTuple_with_def(SuperTuple{}, std::forward<Args>(args)...);
+	constexpr decltype(auto) make_tuple_with_def(Args&&... args){
+		return ext::make_tuple_with_def(SuperTuple{}, std::forward<Args>(args)...);
 	}
 
 	/**

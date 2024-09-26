@@ -9,9 +9,9 @@ export import Core.UI.Event;
 export import Core.UI.Flags;
 export import Core.UI.Util;
 export import Core.UI.CellBase;
-
-
 export import Core.Ctrl.Constants;
+
+import Core.UI.StatedLength;
 
 import Graphic.Color;
 
@@ -26,6 +26,7 @@ export namespace Core{
 
 
 export namespace Graphic{
+	struct Batch_Exclusive;
 	struct RendererUI;
 }
 
@@ -171,6 +172,10 @@ namespace Core::UI{
 			return clipRegion.containsPos_edgeExclusive(pos) && getValidBound_absolute().containsPos_edgeExclusive(pos);
 		}
 
+		[[nodiscard]] constexpr Geom::Vec2 evaluateValidSize(Geom::Vec2 rawSize) const noexcept{
+			return rawSize.clampXY(clampedSize.getMinimumSize(), clampedSize.getMaximumSize()).sub(boarder.getSize()).max(Geom::zeroVec2<float>);
+		}
+
 		[[nodiscard]] constexpr float getValidWidth() const noexcept{
 			return clampedSize.getWidth() - boarder.getWidth();
 		}
@@ -198,17 +203,19 @@ namespace Core::UI{
 		Interactivity interactivity{Interactivity::enabled};
 
 		[[nodiscard]] Element(){
-			cursorState.registerDefEvent(events());
+
 		}
 
 		[[nodiscard]] explicit Element(const std::string_view tyName)
 			: property{tyName}{
-			cursorState.registerDefEvent(events());
+
 		}
 
 		virtual ~Element(){
 			clearExternalReferences();
 		}
+
+		[[nodiscard]] Graphic::Batch_Exclusive& getBatch() const noexcept;
 
 		[[nodiscard]] const CursorState& getCursorState() const noexcept{
 			return cursorState;
@@ -242,7 +249,6 @@ namespace Core::UI{
 			return parent;
 		}
 
-
 		void setParent(Group* p) noexcept{
 			parent = p;
 		}
@@ -267,9 +273,16 @@ namespace Core::UI{
 			return property.events;
 		}
 
-		[[nodiscard]] Geom::Vec2 absPos() const noexcept{
+		[[nodiscard]] constexpr Geom::Vec2 absPos() const noexcept{
 			return property.absoluteSrc;
 		}
+
+
+		[[nodiscard]] constexpr Geom::Vec2 contentSrcPos() const noexcept{
+			return property.absoluteSrc + property.boarder.bot_lft();
+		}
+
+		void registerAsyncTask();
 
 		void notifyRemove();
 
@@ -320,7 +333,7 @@ namespace Core::UI{
 			layoutState.checkChanged();
 		}
 
-		[[nodiscard]] virtual Geom::Vec2 requestSpace(const bool xProvided, const bool yProvided) const noexcept{
+		[[nodiscard]] virtual Geom::Vec2 requestSpace(const StatedSize sz){
 			return getSize();
 		}
 
@@ -364,6 +377,10 @@ namespace Core::UI{
 				return true;
 			}
 			return false;
+		}
+
+		virtual void getFuture(){
+
 		}
 
 	protected:
@@ -480,6 +497,8 @@ namespace Core::UI{
 		Element* currentCursorFocus{nullptr};
 
 		std::vector<Element*> lastInbounds{};
+		std::unordered_set<Element*> independentLayout{};
+		std::unordered_set<Element*> asyncTaskOwners{};
 
 		Graphic::RendererUI* renderer{};
 		Bundle* bundle{};
@@ -511,10 +530,15 @@ namespace Core::UI{
 
 		~Scene();
 
+		void registerAsyncTaskElement(Element* element);
+
+		void registerIndependentLayout(Element* element);
 
 		[[nodiscard]] bool isMousePressed() const noexcept{
 			return std::ranges::any_of(mouseKeyStates, std::identity{}, &MouseState::pressed);
 		}
+
+		void joinTasks();
 
 		void dropAllFocus(const Element* target);
 
@@ -538,7 +562,7 @@ namespace Core::UI{
 
 		void update(float delta_in_ticks) const;
 
-		void layout() const;
+		void layout();
 
 		void draw() const;
 

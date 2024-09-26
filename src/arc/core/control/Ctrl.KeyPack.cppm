@@ -11,6 +11,11 @@ export namespace Core::Ctrl{
 
 	using PackedKey = unsigned;
 
+	struct UnpackedKey{
+		int keyCode;
+		int act;
+		int mode;
+	};
 
 	/**
 	* @code
@@ -30,8 +35,12 @@ export namespace Core::Ctrl{
 	 * @brief
 	 * @return [keyCode, act, mode]
 	 */
-	constexpr std::tuple<int, int, int> unpackKey(const PackedKey fullKey) noexcept{
-		return {fullKey & KeyMask, fullKey >> 16 & 0xff, fullKey >> 24 & 0xff};
+	constexpr decltype(auto) unpackKey(const PackedKey fullKey) noexcept{
+		return UnpackedKey{
+				.keyCode = static_cast<int>(fullKey & KeyMask),
+				.act = static_cast<int>(fullKey >> 16 & 0xff),
+				.mode = static_cast<int>(fullKey >> 24 & 0xff)
+			};
 	}
 
 	struct KeyPack{
@@ -57,6 +66,10 @@ export namespace Core::Ctrl{
 
 		[[nodiscard]] constexpr int action() const noexcept{
 			return static_cast<int>((code >> 16) & 0xff);
+		}
+
+		[[nodiscard]] constexpr int mode() const noexcept{
+			return static_cast<int>((code >> 24) & 0xff);
 		}
 	};
 
