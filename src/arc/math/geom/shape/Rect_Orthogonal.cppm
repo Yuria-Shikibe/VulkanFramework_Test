@@ -70,6 +70,12 @@ export namespace Geom{
 			this->setSize(size);
 		}
 
+		constexpr Rect_Orthogonal(FromExtentTag,
+			const typename Vector2D<T>::PassType src, const T width, const T height) noexcept
+			: src(src){
+			this->setSize(width, height);
+		}
+
 		constexpr explicit Rect_Orthogonal(const T size) noexcept{
 			this->setSize(size, size);
 		}
@@ -128,6 +134,21 @@ export namespace Geom{
 				static_cast<T_>(size_.x),
 				static_cast<T_>(size_.y),
 			};
+		}
+
+
+		[[nodiscard]] constexpr auto asSigned() const noexcept{
+			if constexpr (std::is_unsigned_v<T>){
+				using S = std::make_signed_t<T>;
+				return Rect_Orthogonal<S>{
+					static_cast<S>(src.x  ),
+					static_cast<S>(src.y  ),
+					static_cast<S>(size_.x),
+					static_cast<S>(size_.y)
+				};
+			}else{
+				return *this;
+			}
 		}
 
 		template <ext::number N>
@@ -559,6 +580,13 @@ export namespace Geom{
 		constexpr Rect_Orthogonal& shrink(const T marginX, const T marginY) noexcept{
 			(void)this->shrinkX(marginX);
 			(void)this->shrinkY(marginY);
+
+			return *this;
+		}
+
+		constexpr Rect_Orthogonal& shrink(const typename Geom::Vector2D<T>::PassType margin) noexcept{
+			(void)this->shrinkX(margin.x);
+			(void)this->shrinkY(margin.y);
 
 			return *this;
 		}

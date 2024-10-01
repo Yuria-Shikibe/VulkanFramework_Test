@@ -493,14 +493,15 @@ export namespace Math {
 		return static_cast<T>(value + CEIL);
 	}
 
-	/**
-	 * Returns the closest integer to the specified float. This method will only properly round floats from -(2^14) to
-	 * (Float.MAX_VALUE - 2^14).
-	 */
-	template <typename T>
-		requires std::is_integral_v<T>
-	constexpr T round(const float value) noexcept {
-		return static_cast<T>(std::round(value) + FLOATING_ROUNDING_ERROR);
+
+	template <typename T, typename T0>
+		requires (std::is_integral_v<T>)
+	constexpr T round(const T0 value) noexcept {
+		if constexpr (std::is_floating_point_v<T0>){
+			return static_cast<T>(std::round(value) + std::numeric_limits<T0>::epsilon());
+		}else{
+			return static_cast<T>(value);
+		}
 	}
 
 	constexpr int floor(const int value, const int step) noexcept {
@@ -572,9 +573,9 @@ export namespace Math {
 	// }
 
 	/** Mod function that works properly for negative numbers. */
-	inline int mod(const int x, const int n) noexcept {
-		return (x % n + n) % n;
-	}
+	// inline int mod(const int x, const int n) noexcept {
+	// 	return (x % n + n) % n;
+	// }
 
 	template <ext::number T>
 	T mod(const T x, const T n) noexcept {

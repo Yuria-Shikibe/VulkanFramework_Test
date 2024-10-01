@@ -333,7 +333,7 @@ export namespace Graphic{
 			pipelineTemplate
 				.useDefaultFixedStages()
 				.setColorBlend(&Default::ColorBlending<std::array{
-						Blending::ScaledAlphaBlend,
+						Blending::AlphaBlend,
 						Blending::ScaledAlphaBlend,
 						Blending::AlphaBlend,
 					}>)
@@ -372,7 +372,7 @@ export namespace Graphic{
 				Util::imageBarrier(scopedCommand, barriers);
 
 				for (auto& attachment : attachments){
-					attachment.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color, {});
+					attachment.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color, {1., 1., 1., 0.});
 				}
 
 				Util::swapStage(barriers);

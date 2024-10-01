@@ -16,8 +16,9 @@ import Graphic.Pixmap;
 
 import Geom.Vector2D;
 import Geom.Rect_Orthogonal;
-import ext.Allocator2D;
+import ext.allocator_2D;
 import ext.heterogeneous;
+import ext.meta_programming;
 import std;
 
 namespace Graphic{
@@ -45,38 +46,30 @@ namespace Graphic{
 				return static_cast<const ImageViewRegion&>(*this);
 			}
 
-			[[nodiscard]] AllocatedViewRegion(VkImageView imageView, const Geom::USize2& srcImageSize,
-			                         const Geom::Rect_Orthogonal<std::uint32_t>& internal,
-			                         SubpageData* srcAllocator)
+			[[nodiscard]] AllocatedViewRegion(
+				VkImageView imageView,
+				const Geom::USize2 srcImageSize,
+				const Geom::Rect_Orthogonal<std::uint32_t> internal,
+				SubpageData* srcAllocator)
 				: ImageViewRegion{imageView, srcImageSize, internal},
 				  srcAllocator{srcAllocator}, region{internal}{}
 
 			void shrink(const std::uint32_t size){
 				region.shrink(size);
-				setUV(region);
+				setUV_fromInternal(region);
 			}
 
 			~AllocatedViewRegion(){
-				if(srcAllocator) srcAllocator->deallocate(region.getSrc());
+				if(srcAllocator)srcAllocator->deallocate(region.getSrc());
 			}
 
 			AllocatedViewRegion(const AllocatedViewRegion& other) = delete;
 
-			AllocatedViewRegion(AllocatedViewRegion&& other) noexcept
-				: ImageViewRegion{std::move(other)},
-				  srcAllocator{std::move(other.srcAllocator)},
-				  region{std::move(other.region)}{}
+			AllocatedViewRegion(AllocatedViewRegion&& other) noexcept = default;
 
 			AllocatedViewRegion& operator=(const AllocatedViewRegion& other) = delete;
 
-			AllocatedViewRegion& operator=(AllocatedViewRegion&& other) noexcept{
-				if(this == &other) return *this;
-				if(srcAllocator) srcAllocator->deallocate(region.getSrc());
-				ImageViewRegion::operator =(std::move(other));
-				srcAllocator = std::move(other.srcAllocator);
-				region = std::move(other.region);
-				return *this;
-			}
+			AllocatedViewRegion& operator=(AllocatedViewRegion&& other) noexcept = default;
 		};
 
 		auto allocate(const SizeType size){
@@ -92,23 +85,20 @@ namespace Graphic{
 			texture.createEmpty(size, 1);
 		}
 
-		std::optional<AllocatedViewRegion> tryAllocate(VkCommandBuffer commandBuffer, VkImage image, const Rect& region, std::uint32_t margin){
+		template <typename T>
+			requires (ext::is_any_of<T, VkImage, VkBuffer>)
+		std::optional<AllocatedViewRegion> tryAllocate(VkCommandBuffer commandBuffer, T dataHandle, const Rect region, const std::uint32_t margin){
 			if(const auto rect = allocate(region.getSize().add(margin))){
 				const Rect rst = rect->copy().setSize(region.getSize());
-				texture.writeImage(commandBuffer, image,
-					region.as<int>(),
-					rst.as<int>());
 
-				return AllocatedViewRegion{texture.getView(), texture.getSize(), rst, this};
-			}
+				if constexpr(std::same_as<T, VkImage>){
+					texture.writeImage(commandBuffer, dataHandle, region.as<int>(), rst.as<int>());
+				} else if constexpr(std::same_as<T, VkBuffer>){
+					texture.writeBuffer(commandBuffer, dataHandle, rst.as<int>());
+				}else{
+					static_assert(false, "Data Type is not supported");
+				}
 
-			return std::nullopt;
-		}
-
-		std::optional<AllocatedViewRegion> tryAllocate(VkCommandBuffer commandBuffer, VkBuffer buffer, const Rect& region, std::uint32_t margin){
-			if(const auto rect = allocate(region.getSize().add(margin))){
-				const Rect rst = rect->copy().setSize(region.getSize());
-				texture.writeBuffer(commandBuffer, buffer, rst.as<int>());
 
 				return AllocatedViewRegion{texture.getView(), texture.getSize(), rst, this};
 			}
@@ -118,23 +108,24 @@ namespace Graphic{
 	};
 
 	export struct ImagePage{
-		SizeType size{};
-
-		std::string name{};
 		std::deque<SubpageData> subpages{};
 		ext::string_hash_map<SubpageData::AllocatedViewRegion> namedImageRegions{};
 
 		std::uint32_t margin{4};
 
+	private:
+		std::string name{};
+		SizeType imageSize{};
 		std::shared_mutex writeMutex{};
 
-		[[nodiscard]] ImagePage(const SizeType& size, const std::string_view name)
-			: size{size},
-			  name{name}{}
+	public:
+		[[nodiscard]] explicit ImagePage(const std::string_view name, const SizeType size = DefTexturePageSize)
+			: name{name},
+			  imageSize{size}{}
 
 		SubpageData& createPage(const Core::Vulkan::Context* context){
 			std::unique_lock lk{writeMutex};
-			return subpages.emplace_back(SubpageData{context, size});
+			return subpages.emplace_back(SubpageData{context, imageSize});
 		}
 
 		template <typename T>
@@ -160,6 +151,10 @@ namespace Graphic{
 			return std::move(rst.value());
 		}
 
+		[[nodiscard]] constexpr std::string_view getName() const noexcept{
+			return name;
+		}
+
 		SubpageData::AllocatedViewRegion* find(const std::string_view localName){
 			if(const auto page = namedImageRegions.find(localName); page != namedImageRegions.end()){
 				return &page->second;
@@ -168,9 +163,8 @@ namespace Graphic{
 			return nullptr;
 		}
 
-
 		std::pair<SubpageData::AllocatedViewRegion&, bool> registerNamedRegion(std::string&& name, SubpageData::AllocatedViewRegion&& region){
-			auto [itr, rst] = namedImageRegions.try_emplace(std::move(name), std::move(region));
+			auto [itr, rst] = namedImageRegions.insert_or_assign(std::move(name), std::move(region));
 			return {itr->second, rst};
 		}
 
@@ -180,6 +174,16 @@ namespace Graphic{
 
 		decltype(auto) registerNamedRegion(const char* name, SubpageData::AllocatedViewRegion&& region){
 			return registerNamedRegion(std::string{name}, std::move(region));
+		}
+
+		template <typename T>
+			requires (std::same_as<T, VkImage> || std::same_as<T, VkBuffer>)
+		decltype(auto) registerNamedRegion(
+			const std::string_view name,
+			const Core::Vulkan::Context* context, VkCommandBuffer commandBuffer,
+			T data, const Rect region
+		){
+			return ImagePage::registerNamedRegion(std::string{name}, allocate<T>(context, commandBuffer, std::move(data), region));
 		}
 
 		std::vector<Pixmap> exportImages(const Core::Vulkan::CommandPool& commandPool, VkQueue queue) const{
@@ -195,7 +199,6 @@ namespace Graphic{
 	};
 
 	export using AllocatedImageViewRegion = SubpageData::AllocatedViewRegion;
-
 
 	export struct ImageAtlas{
 		const Core::Vulkan::Context* context{};
@@ -222,7 +225,7 @@ namespace Graphic{
 		}
 
 		ImagePage& registerPage(std::string_view name, SizeType size = DefTexturePageSize){
-			return pages.try_emplace(std::string(name), size, name).first->second;
+			return pages.try_emplace(std::string(name), name, size).first->second;
 		}
 
 		[[nodiscard]] AllocatedImageViewRegion allocate(
@@ -235,7 +238,7 @@ namespace Graphic{
 			const Core::Vulkan::StagingBuffer buffer(context->physicalDevice, context->device, pixmap.sizeBytes());
 			buffer.memory.loadData(pixmap.data(), pixmap.sizeBytes());
 
-			return page.allocate(context, obtainTransientCommand(), buffer.get(), {pixmap.getWidth(), pixmap.getHeight()});
+			return page.allocate(context, obtainTransientCommand(), buffer.get(), Geom::Rect_Orthogonal<std::uint32_t>{pixmap.size2D()});
 		}
 
 		[[nodiscard]] AllocatedImageViewRegion allocate(const std::string_view pageName, const Pixmap& pixmap){
@@ -294,10 +297,30 @@ namespace Graphic{
 			auto [category, localName] = splitKey(name);
 
 			if(const auto page = findPage(category)){
-				return &page->registerNamedRegion(name, std::move(region)).first;
+				return &page->registerNamedRegion(localName, std::move(region)).first;
 			}
 
 			return nullptr;
+		}
+
+		AllocatedImageViewRegion* registerNamedImageViewRegion(const std::string_view name, const Pixmap& pixmap){
+			auto [category, localName] = splitKey(name);
+
+			if(const auto page = findPage(category)){
+				return &page->registerNamedRegion(localName, allocate(*page, pixmap)).first;
+			}
+
+			return nullptr;
+		}
+
+		decltype(auto) registerNamedImageViewRegionGuaranteed(const std::string_view name, const Pixmap& pixmap){
+			auto [category, localName] = splitKey(name);
+			auto& page = registerPage(category);
+			return page.registerNamedRegion(localName, allocate(page, pixmap));
+		}
+
+		decltype(auto) registerNamedImageViewRegion(ImagePage& page, const std::string_view name, const Pixmap& pixmap) const{
+			return page.registerNamedRegion(name, allocate(page, pixmap));
 		}
 
 		static std::pair<std::string_view, std::string_view> splitKey(const std::string_view name){

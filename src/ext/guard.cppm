@@ -4,14 +4,13 @@ import ext.meta_programming;
 import std;
 
 export namespace ext{
-
 	template <typename T, bool passByMove = false>
 		requires requires{
-		requires
+			requires
 			(passByMove && std::is_move_assignable_v<T>) ||
 			(!passByMove && std::is_copy_assignable_v<T>);
 		}
-	class [[jetbrains::guard]] guard{
+	class [[deprecated]] [[jetbrains::guard]] guard{
 		T& tgt;
 		T original;
 
@@ -25,10 +24,41 @@ export namespace ext{
 		}
 
 		constexpr ~guard(){
-			if constexpr (passByMove){
+			if constexpr(passByMove){
 				tgt = std::move(original);
-			}else{
+			} else{
 				tgt = original;
+			}
+		}
+	};
+
+	template <typename T, bool passByMove = !(std::is_trivially_copy_assignable_v<T> && std::is_copy_assignable_v<T>)>
+		requires requires{
+			requires std::is_object_v<T>;
+			requires
+			(passByMove && std::is_move_assignable_v<T>) ||
+			(!passByMove && std::is_copy_assignable_v<T>);
+		}
+	class [[jetbrains::guard]] resumer{
+		std::add_pointer_t<T> tgt;
+		T original;
+
+		static constexpr bool is_nothrow =
+			(passByMove && std::is_nothrow_move_assignable_v<T>) ||
+			(!passByMove && std::is_nothrow_copy_assignable_v<T>);
+
+	public:
+		[[nodiscard]] constexpr explicit resumer(T& tgt) noexcept(is_nothrow) requires (!passByMove) :
+			tgt{std::addressof(tgt)}, original{tgt}{}
+
+		[[nodiscard]] constexpr explicit resumer(T& tgt) noexcept(is_nothrow) requires (passByMove) :
+			tgt{std::addressof(tgt)}, original{std::move(tgt)}{}
+
+		constexpr ~resumer() noexcept(is_nothrow){
+			if constexpr(passByMove){
+				*tgt = std::move(original);
+			} else{
+				*tgt = original;
 			}
 		}
 	};

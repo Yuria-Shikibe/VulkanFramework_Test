@@ -19,21 +19,17 @@ void Core::UI::ScrollPanel::drawPost() const{
 
 	using namespace Graphic;
 
-	Draw::DrawContext context{};
-	BatchAutoParam_Exclusive<Vulkan::Vertex_UI> ac{getScene()->renderer->batch, context.whiteRegion};
+	InstantBatchAutoParam param{getBatch(), Draw::WhiteRegion};
+	auto color = Colors::YELLOW;
+	color.a = 0.3f;
 
-	auto param = ac.get();
-
-	context.color = Colors::YELLOW;
-	context.stroke = 2.f;
-	context.color.a = 0.5f;
 	if(enableHori || enableVert)getScene()->renderer->popScissor();
 
 	if(enableHori){
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getHoriBarRect(), context.color);
+		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getHoriBarRect(), color);
 	}
 
 	if(enableVert){
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getVertBarRect(), context.color);
+		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getVertBarRect(), color);
 	}
 }

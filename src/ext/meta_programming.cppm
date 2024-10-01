@@ -3,6 +3,26 @@ export module ext.meta_programming;
 import std;
 
 namespace ext{
+	export template <typename T, typename ...Targets>
+	constexpr bool is_any_of = (std::same_as<T, Targets> || ...);
+
+	export
+	template <typename T>
+	struct to_signed : std::type_identity<std::make_signed_t<T>>{};
+
+	template <std::floating_point T>
+	struct to_signed<T> : std::type_identity<T>{};
+
+	template <typename T>
+		requires std::same_as<std::remove_cv_t<T>, bool>
+	struct to_signed<T> : std::type_identity<void>{
+		// ReSharper disable once CppStaticAssertFailure
+		static_assert(false, "to signed applied to bool type");
+	};
+
+	export template <typename T>
+	using to_signed_t = typename to_signed<T>::type;
+
 	export
 	template <typename T>
 	struct function_traits;

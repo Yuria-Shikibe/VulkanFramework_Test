@@ -63,6 +63,8 @@ namespace ext {
 	export template <typename T>
 	concept signed_number = !std::is_unsigned_v<T> && number<T>;
 
+	// constexpr bool b = std::is_unsigned_v<float>;
+
 	export template <typename T, typename ItemType = std::nullptr_t>
 	concept range_of = requires{
 		requires std::ranges::range<T>;

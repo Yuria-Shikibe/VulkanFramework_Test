@@ -37,8 +37,8 @@ export namespace Font::TypeSettings{
 			// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, row.getRectBound().move(offset), context.color);
 
 			for (auto && glyph : row.glyphs){
-				if(!glyph.glyph->imageView)continue;
-				auto [imageIndex, sz, dataPtr] = batch.acquire(glyph.glyph->imageView, 1);
+				if(!glyph.glyph->view)continue;
+				auto [imageIndex, sz, dataPtr] = batch.acquire(glyph.glyph->view, 1);
 
 				new(dataPtr) std::array{
 					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v01},

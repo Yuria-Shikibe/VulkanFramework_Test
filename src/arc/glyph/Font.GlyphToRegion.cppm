@@ -24,7 +24,7 @@ export namespace Font{
 			: ImageViewRegion{view}, metrics{metrics}{}
 
 		[[nodiscard]] constexpr bool drawable() const noexcept{
-			return srcImageSize.area() == 0;
+			return size.area() == 0;
 		}
 	};
 

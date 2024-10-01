@@ -1,6 +1,7 @@
 module;
 
 #include <vulkan/vulkan.h>
+#include <cassert>
 
 export module Graphic.Batch.AutoDrawParam;
 
@@ -25,7 +26,7 @@ namespace Graphic{
 
 	export
 	template <typename Vertex, typename T = std::identity>
-	struct BatchAutoParam_MultiThread : AutoDrawSpaceAcquirer<LockableDrawArgs, Vertex, BatchAutoParam_MultiThread<Vertex, T>>{
+	struct BatchAutoParam_MultiThread : Draw::AutoParamBase<Vertex, T>, AutoDrawSpaceAcquirer<LockableDrawArgs, Vertex, BatchAutoParam_MultiThread<Vertex, T>>{
 		using Acquirer = AcquirerImpl<LockableDrawArgs, Vertex, T, BatchAutoParam_MultiThread>;
 
 		Batch_MultiThread* batch{};
@@ -41,7 +42,7 @@ namespace Graphic{
 		}
 
 		void reserve(const std::size_t count){
-			this->append(batch->acquireOnce(region->imageView, count));
+			this->append(batch->acquireOnce(region->view, count));
 		}
 
 		Acquirer get(){
@@ -51,38 +52,10 @@ namespace Graphic{
 		}
 	};
 
-
-	export
-	template <typename Vertex, typename T = std::identity>
-	struct BatchAutoParam_Exclusive : AutoDrawSpaceAcquirer<DrawArgs, Vertex, BatchAutoParam_Exclusive<Vertex, T>>{
-		using Acquirer = AcquirerImpl<DrawArgs, Vertex, T, BatchAutoParam_Exclusive>;
-
-		Batch_Exclusive* batch{};
-		const ImageViewRegion* region{};
-
-		[[nodiscard]] BatchAutoParam_Exclusive() = default;
-
-		[[nodiscard]] explicit BatchAutoParam_Exclusive(Batch_Exclusive& batch, const ImageViewRegion* region = nullptr)
-			: batch{&batch}, region{region}{}
-
-		void setRegion(const ImageViewRegion* region){
-			this->region = region;
-		}
-
-		void reserve(const std::size_t count){
-			this->append(batch->acquire(region->imageView, count));
-		}
-
-		Acquirer get(){
-			Acquirer acquirer{*this};
-			acquirer.uv = region;
-			return acquirer;
-		}
-	};
 
 	export
 	template <typename Vertex /*capture name*/ = void, typename T = std::identity>
-	class InstantBatchAutoParam : public Draw::DrawParam<T>{
+	class InstantBatchAutoParam : public Draw::AutoParamBase<Vertex, T>{
 		Batch_Exclusive* batch{};
 		VkImageView imageView{};
 
@@ -91,7 +64,7 @@ namespace Graphic{
 
 		[[nodiscard]] InstantBatchAutoParam(Batch_Exclusive& batch, const ImageViewRegion* region)
 			: batch{&batch},
-			  imageView{region->imageView}{
+			  imageView{region->view}{
 			this->uv = region;
 		}
 
@@ -103,8 +76,35 @@ namespace Graphic{
 		}
 
 		void setImage(const ImageViewRegion* region){
-			imageView = region->imageView;
+			imageView = region->view;
 			this->uv = region;
+		}
+
+		InstantBatchAutoParam& operator << (VkImageView view){
+			imageView = view;
+			return *this;
+		}
+
+		InstantBatchAutoParam& operator << (const UVData& uv){
+			this->uv = &uv;
+			return *this;
+		}
+
+		InstantBatchAutoParam& operator << (const UVData* uv){
+			assert(uv != nullptr);
+
+			return this->operator<<(*uv);
+		}
+
+		InstantBatchAutoParam& operator << (const ImageViewRegion& region){
+			return this->operator<<(region.view) << static_cast<const UVData&>(region);
+		}
+
+		InstantBatchAutoParam& operator << (const ImageViewRegion* region){
+			assert(region != nullptr);
+
+			return this->operator<<(*region);
+
 		}
 	};
 

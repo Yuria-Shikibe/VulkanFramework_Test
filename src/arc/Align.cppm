@@ -5,37 +5,56 @@ export import Geom.Vector2D;
 export import Geom.Rect_Orthogonal;
 
 import std;
+import Math;
+
+namespace Align{
+	template <ext::number T1, ext::number T2>
+	constexpr float floating_div(const T1 a, const T2 b) noexcept{
+		return static_cast<float>(a) / static_cast<float>(b);
+	}
+
+	template <ext::number T1>
+	constexpr T1 floating_mul(const T1 a, const float b) noexcept{
+		if constexpr (std::is_floating_point_v<T1>){
+			return a * b;
+		}else{
+			return Math::round<T1>(static_cast<float>(a) * b);
+		}
+	}
+}
 
 export namespace Align{
-	struct Spacing{
+	template<typename T>
+		requires (std::is_arithmetic_v<T>)
+	struct Pad{
 		/**@brief Left Spacing*/
-		float left{};
+		T left{};
 		/**@brief Right Spacing*/
-		float right{};
+		T right{};
 		/**@brief Bottom Spacing*/
-		float bottom{};
+		T bottom{};
 		/**@brief Top Spacing*/
-		float top{};
+		T top{};
 
-		[[nodiscard]] constexpr Geom::Vec2 bot_lft() const noexcept{
+		[[nodiscard]] constexpr Geom::Vector2D<T> bot_lft() const noexcept{
 			return {left, bottom};
 		}
 
-		[[nodiscard]] constexpr Geom::Vec2 top_rit() const noexcept{
+		[[nodiscard]] constexpr Geom::Vector2D<T> top_rit() const noexcept{
 			return {right, top};
 		}
 
-		[[nodiscard]] constexpr Geom::Vec2 top_lft() const noexcept{
+		[[nodiscard]] constexpr Geom::Vector2D<T> top_lft() const noexcept{
 			return {left, top};
 		}
 
-		[[nodiscard]] constexpr Geom::Vec2 bot_rit() const noexcept{
+		[[nodiscard]] constexpr Geom::Vector2D<T> bot_rit() const noexcept{
 			return {right, bottom};
 		}
 
-		[[nodiscard]] friend constexpr bool operator==(const Spacing& lhs, const Spacing& rhs) noexcept = default;
+		[[nodiscard]] friend constexpr bool operator==(const Pad& lhs, const Pad& rhs) noexcept = default;
 
-		constexpr void expand(float x, float y) noexcept{
+		constexpr void expand(T x, T y) noexcept{
 			x *= 0.5f;
 			y *= 0.5f;
 
@@ -45,36 +64,36 @@ export namespace Align{
 			bottom += y;
 		}
 
-		constexpr void expand(const float val) noexcept{
-			expand(val, val);
+		constexpr void expand(const T val) noexcept{
+			this->expand(val, val);
 		}
 
-		[[nodiscard]] constexpr float getWidth() const noexcept{
+		[[nodiscard]] constexpr T getWidth() const noexcept{
 			return left + right;
 		}
 
-		[[nodiscard]] constexpr float getHeight() const noexcept{
+		[[nodiscard]] constexpr T getHeight() const noexcept{
 			return bottom + top;
 		}
 
-		[[nodiscard]] constexpr Geom::Vec2 getSize() const noexcept{
+		[[nodiscard]] constexpr Geom::Vector2D<T> getSize() const noexcept{
 			return {getWidth(), getHeight()};
 		}
 
-		[[nodiscard]] constexpr float getRemainWidth(const float total = 1.0f) const noexcept{
+		[[nodiscard]] constexpr T getRemainWidth(const T total = 1) const noexcept{
 			return total - getWidth();
 		}
 
-		[[nodiscard]] constexpr float getRemainHeight(const float total = 1.0f) const noexcept{
+		[[nodiscard]] constexpr T getRemainHeight(const T total = 1) const noexcept{
 			return total - getHeight();
 		}
 
-		constexpr Spacing& set(const float val) noexcept{
+		constexpr Pad& set(const T val) noexcept{
 			bottom = top = left = right = val;
 			return *this;
 		}
 
-		constexpr Spacing& set(const float l, const float r, const float b, const float t) noexcept{
+		constexpr Pad& set(const T l, const T r, const T b, const T t) noexcept{
 			left = l;
 			right = r;
 			bottom = b;
@@ -82,10 +101,22 @@ export namespace Align{
 			return *this;
 		}
 
-		constexpr Spacing& setZero() noexcept{
+		constexpr Pad& setZero() noexcept{
 			return set(0);
 		}
 	};
+
+	template<typename T>
+	Pad<T> padBetween(const Geom::Rect_Orthogonal<T>& internal, const Geom::Rect_Orthogonal<T>& external){
+		return Pad<T>{
+			internal.getSrcX() - external.getSrcX(),
+			external.getEndX() - internal.getEndX(),
+			internal.getSrcY() - external.getSrcY(),
+			external.getEndY() - internal.getEndY(),
+		};
+	}
+
+	using Spacing = Pad<float>;
 
 	enum class Pos : unsigned char{
 		left     = 0b0000'0001,
@@ -159,39 +190,48 @@ export namespace Align{
 	};
 
 	template <ext::number T>
-	Geom::Vector2D<T> embedTo(const Scale stretch, Geom::Vector2D<T> src, Geom::Vector2D<T> tgt){
+	constexpr Geom::Vector2D<T> embedTo(const Scale stretch, Geom::Vector2D<T> srcSize, Geom::Vector2D<T> toBound){
 		switch(stretch){
 			case Scale::fit :{
-				const float targetRatio = tgt.y / tgt.x;
-				const float sourceRatio = src.y / src.x;
-				float scale = targetRatio > sourceRatio ? tgt.x / src.x : tgt.y / src.y;
-				return {src.x * scale, src.y * scale};
+				const float targetRatio = Align::floating_div(toBound.y, toBound.x);
+				const float sourceRatio =
+					Align::floating_div(srcSize.y, srcSize.x);
+				float scale = targetRatio > sourceRatio ?
+					Align::floating_div(toBound.x, srcSize.x) :
+					Align::floating_div(toBound.y, srcSize.y);
+
+				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::fill :{
-				const float targetRatio = tgt.y / tgt.x;
-				const float sourceRatio = src.y / src.x;
-				float scale = targetRatio < sourceRatio ? tgt.x / src.x : tgt.y / src.y;
-				return {src.x * scale, src.y * scale};
+				const float targetRatio =
+					Align::floating_div(toBound.y, toBound.x);
+				const float sourceRatio =
+					Align::floating_div(srcSize.y, srcSize.x);
+				float scale = targetRatio < sourceRatio ?
+					Align::floating_div(toBound.x, srcSize.x) :
+					Align::floating_div(toBound.y, srcSize.y);
+
+				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::fillX :{
-				float scale = tgt.x / src.x;
-				return {src.x * scale, src.y * scale};
+				float scale = Align::floating_div(toBound.x, srcSize.x);
+				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::fillY :{
-				float scale = tgt.y / src.y;
-				return {src.x * scale, src.y * scale};
+				float scale = Align::floating_div(toBound.y, srcSize.y);
+				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
-			case Scale::stretch : return tgt;
-			case Scale::stretchX : return {tgt.x, src.y};
-			case Scale::stretchY : return {src.x, tgt.y};
+			case Scale::stretch : return toBound;
+			case Scale::stretchX : return {toBound.x, srcSize.y};
+			case Scale::stretchY : return {srcSize.x, toBound.y};
 			case Scale::bounded :
-				if(src.y > tgt.y || src.x > tgt.x){
-					return Align::embedTo<T>(Scale::fit, src, tgt);
+				if(srcSize.y > toBound.y || srcSize.x > toBound.x){
+					return Align::embedTo<T>(Scale::fit, srcSize, toBound);
 				} else{
-					return Align::embedTo<T>(Scale::none, src, tgt);
+					return Align::embedTo<T>(Scale::none, srcSize, toBound);
 				}
 			case Scale::none :
-				return src;
+				return srcSize;
 		}
 		
 		std::unreachable();
@@ -201,8 +241,9 @@ export namespace Align{
 		return std::to_underlying(l) & std::to_underlying(r);
 	}
 
-	constexpr Geom::Vec2 getOffsetOf(const Pos align, const Geom::Vec2 bottomLeft, const Geom::Vec2 topRight){
-		Geom::Vec2 move{};
+	template <ext::signed_number T>
+	constexpr Geom::Vec2 getOffsetOf(const Pos align, const Geom::Vector2D<T> bottomLeft, const Geom::Vector2D<T> topRight){
+		Geom::Vector2D<T> move{};
 
 		if(align & Pos::top){
 			move.y = -topRight.y;
@@ -304,9 +345,10 @@ export namespace Align{
 	 * @return
 	 */
 	template <ext::signed_number T>
-	[[nodiscard]] constexpr Geom::Vector2D<T> getOffsetOf(const Pos align,
-	                                                      const Geom::Vector2D<T>& internal_toAlignSize,
-	                                                      const Geom::Rect_Orthogonal<T>& external){
+	[[nodiscard]] constexpr Geom::Vector2D<T> getOffsetOf(
+		const Pos align,
+		const typename Geom::Vector2D<T>::PassType internal_toAlignSize,
+		const Geom::Rect_Orthogonal<T>& external){
 		Geom::Vector2D<T> offset{};
 
 		if(align & Pos::top){

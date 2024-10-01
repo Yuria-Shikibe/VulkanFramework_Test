@@ -7,10 +7,10 @@ import ext.concepts;
 
 export namespace Geom{
 	template <ext::number T>
-	struct Vector2D
+	struct Vector2D // NOLINT(*-pro-type-member-init)
 	{
-		T x{0};
-		T y{0};
+		T x;
+		T y;
 
 		using PassType = ext::ParamPassType<Vector2D, sizeof(T) * 2>;
 
@@ -30,8 +30,14 @@ export namespace Geom{
 			return {x * val, y * val};
 		}
 
-		[[nodiscard]] constexpr Vector2D operator-() const noexcept {
-			return {- x, - y};
+		[[nodiscard]] constexpr auto operator-() const noexcept{
+			if constexpr (std::is_unsigned_v<T>){
+				using S = std::make_signed_t<T>;
+				return Vector2D<std::make_signed_t<T>>{-static_cast<S>(x), -static_cast<S>(y)};
+			}else{
+				return Vector2D<T>{- x, - y};
+			}
+
 		}
 
 		[[nodiscard]] constexpr Vector2D operator/(const T val) const noexcept {
@@ -43,7 +49,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr Vector2D operator%(const PassType tgt) const noexcept {
-			return {Math::mod(x, tgt.x), Math::mod(y, tgt.y)};
+			return {Math::mod<T>(x, tgt.x), Math::mod<T>(y, tgt.y)};
 		}
 
 		constexpr Vector2D& operator+=(const PassType tgt) noexcept {
@@ -547,6 +553,13 @@ export namespace Geom{
 		}
 
 		template <std::floating_point V>
+		constexpr Vector2D& sclRound(const Vector2D<V> val) noexcept {
+			V rstX = static_cast<V>(x) * val.x;
+			V rstY = static_cast<V>(y) * val.y;
+			return this->set(Math::round<T>(rstX), Math::round<T>(rstY));
+		}
+
+		template <std::floating_point V>
 		constexpr Vector2D& scl(const V val) noexcept {
 			V rstX = static_cast<V>(x) * val;
 			V rstY = static_cast<V>(y) * val;
@@ -707,31 +720,58 @@ export namespace Geom{
 			return {Math::sign(x), Math::sign(y)};
 		}
 
-		auto constexpr operator<=>(const PassType v) const noexcept {
-			T len = length2();
-			T lenO = v.length2();
-
-			if(len > lenO) {
-				return std::weak_ordering::greater;
-			}
-
-			if(len < lenO) {
-				return std::weak_ordering::less;
-			}
-
-			return std::weak_ordering::equivalent;
+		[[nodiscard]] constexpr bool within(const PassType other) const noexcept{
+			return x < other.x && y < other.y;
 		}
+
+		[[nodiscard]] constexpr bool beyond(const PassType other) const noexcept{
+			return x > other.x && y > other.y;
+		}
+
+		constexpr auto operator<=>(const Vector2D&) const = default;
+		// auto constexpr operator<=>(const PassType v) const noexcept {
+		// 	T len = length2();
+		// 	T lenO = v.length2();
+		//
+		// 	if(len > lenO) {
+		// 		return std::weak_ordering::greater;
+		// 	}
+		//
+		// 	if(len < lenO) {
+		// 		return std::weak_ordering::less;
+		// 	}
+		//
+		// 	return std::weak_ordering::equivalent;
+		// }
 
 		template <ext::number TN>
 		[[nodiscard]] constexpr Vector2D<TN> as() const noexcept{
-			return Vector2D<TN>{static_cast<TN>(x), static_cast<TN>(y)};
+			if constexpr (std::same_as<TN, T>){
+				return *this;
+			}else{
+				return Vector2D<TN>{static_cast<TN>(x), static_cast<TN>(y)};
+			}
+		}
+
+		template <ext::number TN>
+		[[nodiscard]] constexpr explicit operator Vector2D<TN>() const noexcept{
+			return as<TN>();
+		}
+
+		[[nodiscard]] constexpr auto asSigned() const noexcept{
+			if constexpr (std::is_unsigned_v<T>){
+				using S = std::make_signed_t<T>;
+				return Vector2D<S>{static_cast<S>(x), static_cast<S>(y)};
+			}else{
+				return *this;
+			}
 		}
 
 		friend std::ostream& operator<<(std::ostream& os, const PassType obj) {
 			return os << '(' << std::to_string(obj.x) << ", " << std::to_string(obj.y) << ')';
 		}
 
-		constexpr bool equalsTo(const PassType other){
+		[[nodiscard]] constexpr bool equalsTo(const PassType other) const noexcept{
 			if constexpr (std::is_integral_v<T>){
 				return *this == other;
 			}else{

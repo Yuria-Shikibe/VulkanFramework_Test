@@ -409,11 +409,8 @@ Graphic::Pixmap Font::toPixmap(const FT_Bitmap& map) {
 	Graphic::Pixmap pixmap{map.width, map.rows};
 	auto* const data = pixmap.data();
 	const auto size = map.width * map.rows;
+	std::memset(data, 0xff, pixmap.sizeBytes());
 	for(unsigned i = 0; i < size; ++i) {
-		//Normal
-		data[i * 4 + 0] = 0xff;
-		data[i * 4 + 1] = 0xff;
-		data[i * 4 + 2] = 0xff;
 		data[i * 4 + 3] = map.buffer[i];
 	}
 	return pixmap;

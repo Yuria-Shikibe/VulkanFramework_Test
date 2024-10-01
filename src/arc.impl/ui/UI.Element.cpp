@@ -23,7 +23,7 @@ void Core::UI::DefElementDrawer::draw(const Element& element) const {
 
 }
 
-Graphic::Batch_Exclusive& Core::UI::Element::getBatch() const noexcept{
+Graphic::Batch_Exclusive& Core::UI::Element::getBatch() const noexcept(true){
 #if DEBUG_CHECK
 	if(!getScene())throw std::logic_error("nullptr scene");
 #endif

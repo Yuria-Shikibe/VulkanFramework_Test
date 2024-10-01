@@ -1,3 +1,7 @@
+module;
+
+#include <vulkan/vulkan.h>
+
 export module Graphic.Draw.Interface;
 
 import std;
@@ -122,7 +126,36 @@ export namespace Graphic::Draw{
 
 	template <typename M>
 	concept AutoAcquirableParam = requires(M& m){
+		typename M::VertexType;
 		requires ext::spec_of<M, DrawParam>;
+
 		{ ++m } -> std::same_as<M&>;
+	};
+
+	template <typename M>
+	concept ImageMutableParam = requires(M& m){
+		{ m << VkImageView{} } -> std::same_as<M&>;
+		{ m << std::declval<const UVData&>() } -> std::same_as<M&>;
+	};
+
+	template <typename Vty, typename M>
+	struct AutoParamBase : DrawParam<M>{
+		using VertexType = Vty;
+
+		AutoParamBase& operator ++() = delete;
+
+		AutoParamBase& operator << (VkImageView) = delete;
+		AutoParamBase& operator << (const UVData&) = delete;
+		AutoParamBase& operator << (const UVData*) = delete;
+		AutoParamBase& operator << (const ImageViewRegion&) = delete; //OPTM using CRTP ?
+		AutoParamBase& operator << (const ImageViewRegion*) = delete; //OPTM using CRTP ?
+
+	};
+
+	using EmptyParam = AutoParamBase<Core::Vulkan::Vertex_UI, std::identity>;
+
+	template <typename T>
+	struct AutoParamTraits{
+		using VertexType = typename T::VertexType;
 	};
 }

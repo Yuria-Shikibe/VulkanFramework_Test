@@ -79,13 +79,13 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		static void binarySort(iter_t const lo, iter_t const hi, iter_t start,
 		                       Compare comp, Projection proj){
-			ADAPTED_ASSUME(lo <= start);
-			ADAPTED_ASSUME(start <= hi);
+			CHECKED_ASSUME(lo <= start);
+			CHECKED_ASSUME(start <= hi);
 			if(start == lo){
 				++start;
 			}
 			for(; start < hi; ++start){
-				ADAPTED_ASSUME(lo <= start);
+				CHECKED_ASSUME(lo <= start);
 				auto pos = std::ranges::upper_bound(lo, start, std::invoke(proj, *start), comp, proj);
 				TimSort::rotateRight(pos, std::ranges::next(start));
 			}
@@ -94,7 +94,7 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		static diff_t countRunAndMakeAscending(iter_t const lo, iter_t const hi,
 		                                       Compare comp, Projection proj){
-			ADAPTED_ASSUME(lo < hi);
+			CHECKED_ASSUME(lo < hi);
 
 			auto runHi = std::ranges::next(lo);
 			if(runHi == hi){
@@ -122,7 +122,7 @@ namespace ext::algo{
 		}
 
 		static diff_t minRunLength(diff_t n){
-			ADAPTED_ASSUME(n >= 0);
+			CHECKED_ASSUME(n >= 0);
 
 			diff_t r = 0;
 			while(n >= 2 * MIN_MERGE){
@@ -170,9 +170,9 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		void mergeAt(diff_t const i, Compare comp, Projection proj){
 			diff_t const stackSize = pending_.size();
-			ADAPTED_ASSUME(stackSize >= 2);
-			ADAPTED_ASSUME(i >= 0);
-			ADAPTED_ASSUME(i == stackSize - 2 || i == stackSize - 3);
+			CHECKED_ASSUME(stackSize >= 2);
+			CHECKED_ASSUME(i >= 0);
+			CHECKED_ASSUME(i == stackSize - 2 || i == stackSize - 3);
 
 			auto base1 = pending_[i].base;
 			auto len1 = pending_[i].len;
@@ -193,12 +193,12 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		void mergeConsecutiveRuns(iter_t base1, diff_t len1, iter_t base2, diff_t len2,
 		                          Compare comp, Projection proj){
-			ADAPTED_ASSUME(len1 > 0);
-			ADAPTED_ASSUME(len2 > 0);
-			ADAPTED_ASSUME(base1 + len1 == base2);
+			CHECKED_ASSUME(len1 > 0);
+			CHECKED_ASSUME(len2 > 0);
+			CHECKED_ASSUME(base1 + len1 == base2);
 
 			auto k = TimSort::gallopRight(std::invoke(proj, *base2), base1, len1, 0, comp, proj);
-			ADAPTED_ASSUME(k >= 0);
+			CHECKED_ASSUME(k >= 0);
 
 			base1 += k;
 			len1 -= k;
@@ -208,7 +208,7 @@ namespace ext::algo{
 			}
 
 			len2 = TimSort::gallopLeft(std::invoke(proj, base1[len1 - 1]), base2, len2, len2 - 1, comp, proj);
-			ADAPTED_ASSUME(len2 >= 0);
+			CHECKED_ASSUME(len2 >= 0);
 			if(len2 == 0){
 				return;
 			}
@@ -223,9 +223,9 @@ namespace ext::algo{
 		template <typename T, typename Iter, typename Compare, typename Projection>
 		static diff_t gallopLeft(T const& key, Iter const base, diff_t const len, diff_t const hint,
 		                         Compare comp, Projection proj){
-			ADAPTED_ASSUME(len > 0);
-			ADAPTED_ASSUME(hint >= 0);
-			ADAPTED_ASSUME(hint < len);
+			CHECKED_ASSUME(len > 0);
+			CHECKED_ASSUME(hint >= 0);
+			CHECKED_ASSUME(hint < len);
 
 			diff_t lastOfs = 0;
 			diff_t ofs = 1;
@@ -265,9 +265,9 @@ namespace ext::algo{
 				lastOfs = hint - ofs;
 				ofs = hint - tmp;
 			}
-			ADAPTED_ASSUME(-1 <= lastOfs);
-			ADAPTED_ASSUME(lastOfs < ofs);
-			ADAPTED_ASSUME(ofs <= len);
+			CHECKED_ASSUME(-1 <= lastOfs);
+			CHECKED_ASSUME(lastOfs < ofs);
+			CHECKED_ASSUME(ofs <= len);
 
 			return std::ranges::lower_bound(base + (lastOfs + 1), base + ofs, key, comp, proj) - base;
 		}
@@ -275,9 +275,9 @@ namespace ext::algo{
 		template <typename T, typename Iter, typename Compare, typename Projection>
 		static diff_t gallopRight(T const& key, Iter const base, diff_t const len, diff_t const hint,
 		                          Compare comp, Projection proj){
-			ADAPTED_ASSUME(len > 0);
-			ADAPTED_ASSUME(hint >= 0);
-			ADAPTED_ASSUME(hint < len);
+			CHECKED_ASSUME(len > 0);
+			CHECKED_ASSUME(hint >= 0);
+			CHECKED_ASSUME(hint < len);
 
 			diff_t ofs = 1;
 			diff_t lastOfs = 0;
@@ -317,9 +317,9 @@ namespace ext::algo{
 				lastOfs += hint;
 				ofs += hint;
 			}
-			ADAPTED_ASSUME(-1 <= lastOfs);
-			ADAPTED_ASSUME(lastOfs < ofs);
-			ADAPTED_ASSUME(ofs <= len);
+			CHECKED_ASSUME(-1 <= lastOfs);
+			CHECKED_ASSUME(lastOfs < ofs);
+			CHECKED_ASSUME(ofs <= len);
 
 			return std::ranges::upper_bound(base + (lastOfs + 1), base + ofs, key, comp, proj) - base;
 		}
@@ -340,9 +340,9 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		void mergeLo(iter_t const base1, diff_t len1, iter_t const base2, diff_t len2,
 		             Compare comp, Projection proj){
-			ADAPTED_ASSUME(len1 > 0);
-			ADAPTED_ASSUME(len2 > 0);
-			ADAPTED_ASSUME(base1 + len1 == base2);
+			CHECKED_ASSUME(len1 > 0);
+			CHECKED_ASSUME(len2 > 0);
+			CHECKED_ASSUME(base1 + len1 == base2);
 
 			if(len1 == 1){
 				return TimSort::rotateLeft(base1, base2 + len2);
@@ -370,8 +370,8 @@ namespace ext::algo{
 				diff_t count2 = 0;
 
 				do{
-					ADAPTED_ASSUME(len1 > 1);
-					ADAPTED_ASSUME(len2 > 0);
+					CHECKED_ASSUME(len1 > 1);
+					CHECKED_ASSUME(len2 > 0);
 
 					if(std::invoke(comp, std::invoke(proj, *cursor2), std::invoke(proj, *cursor1))){
 						*dest = std::ranges::iter_move(cursor2);
@@ -395,8 +395,8 @@ namespace ext::algo{
 				} while((count1 | count2) < minGallop);
 
 				do{
-					ADAPTED_ASSUME(len1 > 1);
-					ADAPTED_ASSUME(len2 > 0);
+					CHECKED_ASSUME(len1 > 1);
+					CHECKED_ASSUME(len2 > 0);
 
 					count1 = TimSort::gallopRight(std::invoke(proj, *cursor2), cursor1, len1, 0, comp, proj);
 					if(count1 != 0){
@@ -447,13 +447,13 @@ namespace ext::algo{
 			minGallop_ = (std::min)(minGallop, 1);
 
 			if(len1 == 1){
-				ADAPTED_ASSUME(len2 > 0);
+				CHECKED_ASSUME(len2 > 0);
 				std::ranges::move(cursor2, cursor2 + len2, dest);
 				*(dest + len2) = std::ranges::iter_move(cursor1);
 			} else{
-				ADAPTED_ASSUME(len1 != 0 && "Comparison function violates its general contract");
-				ADAPTED_ASSUME(len2 == 0);
-				ADAPTED_ASSUME(len1 > 1);
+				CHECKED_ASSUME(len1 != 0 && "Comparison function violates its general contract");
+				CHECKED_ASSUME(len2 == 0);
+				CHECKED_ASSUME(len1 > 1);
 				std::ranges::move(cursor1, cursor1 + len1, dest);
 			}
 		}
@@ -461,9 +461,9 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		void mergeHi(iter_t const base1, diff_t len1, iter_t const base2, diff_t len2,
 		             Compare comp, Projection proj){
-			ADAPTED_ASSUME(len1 > 0);
-			ADAPTED_ASSUME(len2 > 0);
-			ADAPTED_ASSUME(base1 + len1 == base2);
+			CHECKED_ASSUME(len1 > 0);
+			CHECKED_ASSUME(len2 > 0);
+			CHECKED_ASSUME(base1 + len1 == base2);
 
 			if(len1 == 1){
 				return TimSort::rotateLeft(base1, base2 + len2);
@@ -496,8 +496,8 @@ namespace ext::algo{
 				--cursor1;
 
 				do{
-					ADAPTED_ASSUME(len1 > 0);
-					ADAPTED_ASSUME(len2 > 1);
+					CHECKED_ASSUME(len1 > 0);
+					CHECKED_ASSUME(len2 > 1);
 
 					if(std::invoke(comp, std::invoke(proj, *cursor2), std::invoke(proj, *cursor1))){
 						*dest = std::ranges::iter_move(cursor1);
@@ -523,8 +523,8 @@ namespace ext::algo{
 				++cursor1; // See comment before the loop
 
 				do{
-					ADAPTED_ASSUME(len1 > 0);
-					ADAPTED_ASSUME(len2 > 1);
+					CHECKED_ASSUME(len1 > 0);
+					CHECKED_ASSUME(len2 > 1);
 
 					count1 = len1 - TimSort::gallopRight(std::invoke(proj, *cursor2),
 					                            base1, len1, len1 - 1, comp, proj);
@@ -578,14 +578,14 @@ namespace ext::algo{
 			minGallop_ = (std::min)(minGallop, 1);
 
 			if(len2 == 1){
-				ADAPTED_ASSUME(len1 > 0);
+				CHECKED_ASSUME(len1 > 0);
 				dest -= len1;
 				std::ranges::move_backward(cursor1 - len1, cursor1, dest + (1 + len1));
 				*dest = std::ranges::iter_move(cursor2);
 			} else{
-				ADAPTED_ASSUME(len2 != 0/* && "Comparison function violates its general contract"*/);
-				ADAPTED_ASSUME(len1 == 0);
-				ADAPTED_ASSUME(len2 > 1);
+				CHECKED_ASSUME(len2 != 0/* && "Comparison function violates its general contract"*/);
+				CHECKED_ASSUME(len1 == 0);
+				CHECKED_ASSUME(len2 > 1);
 				std::ranges::move(tmp_.begin(), tmp_.begin() + len2, dest - (len2 - 1));
 			}
 		}
@@ -599,8 +599,8 @@ namespace ext::algo{
 		template <typename Compare, typename Projection>
 		static void merge(iter_t const lo, iter_t const mid, iter_t const hi,
 		                  Compare comp, Projection proj){
-			ADAPTED_ASSUME(lo <= mid);
-			ADAPTED_ASSUME(mid <= hi);
+			CHECKED_ASSUME(lo <= mid);
+			CHECKED_ASSUME(mid <= hi);
 
 			if(lo == mid || mid == hi){
 				return; // nothing to do
@@ -612,7 +612,7 @@ namespace ext::algo{
 
 		template <typename Compare, typename Projection>
 		static void sort(iter_t const lo, iter_t const hi, Compare comp, Projection proj){
-			ADAPTED_ASSUME(lo <= hi);
+			CHECKED_ASSUME(lo <= hi);
 
 			auto nRemaining = hi - lo;
 			if(nRemaining < 2){
@@ -644,9 +644,9 @@ namespace ext::algo{
 				nRemaining -= runLen;
 			} while(nRemaining != 0);
 
-			ADAPTED_ASSUME(cur == hi);
+			CHECKED_ASSUME(cur == hi);
 			ts.mergeForceCollapse(comp, proj);
-			ADAPTED_ASSUME(ts.pending_.size() == 1);
+			CHECKED_ASSUME(ts.pending_.size() == 1);
 		}
 	};
 

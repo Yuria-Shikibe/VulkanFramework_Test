@@ -23,6 +23,7 @@ import Graphic.Camera2D;
 import Core.InitAndTerminate;
 
 import Geom.Matrix4D;
+import Geom.GridGenerator;
 import Geom.Rect_Orthogonal;
 
 import Core.Vulkan.Shader.Compile;
@@ -64,6 +65,15 @@ import Core.Vulkan.Vertex;
 
 import Graphic.Renderer.UI;
 import Graphic.Renderer.World;
+import Graphic.Color;
+import Graphic.ImageRegion;
+import Graphic.ImageNineRegion;
+import Graphic.Batch.Exclusive;
+import Graphic.Draw.Func;
+import Graphic.Draw.NinePatch;
+import Graphic.Batch.AutoDrawParam;
+
+
 import Core.Global;
 import Core.Global.Graphic;
 import Core.Global.UI;
@@ -79,6 +89,9 @@ import Math.Rand;
 Core::Vulkan::Texture texturePester{};
 Core::Vulkan::Texture texturePesterLight{};
 
+Graphic::ImageViewNineRegion nineRegion_edge{};
+Graphic::ImageViewNineRegion nineRegion_base{};
+
 Graphic::ImageAtlas loadTex(){
 
     std::unordered_map<std::string, std::uint64_t> tags{};
@@ -87,6 +100,7 @@ Graphic::ImageAtlas loadTex(){
     Graphic::ImageAtlas imageAtlas{Global::vulkanManager->context};
 
     auto& mainPage = imageAtlas.registerPage("main");
+    auto& uiPage = imageAtlas.registerPage("ui");
     auto& fontPage = imageAtlas.registerPage("font");
 
     auto& page = fontPage.createPage(imageAtlas.context);
@@ -96,6 +110,20 @@ Graphic::ImageAtlas loadTex(){
     auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{Assets::Dir::texture.find("white.png")});
     region.shrink(15);
     Graphic::Draw::WhiteRegion = &mainPage.registerNamedRegion("white", std::move(region)).first;
+
+    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.base", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-back.png")});
+    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.edge", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-edge.png")});
+    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.cent", Graphic::Pixmap{Assets::Dir::texture.find("test-1.png")});
+
+    nineRegion_base = {imageAtlas.at("ui.base"), Align::Pad<std::uint32_t>{8, 8, 8, 8}};
+    nineRegion_edge = {
+        imageAtlas.at("ui.edge"),
+        Align::Pad<std::uint32_t>{8, 8, 8, 8},
+        imageAtlas.at("ui.cent"),
+        // {200, 200},
+        Align::Scale::bounded
+    };
+
 
     return imageAtlas;
 }
@@ -132,20 +160,23 @@ struct TestT{
 };
 
 int main_(){
-    ext::projection_priority_queue<decltype(&TestT::rank), std::vector<TestT>, std::greater<>>
-        queue{&TestT::rank};
-
-    queue.push({666, 57457686});
-    queue.push({514, 2});
-    queue.push({114, 1});
-    queue.push({666, 3});
-    queue.push({666, 151253});
-    queue.push({12390123, 0});
-
-    while(!queue.empty()){
-        std::println("{}", queue.top().rank);
-        queue.pop();
-    }
+    // for (unsigned arr1 : arr){
+    //     std::println("{}", arr1);
+    // }
+    // ext::projection_priority_queue<decltype(&TestT::rank), std::vector<TestT>, std::greater<>>
+    //     queue{&TestT::rank};
+    //
+    // queue.push({666, 57457686});
+    // queue.push({514, 2});
+    // queue.push({114, 1});
+    // queue.push({666, 3});
+    // queue.push({666, 151253});
+    // queue.push({12390123, 0});
+    //
+    // while(!queue.empty()){
+    //     std::println("{}", queue.top().rank);
+    //     queue.pop();
+    // }
 
     // using namespace std::literals;
     // auto gen = std::mt19937{std::random_device{}()};
@@ -307,6 +338,22 @@ int main(){
         }
 
         Global::UI::root->draw();
+
+        Graphic::InstantBatchAutoParam<Vulkan::Vertex_UI> param{
+            Global::UI::renderer->batch, Graphic::Draw::WhiteRegion
+        };
+
+        Geom::grid_generator<4, float> generator{};
+        for (const auto & rects : generator({Geom::Vec2{50.f, 80.f}, {120.f, 160.f}, {250.f, 320.f}, {600.f, 600.f}})){
+            Graphic::Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(++param, 1.f, rects, Graphic::Colors::AQUA);
+        }
+
+        Geom::OrthoRectFloat rect{Geom::FromExtent, {20, 80}, {600, 800}};
+
+        // param << imageAtlas.find("main.frame");
+        //
+        // Graphic::Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Graphic::Colors::AQUA);
+        Graphic::Draw::drawNinePatch(param, nineRegion_edge, rect, Graphic::Colors::AQUA);
 
         // Font::TypeSettings::draw(Global::UI::renderer->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 

@@ -7,6 +7,7 @@ export module Graphic.BatchData;
 import std;
 import ext.concepts;
 
+//TODO move this to other place
 export namespace Graphic{
 	using ImageIndex = std::uint8_t;
 

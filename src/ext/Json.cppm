@@ -85,7 +85,10 @@ namespace ext::json{
 		object
 	};
 
+
+
 	static_assert(std::same_as<std::underlying_type_t<JsonValueTag>, std::size_t>);
+
 
 #pragma region JsonTypeToIndex
 #define TypeToIndex(targetTag)\

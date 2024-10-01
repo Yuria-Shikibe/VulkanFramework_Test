@@ -75,7 +75,7 @@ export namespace Core::Vulkan{
 					.pNext = nullptr,
 					.descriptorPool = handle,
 					.descriptorSetCount = 1,
-					.pSetLayouts = layout.asData()
+					.pSetLayouts = layout.as_data()
 				};
 
 			if (vkAllocateDescriptorSets(device, &allocInfo, descriptors.as_data()) != VK_SUCCESS) {

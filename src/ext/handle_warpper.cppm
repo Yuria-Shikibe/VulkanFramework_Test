@@ -35,10 +35,13 @@ export namespace ext{
 			return *this;
 		}
 
+	protected:
 		constexpr wrapper& operator=(T other) noexcept{
-			if(this->handle == other) return *this;
-			return this->operator=(wrapper<T>{other});
+			handle = other;
+			return *this;
 		}
+
+	public:
 
 		[[nodiscard]] constexpr explicit(false) operator T() const noexcept{ return handle; }
 
@@ -77,7 +80,7 @@ export namespace ext{
 
 		[[nodiscard]] constexpr T operator->() const noexcept{ return handle; }
 
-		[[nodiscard]] constexpr const T* asData() const noexcept{ return &handle; }
+		[[nodiscard]] constexpr const T* as_data() const noexcept{ return &handle; }
 
 		constexpr dependency(const dependency& other) = delete;
 
