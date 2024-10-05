@@ -6,6 +6,7 @@ export module Core.UI.TextElement;
 
 export import Core.UI.Element;
 export import Core.UI.StatedLength;
+import Core.UI.Scene;
 
 import Font.TypeSettings;
 import std;

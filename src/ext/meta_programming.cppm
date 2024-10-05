@@ -3,8 +3,8 @@ export module ext.meta_programming;
 import std;
 
 namespace ext{
-	export template <typename T, typename ...Targets>
-	constexpr bool is_any_of = (std::same_as<T, Targets> || ...);
+	export template <typename ToVerify, typename ...Targets>
+	constexpr bool is_any_of = (std::same_as<ToVerify, Targets> || ...);
 
 	export
 	template <typename T>
@@ -32,8 +32,8 @@ namespace ext{
 	struct function_traits<Ret(Args...)>{
 		using return_type = Ret;
 		using args_type = std::tuple<Args...>;
-		static constexpr std::size_t args_count = sizeof...(Args);
-		static constexpr bool is_single = sizeof...(Args) == 1;
+		static constexpr std::size_t args_count = std::tuple_size_v<args_type>;
+		static constexpr bool is_single = args_count == 1;
 
 		template <typename Func>
 		static constexpr bool is_invocable = std::is_invocable_r_v<Ret, Func, Args...>;
@@ -49,16 +49,50 @@ namespace ext{
 		}
 	};
 
-#define Variant(ext) export template<typename Ret, typename... Args> struct function_traits<Ret(Args...) ext> : function_traits<Ret(Args...)>{};
-	Variant(&);
-	Variant(&&);
-	Variant(const);
-	Variant(const &);
-	Variant(noexcept);
-	Variant(& noexcept);
-	Variant(&& noexcept);
-	Variant(const noexcept);
-	Variant(const& noexcept);
+	export
+	template <typename Ret, typename T, typename... Args>
+	struct function_traits<Ret(T::*)(Args...)> : function_traits<Ret(T*, Args...)>{};
+
+	// export
+	// template <typename T>
+	// struct normalized_function{
+	// 	using type = std::remove_pointer_t<T>;
+	// };
+	//
+	// template <typename T>
+	// 	requires std::is_member_function_pointer_v<T>
+	// struct normalized_function<T>{
+	// 	using type = std::remove_pointer_t<T>;
+	// };
+
+#define VariantFunc(ext) export template<typename Ret, typename... Args> struct function_traits<Ret(Args...) ext> : function_traits<Ret(Args...)>{};
+	VariantFunc(&);
+	VariantFunc(&&);
+	VariantFunc(const);
+	VariantFunc(const &);
+	VariantFunc(noexcept);
+	VariantFunc(& noexcept);
+	VariantFunc(&& noexcept);
+	VariantFunc(const noexcept);
+	VariantFunc(const& noexcept);
+
+#define VariantMemberFunc(ext) export template<typename Ret, typename T, typename... Args> struct function_traits<Ret(T::*)(Args...) ext> : function_traits<Ret(T::*)(Args...)>{};
+	VariantMemberFunc(&);
+	VariantMemberFunc(&&);
+	VariantMemberFunc(const);
+	VariantMemberFunc(const &);
+	VariantMemberFunc(noexcept);
+	VariantMemberFunc(& noexcept);
+	VariantMemberFunc(&& noexcept);
+	VariantMemberFunc(const noexcept);
+	VariantMemberFunc(const& noexcept);
+
+	export
+	template <typename Ty>
+		requires std::is_class_v<Ty>
+	struct function_traits<Ty> : function_traits<std::remove_pointer_t<decltype(&Ty::operator())>>{
+
+	};
 
 	export
 	template <std::size_t N, typename FuncType>
@@ -68,7 +102,12 @@ namespace ext{
 		using type = std::tuple_element_t<N, typename trait::args_type>;
 	};
 
-
+	export
+		template <typename FuncType>
+		struct function_arg_at_last{
+		using trait = function_traits<FuncType>;
+		using type = std::tuple_element_t<trait::args_count - 1, typename trait::args_type>;
+	};
 
 	template <std::size_t I, std::size_t size, typename ArgTuple, typename DefTuple>
 	constexpr decltype(auto) getWithDef(ArgTuple&& argTuple, DefTuple&& defTuple){

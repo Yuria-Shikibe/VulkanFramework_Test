@@ -279,26 +279,25 @@ export namespace Align{
 		return {xMove, yMove};
 	}
 
-
 	/**
 	 * @brief
 	 * @tparam T arithmetic type, does not accept unsigned type
 	 * @return
 	 */
 	template <ext::signed_number T>
-	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Rect_Orthogonal<T>& bound){
+	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Vector2D<T>& bound){
 		Geom::Vector2D<T> offset{};
 
 		if(align & Pos::top){
-			offset.y = -bound.getHeight();
+			offset.y = -bound.y;
 		} else if(align & Pos::center_y){
-			offset.y = -bound.getHeight() / static_cast<T>(2);
+			offset.y = -bound.y / static_cast<T>(2);
 		}
 
 		if(align & Pos::right){
-			offset.x = -bound.getWidth();
+			offset.x = -bound.x;
 		} else if(align & Pos::center_x){
-			offset.x = -bound.getWidth() / static_cast<T>(2);
+			offset.x = -bound.x / static_cast<T>(2);
 		}
 
 		return offset;
@@ -310,9 +309,10 @@ export namespace Align{
 	 * @return
 	 */
 	template <ext::signed_number T>
-	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Vector2D<T>& bound){
-		return Align::getOffsetOf(align, Geom::Rect_Orthogonal<T>{bound});
+	constexpr Geom::Vector2D<T> getOffsetOf(const Pos align, const Geom::Rect_Orthogonal<T>& bound){
+		return Align::getOffsetOf<T>(align, bound.getSize());
 	}
+
 
 	/**
 	 * @brief

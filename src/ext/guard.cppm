@@ -40,7 +40,7 @@ export namespace ext{
 			(!passByMove && std::is_copy_assignable_v<T>);
 		}
 	class [[jetbrains::guard]] resumer{
-		std::add_pointer_t<T> tgt;
+		T& tgt;
 		T original;
 
 		static constexpr bool is_nothrow =
@@ -49,16 +49,16 @@ export namespace ext{
 
 	public:
 		[[nodiscard]] constexpr explicit resumer(T& tgt) noexcept(is_nothrow) requires (!passByMove) :
-			tgt{std::addressof(tgt)}, original{tgt}{}
+			tgt{tgt}, original{tgt}{}
 
 		[[nodiscard]] constexpr explicit resumer(T& tgt) noexcept(is_nothrow) requires (passByMove) :
-			tgt{std::addressof(tgt)}, original{std::move(tgt)}{}
+			tgt{tgt}, original{std::move(tgt)}{}
 
 		constexpr ~resumer() noexcept(is_nothrow){
 			if constexpr(passByMove){
-				*tgt = std::move(original);
+				tgt = std::move(original);
 			} else{
-				*tgt = original;
+				tgt = original;
 			}
 		}
 	};

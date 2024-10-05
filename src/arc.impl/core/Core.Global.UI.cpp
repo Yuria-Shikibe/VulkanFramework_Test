@@ -1,14 +1,14 @@
 module Core.Global.UI;
 
+import Graphic.Renderer.UI;
 import Core.UI.Root;
-import Core.UI.BedFace;
+import Core.UI.LooseGroup;
 import Core.UI.Element;
 import Core.Vulkan.Manager;
-import Graphic.Renderer.UI;
 
-void Core::Global::UI::init(Vulkan::VulkanManager& manager){
+void Core::UI::init(Vulkan::VulkanManager& manager){
 	renderer = new Graphic::RendererUI{manager.context};
-	root = new Core::UI::Root{Core::UI::Scene{new Core::UI::BedFace, renderer}};
+	root = new Core::UI::Root{Core::UI::Scene{new Core::UI::LooseGroup, renderer}};
 
 	
 	manager.registerResizeCallback(
@@ -32,11 +32,11 @@ void Core::Global::UI::init(Vulkan::VulkanManager& manager){
 		});
 }
 
-Core::UI::BedFace& Core::Global::UI::getMainGroup(){
-	return root->rootOf<Core::UI::BedFace>(Core::UI::SceneName::Main);
+Core::UI::LooseGroup& Core::UI::getMainGroup(){
+	return root->rootOf<Core::UI::LooseGroup>(Core::UI::SceneName::Main);
 }
 
-void Core::Global::UI::terminate(){
+void Core::UI::terminate(){
 	delete root;
 	delete renderer;
 }

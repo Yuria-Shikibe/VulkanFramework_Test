@@ -74,92 +74,30 @@ export namespace Geom{
 			return property::pos_to_index(pos.x, pos.y);
 		}
 
-		struct view : std::ranges::view_interface<view>, std::ranges::view_base{
-			using range_type = std::ranges::ref_view<input_type>;
-			range_type arg{};
-			size_type grid_side_size{};
-
-			constexpr auto size() const noexcept{
-				return grid_side_size * grid_side_size;
-			}
-
-			constexpr auto data() const noexcept = delete;
-
-			struct iterator{
-				const range_type* parent{};
-				Geom::Vector2D<size_type> cur{};
-
-				using iterator_category = std::input_iterator_tag;
-				using value_type = Rect_Orthogonal<T>;
-				using difference_type = std::ptrdiff_t;
-				using size_type = grid_generator::size_type;
-
-				constexpr friend bool operator==(const iterator& lhs, const iterator& rhs){
-					assert(lhs.parent == rhs.parent);
-
-					return lhs.cur == rhs.cur;
-				}
-
-				[[nodiscard]] constexpr value_type operator*() const noexcept{
-					return grid_generator::constructAt(parent->base(), cur.x, cur.y);
-				}
-
-				[[nodiscard]] constexpr auto operator->() const noexcept{
-					return grid_generator::vertAt(parent->base(), cur.x, cur.y);
-				}
-
-				constexpr iterator& operator++() noexcept{
-					assert(parent != nullptr);
-
-					++cur.x;
-					if(cur.x == parent->grid_side_size){
-						++cur.y;
-						cur.x = 0;
-					}
-
-					assert(cur.x <= parent->grid_side_size);
-					assert(cur.y <= parent->grid_side_size);
-
-					return *this;
-				}
-
-				constexpr iterator operator++(int) noexcept{
-					auto t = *this;
-					++*this;
-					return t;
-				}
-			};
-
-			constexpr auto begin() const noexcept{
-				return iterator{this, {0, 0}};
-			}
-
-			constexpr auto end() const noexcept{
-				return iterator{this, {0, grid_side_size}};
-			}
-		};
-
 		//OPTM static operator
 		[[nodiscard]] constexpr result_type operator()(const input_type& diagonalAnchorPoints) const noexcept{
 			result_type rst{};
 
 			for(size_type y = 0; y < side_size; ++y){
 				for(size_type x = 0; x < side_size; ++x){
-					rst[x + y * side_size] = grid_generator::constructAt(diagonalAnchorPoints, x, y);
+					rst[x + y * side_size] = grid_generator::rectangle_at(diagonalAnchorPoints, x, y);
 				}
 			}
 
 			return rst;
 		}
 
-	private:
-		[[nodiscard]] static constexpr Vector2D<T> vertAt(const input_type& anchorPoints, const size_type x, const size_type y) noexcept{
+		template <std::ranges::random_access_range Rng>
+			requires (std::same_as<std::ranges::range_const_reference_t<Rng>, const Vector2D<T>&>)
+		[[nodiscard]] static constexpr Vector2D<T> vertex_at(const Rng& anchorPoints, const size_type x, const size_type y) noexcept{
 			return {anchorPoints[x].x, anchorPoints[y].y};
 		}
 
-		[[nodiscard]] static constexpr Rect_Orthogonal<T> constructAt(const input_type& anchorPoints, const size_type x, const size_type y) noexcept{
-			auto v00 = grid_generator::vertAt(anchorPoints, x, y);
-			auto v11 = grid_generator::vertAt(anchorPoints, x + 1, y + 1);
+		template <std::ranges::random_access_range Rng>
+			requires (std::same_as<std::ranges::range_const_reference_t<Rng>, const Vector2D<T>&>)
+		[[nodiscard]] static constexpr Rect_Orthogonal<T> rectangle_at(const Rng& anchorPoints, const size_type x, const size_type y) noexcept{
+			auto v00 = grid_generator::vertex_at<Rng>(anchorPoints, x, y);
+			auto v11 = grid_generator::vertex_at<Rng>(anchorPoints, x + 1, y + 1);
 
 			CHECKED_ASSUME(v00.x <= v11.x);
 			CHECKED_ASSUME(v00.y <= v11.y);
@@ -167,6 +105,90 @@ export namespace Geom{
 			return {v00, v11};
 		}
 	};
+
+	template <std::size_t anchorPointCount, typename T, std::ranges::random_access_range Rng>
+		requires requires{
+			requires anchorPointCount >= 2;
+			requires std::is_arithmetic_v<T>;
+			requires std::convertible_to<std::ranges::range_value_t<Rng>, Vector2D<T>>;
+		}
+	struct deferred_grid_generator : std::ranges::view_interface<deferred_grid_generator<anchorPointCount, T, Rng>>, std::ranges::view_base{
+		using generator_type = grid_generator<anchorPointCount, T>;
+		using range_type = Rng;
+		range_type arg{};
+
+		[[nodiscard]] constexpr deferred_grid_generator() = default;
+
+		[[nodiscard]] constexpr explicit deferred_grid_generator(const range_type& arg)
+			: arg{arg}{}
+
+		template <typename Ty>
+			requires std::constructible_from<Rng, Ty>
+		[[nodiscard]] constexpr explicit deferred_grid_generator(Ty&& arg)
+			: arg{std::forward<Ty>(arg)}{}
+
+		constexpr auto size() const noexcept{
+			return generator_type::side_size * generator_type::side_size;
+		}
+
+		constexpr auto data() const noexcept = delete;
+
+		struct iterator{
+			const deferred_grid_generator* parent{};
+			Geom::Vector2D<typename generator_type::size_type> cur{};
+
+			using iterator_category = std::input_iterator_tag;
+			using value_type = Rect_Orthogonal<T>;
+			using difference_type = std::ptrdiff_t;
+			using size_type = typename generator_type::size_type;
+
+			constexpr friend bool operator==(const iterator& lhs, const iterator& rhs){
+				assert(lhs.parent == rhs.parent);
+
+				return lhs.cur == rhs.cur;
+			}
+
+			[[nodiscard]] constexpr value_type operator*() const noexcept{
+				return generator_type::rectangle_at(parent->arg, cur.x, cur.y);
+			}
+
+			[[nodiscard]] constexpr auto operator->() const noexcept{
+				return generator_type::vertex_at(parent->arg, cur.x, cur.y);
+			}
+
+			constexpr iterator& operator++() noexcept{
+				assert(parent != nullptr);
+
+				++cur.x;
+				if(cur.x == generator_type::side_size){
+					++cur.y;
+					cur.x = 0;
+				}
+
+				assert(cur.x <= generator_type::side_size);
+				assert(cur.y <= generator_type::side_size);
+
+				return *this;
+			}
+
+			constexpr iterator operator++(int) noexcept{
+				auto t = *this;
+				++*this;
+				return t;
+			}
+		};
+
+		constexpr auto begin() const noexcept{
+			return iterator{this, Geom::Vector2D<typename generator_type::size_type>{0, 0}};
+		}
+
+		constexpr auto end() const noexcept{
+			return iterator{this, Geom::Vector2D<typename generator_type::size_type>{0, generator_type::side_size}};
+		}
+	};
+
+	template <typename T, std::size_t size>
+	deferred_grid_generator(std::array<Geom::Vector2D<T>, size>) -> deferred_grid_generator<size, T, std::ranges::views::all_t<std::array<Geom::Vector2D<T>, size>>>;
 
 	template <std::size_t anchorPointCount = 4, typename T = float>
 	requires (anchorPointCount >= 2 && std::is_arithmetic_v<T>)

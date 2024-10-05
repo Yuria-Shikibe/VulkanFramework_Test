@@ -101,6 +101,7 @@ Graphic::ImageAtlas loadTex(){
 
     auto& mainPage = imageAtlas.registerPage("main");
     auto& uiPage = imageAtlas.registerPage("ui");
+    auto& tempPage = imageAtlas.registerPage("temp");
     auto& fontPage = imageAtlas.registerPage("font");
 
     auto& page = fontPage.createPage(imageAtlas.context);
@@ -159,65 +160,20 @@ struct TestT{
     int rank{};
 };
 
-int main_(){
-    // for (unsigned arr1 : arr){
-    //     std::println("{}", arr1);
-    // }
-    // ext::projection_priority_queue<decltype(&TestT::rank), std::vector<TestT>, std::greater<>>
-    //     queue{&TestT::rank};
-    //
-    // queue.push({666, 57457686});
-    // queue.push({514, 2});
-    // queue.push({114, 1});
-    // queue.push({666, 3});
-    // queue.push({666, 151253});
-    // queue.push({12390123, 0});
-    //
-    // while(!queue.empty()){
-    //     std::println("{}", queue.top().rank);
-    //     queue.pop();
-    // }
+// int main(){
+//     std::vector<int> arr {5, 6, 7, 8 ,9 ,0};
+//
+//     for(int index; auto val : arr | std::views::enumerate){
+//         std::println("[{}] = {}", index, val);
+//
+//         ++index;
+//     }
+//
+//     for(auto&& [i, val] : arr | std::views::enumerate){
+//         std::println("[{}] = {}", i, val);
+//     }
+// }
 
-    // using namespace std::literals;
-    // auto gen = std::mt19937{std::random_device{}()};
-    // gen.seed(10);
-    // for(int i = 0; i < 10; ++i){
-    //     std::println("{}", gen());
-    // }
-    // Math::Rand rand{};
-    //
-    // std::vector<std::size_t> arr{};
-    //
-    // for(std::size_t i = 0; i < 100000000ull; ++i){
-    //     arr.push_back(rand.nextLong(100000000ull));
-    // }
-    //
-    // std::cout << "genDone" << std::endl;
-    //
-    // {
-    //     auto test = arr;
-    //     auto begin = std::chrono::high_resolution_clock::now();
-    //     ext::algo::timsort(test);
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //
-    //     std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
-    // }
-    //
-    // std::cout << "tim sort done" << std::endl;
-    //
-    // {
-    //     auto test = arr;
-    //     auto begin = std::chrono::high_resolution_clock::now();
-    //     std::ranges::sort(test);
-    //     auto end = std::chrono::high_resolution_clock::now();
-    //
-    //     std::println("{}, {}", std::ranges::is_sorted(test), end - begin);
-    // }
-    //
-    // std::cout << "std sort done" << std::endl;
-
-    return 0;
-}
 
 int main(){
     using namespace Core;
@@ -344,8 +300,9 @@ int main(){
         };
 
         Geom::grid_generator<4, float> generator{};
-        for (const auto & rects : generator({Geom::Vec2{50.f, 80.f}, {120.f, 160.f}, {250.f, 320.f}, {600.f, 600.f}})){
-            Graphic::Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(++param, 1.f, rects, Graphic::Colors::AQUA);
+        for (auto rects : Geom::deferred_grid_generator{
+            std::array{Geom::Vec2{50.f, 80.f}, Geom::Vec2{120.f, 160.f}, Geom::Vec2{250.f, 320.f}, Geom::Vec2{400.f, 400.f}, Geom::Vec2{600.f, 600.f}, Geom::Vec2{700.f, 650.f}}}){
+            Graphic::Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(param, 1.f, rects.move(200, 300), Graphic::Colors::AQUA);
         }
 
         Geom::OrthoRectFloat rect{Geom::FromExtent, {20, 80}, {600, 800}};

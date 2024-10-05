@@ -79,7 +79,7 @@ namespace Font{
 			}
 		};
 
-		struct Element{
+		struct GlyphElement{
 			CharCode code{};
 			std::uint32_t index{};
 			TextLayoutPos layoutPos{};
@@ -253,7 +253,7 @@ namespace Font{
 				float baselineHeight{};
 				Geom::Vec2 src{};
 				GlyphRect bound{};
-				std::vector<Element> glyphs{};
+				std::vector<GlyphElement> glyphs{};
 
 				[[nodiscard]] Geom::OrthoRectFloat getRectBound() const noexcept{
 					return {src.x, src.y - bound.descender, bound.width, bound.height()};
@@ -311,13 +311,13 @@ namespace Font{
 				if constexpr (multiThread){
 					std::unique_lock lk{capture};
 					if(maximumSize.equalsTo(size))return false;
-					std::ranges::for_each(elements, &std::vector<Element>::clear, &Row::glyphs);
+					std::ranges::for_each(elements, &std::vector<GlyphElement>::clear, &Row::glyphs);
 					maximumSize = size;
 					isCompressed = false;
 					return true;
 				}else{
 					if(maximumSize.equalsTo(size))return false;
-					std::ranges::for_each(elements, &std::vector<Element>::clear, &Row::glyphs);
+					std::ranges::for_each(elements, &std::vector<GlyphElement>::clear, &Row::glyphs);
 					maximumSize = size;
 					isCompressed = false;
 					return true;

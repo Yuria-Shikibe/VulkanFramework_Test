@@ -1,16 +1,20 @@
 module Core.UI.Element;
 
+
 import Graphic.Renderer.UI;
+
+import Core.UI.Group;
+import Core.UI.Scene;
 import Graphic.Batch.AutoDrawParam;
 import Graphic.Draw.Func;
-import Core.Vulkan.Vertex;
 
+import Core.Vulkan.Vertex;
 
 
 void Core::UI::DefElementDrawer::draw(const Element& element) const {
 	using namespace Graphic;
 
-	InstantBatchAutoParam param{static_cast<RendererUI*>(element.getScene()->renderer)->batch, Draw::WhiteRegion};
+	InstantBatchAutoParam param{element.getBatch(), Draw::WhiteRegion};
 	auto color = element.getCursorState().focused ? Colors::WHITE : Colors::YELLOW;
 
 	if(element.getCursorState().pressed){
@@ -78,4 +82,9 @@ void Core::UI::Element::notifyLayoutChanged(const SpreadDirection toDirection){
 		}
 	}
 }
+
+void Core::UI::Element::drawMain() const{
+	property.graphicData.drawer->draw(*this);
+}
+
 

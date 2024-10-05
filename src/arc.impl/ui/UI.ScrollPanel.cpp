@@ -1,5 +1,6 @@
 module Core.UI.ScrollPanel;
 
+import Core.UI.Scene;
 import Graphic.Renderer.UI;
 import Graphic.Batch.AutoDrawParam;
 import Graphic.Draw.Func;

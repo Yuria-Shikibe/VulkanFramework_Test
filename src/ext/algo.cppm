@@ -125,11 +125,11 @@ namespace ext::algo{
 	}
 	[[nodiscard]] constexpr Itr remove_unstable_impl(Itr first, Sentinel sentinel, const Ty& val, const Proj porj = {}){
 		if constexpr(requires{
-			algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, std::cref(val)), porj);
 		}){
-			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, std::cref(val)), porj);
 		} else{
-			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val), porj);
+			return algo::remove_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, std::cref(val)), porj);
 		}
 	}
 
@@ -166,11 +166,11 @@ namespace ext::algo{
 		const Proj porj = {}){
 
 		if constexpr(requires{
-			algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, std::cref(val)), porj);
 		}){
-			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, val), porj);
+			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<Ty>{}, std::cref(val)), porj);
 		} else{
-			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, val), porj);
+			return algo::remove_unique_if_unstable_impl<replace>(first, sentinel, std::bind_front(std::equal_to<>{}, std::cref(val)), porj);
 		}
 	}
 

@@ -12,6 +12,8 @@ export namespace Geom{
 		T x;
 		T y;
 
+		using value_type = T;
+
 		using PassType = ext::ParamPassType<Vector2D, sizeof(T) * 2>;
 
 		[[nodiscard]] constexpr Vector2D operator+(const PassType tgt) const noexcept {

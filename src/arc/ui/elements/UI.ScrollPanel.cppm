@@ -4,7 +4,7 @@
 
 export module Core.UI.ScrollPanel;
 
-export import Core.UI.Element;
+export import Core.UI.Group;
 import std;
 import ext.snap_shot;
 import Math;
@@ -12,7 +12,7 @@ import Math;
 export namespace Core::UI{
 	struct ScrollPanel : public Core::UI::Group{
 		static constexpr auto TypeName = "ScrollPanel";
-		std::unique_ptr<Element> item{/*Should Be Not Null when using*/};
+		ElementUniquePtr item{/*Should Be Not Null when using*/};
 
 		static constexpr float VelocitySensitivity = 0.95f;
 		static constexpr float VelocityDragSensitivity = 0.15f;
@@ -24,8 +24,8 @@ export namespace Core::UI{
 		Geom::Vec2 scrollTargetVelocity{};
 		ext::snap_shot<Geom::Vec2> scroll{};
 
-		[[nodiscard]] std::span<const std::unique_ptr<Element>> getChildren() const noexcept override{
-			return item ? std::span{&item, 1} : std::span{static_cast<const std::unique_ptr<Element>*>(nullptr), 0};
+		[[nodiscard]] std::span<const ElementUniquePtr> getChildren() const noexcept override{
+			return item ? std::span{&item, 1} : std::span{static_cast<const ElementUniquePtr*>(nullptr), 0};
 		}
 
 		[[nodiscard]] ScrollPanel() : Group{TypeName}{
@@ -104,11 +104,8 @@ export namespace Core::UI{
 		}
 
 		bool resize(const Geom::Vec2 size) override{
-			// const auto clamp = getVelClamp();
 			if(Element::resize(size)){
 				setItemSize();
-
-				// const auto curClamp = getVelClamp();
 
 				scroll.resume();
 				updateChildrenAbsSrc();
@@ -118,19 +115,20 @@ export namespace Core::UI{
 			return false;
 		}
 
-		void setItem(std::unique_ptr<Element>&& item){
+		void setItem(ElementUniquePtr&& item){
 			this->item = std::move(item);
-			modifyChildren(this->item.get());
+			modifyChildren(*this->item.get());
 			setItemSize();
 		}
 
-		template <typename T, Geom::Vector2D<bool> fillParent = {true, false}, std::invocable<T&> InitFunc>
-			requires (std::is_default_constructible_v<T>)
-		void setItem(InitFunc&& func){
-			this->item = std::make_unique<T>();
-			item->prop().fillParent = fillParent;
-			modifyChildren(this->item.get());
-			func(*static_cast<T*>(this->item.get()));
+		template <Geom::Vector2D<bool> fillParent = {true, false}, ElemInitFunc Fn>
+			requires (std::is_default_constructible_v<typename ElemInitFuncTraits<Fn>::ElemType>)
+		void setItem(Fn&& init){
+			this->item = ElementUniquePtr{this, scene, [&](typename ElemInitFuncTraits<Fn>::ElemType& e){
+				ScrollPanel::modifyChildren<fillParent>(e);
+				init(e);
+			}};
+
 			setItemSize();
 		}
 
@@ -142,7 +140,7 @@ export namespace Core::UI{
 			throw std::runtime_error("Not implemented by ScrollPanel");
 		}
 
-		CellBase& addChildren(std::unique_ptr<Element>&& element) override{
+		Element& addChildren(ElementUniquePtr&& element) override{
 			throw std::runtime_error("Not implemented by ScrollPanel");
 		}
 
@@ -154,15 +152,13 @@ export namespace Core::UI{
 		}
 
 	private:
-		void setItemSize() const{
-			if(!item->prop().fillParent.x && !item->prop().fillParent.y)return;
+		template <Geom::Vector2D<bool> fillParent = {true, false}>
+		static void modifyChildren(Element& element){
+			element.prop().fillParent = fillParent;
+		}
 
-			const auto [vx, vy] = getViewportSize();
-			const auto [ox, oy] = getItemSize();
-			item->resize({
-				item->prop().fillParent.x ? vx : ox,
-				item->prop().fillParent.y ? vy : oy
-			});
+		void setItemSize() const{
+			setChildrenFillParentSize(*item, getViewportSize());
 		}
 
 		void updateChildrenAbsSrc() const{

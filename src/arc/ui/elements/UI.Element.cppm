@@ -4,6 +4,8 @@ export import Geom.Rect_Orthogonal;
 export import Core.UI.ClampedSize;
 
 export import Align;
+export import Core.UI.ElementUniquePtr;
+export import Core.UI.ToolTipInterface;
 
 export import Core.UI.Event;
 export import Core.UI.Flags;
@@ -20,21 +22,21 @@ import ext.handle_wrapper;
 import ext.owner;
 import std;
 
-export namespace Core{
-	class Bundle;
-}
-
-
+// export namespace Core{
+// 	class Bundle;
+// }
+//
+//
 export namespace Graphic{
 	struct Batch_Exclusive;
-	struct RendererUI;
+	// struct RendererUI;
 }
 
 
 namespace Core::UI{
-	constexpr bool NoClipWhenDraw = true;
+	export constexpr bool NoClipWhenDraw = true;
+
 	export using Rect = Geom::Rect_Orthogonal<float>;
-	export struct Element;
 	export struct ElementDrawer{
 		virtual ~ElementDrawer() = default;
 
@@ -69,17 +71,35 @@ namespace Core::UI{
 
 	export
 	struct CursorState{
+		/**
+		 * @brief in tick
+		 */
+		float inboundTime{};
+
 		bool inbound{};
 		bool focused{};
 		bool pressed{};
 
-		void registerDefEvent(ext::event_manager& event_manager){
+		void update(const float delta_in_ticks){
+			if(focused){
+				inboundTime += delta_in_ticks;
+			}
+		}
+
+		void registerFocusEvent(ext::event_manager& event_manager){
 			event_manager.on<Event::BeginFocus>([this](auto){
 				focused = true;
 			});
 
 			event_manager.on<Event::EndFocus>([this](auto){
-				pressed = focused = false;
+				focused = false;
+				inboundTime = 0.f;
+			});
+		}
+
+		void registerDefEvent(ext::event_manager& event_manager){
+			event_manager.on<Event::EndFocus>([this](auto){
+				pressed = false;
 			});
 
 			event_manager.on<Event::Inbound>([this](auto){
@@ -99,9 +119,6 @@ namespace Core::UI{
 		}
 	};
 
-	export struct Group;
-	export struct Scene;
-
 	export struct ElemProperty{
 		std::string name{};
 
@@ -115,11 +132,11 @@ namespace Core::UI{
 
 		Geom::Vector2D<bool> fillParent{};
 		ClampedSize clampedSize{};
+		Align::Spacing boarder{};
 
 		float globalScale{};
 		float localScale{};
 
-		Align::Spacing boarder{};
 
 		//state
 		bool activated{}; //TODO as graphic property?
@@ -190,7 +207,7 @@ namespace Core::UI{
 
 	};
 
-	export struct Element{
+	export struct Element : FuncToolTipOwner<struct Element>{
 	protected:
 		ElemProperty property{};
 		CursorState cursorState{};
@@ -203,12 +220,12 @@ namespace Core::UI{
 		Interactivity interactivity{Interactivity::enabled};
 
 		[[nodiscard]] Element(){
-
+			cursorState.registerFocusEvent(events());
 		}
 
 		[[nodiscard]] explicit Element(const std::string_view tyName)
 			: property{tyName}{
-
+			cursorState.registerFocusEvent(events());
 		}
 
 		virtual ~Element(){
@@ -319,8 +336,8 @@ namespace Core::UI{
 		}
 
 
-		virtual void update(float delta_in_ticks){
-
+		virtual void update(const float delta_in_ticks){
+			cursorState.update(delta_in_ticks);
 		}
 
 		virtual void tryLayout(){
@@ -341,7 +358,7 @@ namespace Core::UI{
 			return !getChildren().empty();
 		}
 
-		[[nodiscard]] virtual std::span<const std::unique_ptr<Element>> getChildren() const noexcept{
+		[[nodiscard]] virtual std::span<const ElementUniquePtr> getChildren() const noexcept{
 			return {};
 		}
 
@@ -351,9 +368,7 @@ namespace Core::UI{
 			}
 		}
 
-		virtual void drawMain() const{
-			property.graphicData.drawer->draw(*this);
-		}
+		virtual void drawMain() const;
 
 		virtual void drawPost() const{
 
@@ -383,200 +398,25 @@ namespace Core::UI{
 
 		}
 
+		[[nodiscard]] ToolTipAlignPos alignPolicy() const override{
+			return {ToolTipFollow::none, Align::Pos::top_left};
+		}
+
+		[[nodiscard]] bool shouldDrop(Geom::Vec2 cursorPos) const override{
+			return !containsPos(cursorPos);
+		}
+
+		[[nodiscard]] bool shouldBuild(Geom::Vec2 cursorPos) const override{
+			return cursorState.inboundTime > 90.f;
+		}
+
+
 	protected:
 		[[nodiscard]] bool inboundOf(const Rect& clipSpace_abs) const noexcept{
 			return clipSpace_abs.overlap_Exclusive(property.getValidBound_absolute());
 		}
 	};
 
-	export struct Group : public Element{
-		using Element::Element;
-
-		virtual void postRemove(Element* element) = 0;
-		virtual void instantRemove(Element* element) = 0;
-
-		virtual CellBase& addChildren(std::unique_ptr<Element>&& element) = 0;
-
-		//TODO using explicit this
-
-
-		virtual void updateChildren(const float delta_in_ticks){
-			for (const auto & element : getChildren()){
-				element->update(delta_in_ticks);
-			}
-		}
-
-		virtual void layoutChildren(/*Direction*/){
-			for (const auto& element : getChildren()){
-				element->tryLayout();
-			}
-		}
-
-		void tryDraw(const Rect& clipSpace) const override{
-			if(!NoClipWhenDraw && !inboundOf(clipSpace))return;
-
-			drawMain();
-
-			const auto space = property.getValidBound_absolute().intersectionWith(clipSpace);
-			drawChildren(space);
-
-			drawPost();
-		}
-
-		virtual void drawChildren(const Rect& clipSpace) const{
-			for (const auto & element : getChildren()){
-				element->tryDraw(clipSpace);
-			}
-		}
-
-		void setScene(Scene* manager) override{
-			Element::setScene(manager);
-			for (const auto & element : getChildren()){
-				element->setScene(manager);
-			}
-		}
-
-		bool resize(const Geom::Vec2 size) override{
-			if(Element::resize(size)){
-				tryLayout();
-				return true;
-			}
-
-			return false;
-		}
-
-		bool updateAbsSrc(const Geom::Vec2 parentAbsSrc) override{
-			if(Element::updateAbsSrc(parentAbsSrc)){
-				for (const auto & element : getChildren()){
-					element->updateAbsSrc(absPos());
-				}
-				return true;
-			}
-			return false;
-		}
-
-	protected:
-		void modifyChildren(Element* element){
-			if(!element)throw std::invalid_argument("Cannot add null element");
-			element->setScene(scene);
-			element->setParent(this);
-		}
-	};
-
-	//TODO move scene to other module interface, it is here only because msvc sucks
-
-	struct SceneBase{
-		struct MouseState{
-			Geom::Vec2 src{};
-			bool pressed{};
-
-			void reset(const Geom::Vec2 pos){
-				src = pos;
-				pressed = true;
-			}
-
-			void clear(const Geom::Vec2 pos){
-
-				src = pos;
-				pressed = false;
-			}
-		};
-
-		Geom::Vec2 pos{};
-		Geom::Vec2 size{};
-
-		Geom::Vec2 cursorPos{};
-		std::array<MouseState, Ctrl::Mouse::Count> mouseKeyStates{};
-
-
-		ext::dependency<ext::owner<Group*>> root{};
-
-		//focus fields
-		// Element* currentInputFocused{nullptr};
-		Element* currentScrollFocus{nullptr};
-		Element* currentCursorFocus{nullptr};
-
-		std::vector<Element*> lastInbounds{};
-		std::unordered_set<Element*> independentLayout{};
-		std::unordered_set<Element*> asyncTaskOwners{};
-
-		Graphic::RendererUI* renderer{};
-		Bundle* bundle{};
-
-		[[nodiscard]] SceneBase() = default;
-
-		[[nodiscard]] SceneBase(const ext::owner<Group*> root, Graphic::RendererUI* renderer, Bundle* bundle)
-			: root{root},
-			  renderer{renderer},
-			  bundle{bundle}{}
-
-		SceneBase(const SceneBase& other) = delete;
-
-		SceneBase(SceneBase&& other) noexcept = default;
-
-		SceneBase& operator=(const SceneBase& other) = delete;
-
-		SceneBase& operator=(SceneBase&& other) noexcept = default;
-	};
-
-	export struct Scene : SceneBase{
-
-		[[nodiscard]] Scene() = default;
-
-		[[nodiscard]] explicit Scene(
-			ext::owner<Group*> root,
-			Graphic::RendererUI* renderer = nullptr,
-			Bundle* bundle = nullptr);
-
-		~Scene();
-
-		void registerAsyncTaskElement(Element* element);
-
-		void registerIndependentLayout(Element* element);
-
-		[[nodiscard]] bool isMousePressed() const noexcept{
-			return std::ranges::any_of(mouseKeyStates, std::identity{}, &MouseState::pressed);
-		}
-
-		void joinTasks();
-
-		void dropAllFocus(const Element* target);
-
-		std::vector<Element*> dfsFindDeepestElement(Element* target) const;
-
-		void trySwapFocus(Element* newFocus);
-
-		void swapFocus(Element* newFocus);
-
-		void onMouseAction(int key, int action, int mode);
-
-		void onKeyAction(int key, int action, int mode) const;
-
-		void onTextInput(int code, int mode);
-
-		void onScroll(Geom::Vec2 scroll) const;
-
-		void onCursorPosUpdate(Geom::Vec2 newPos);
-
-		void resize(Geom::Vec2 size);
-
-		void update(float delta_in_ticks) const;
-
-		void layout();
-
-		void draw() const;
-
-		Scene(const Scene& other) = delete;
-
-		Scene(Scene&& other) noexcept;
-
-		Scene& operator=(const Scene& other) = delete;
-
-		Scene& operator=(Scene&& other) noexcept;
-
-	private:
-		void updateInbounds(std::vector<Element*>&& next);
-	};
 }
 
 module : private;

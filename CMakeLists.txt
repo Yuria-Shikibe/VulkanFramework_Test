@@ -44,6 +44,7 @@ add_compile_options("/wd5030")
 add_compile_options("/permissive-")
 add_compile_options("/constexpr:steps4194304")
 add_link_options("/NODEFAULTLIB:library")
+#add_link_options("/Md")
 
 message(STATUS "Loading...")
 

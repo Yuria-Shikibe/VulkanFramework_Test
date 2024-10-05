@@ -1,11 +1,18 @@
-module Core.UI.Element;
+module;
 
+
+//fuck the resharper
+import Core.UI.Group;
+
+module Core.UI.Scene;
+
+import Core.UI.Group;
+import Core.UI.Element;
 import Core.Ctrl.KeyPack;
 import Graphic.Renderer.UI;
 import Core.UI.Event;
 import ext.concepts;
 import ext.algo;
-
 
 void iterateAll_DFSImpl(const Core::UI::Scene& scene, std::vector<Core::UI::Element*>& selected, Core::UI::Element* current){
 	if(current->isInteractable() && current->containsPos(scene.cursorPos)){

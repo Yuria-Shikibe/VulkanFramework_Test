@@ -4,7 +4,7 @@
 
 export module Core.UI.Root;
 
-export import Core.UI.Element;
+export import Core.UI.Scene;
 
 import Geom.Vector2D;
 
@@ -55,7 +55,7 @@ export namespace Core::UI{
 			if(focus)focus->onCursorPosUpdate({x, y});
 		}
 
-		template <typename T = Group>
+		template <std::derived_from<Group> T = Group>
 		T& rootOf(const std::string_view sceneName){
 			if(const auto rst = scenes.try_find(sceneName)){
 				return dynamic_cast<T&>(*rst->root);

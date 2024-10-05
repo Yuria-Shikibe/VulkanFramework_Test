@@ -4,13 +4,16 @@
 
 export module Core.UI.UniversalGroup;
 
+export import Core.UI.Group;
 export import Core.UI.Element;
 export import Core.UI.CellBase;
+export import Core.UI.LooseGroup;
 import ext.concepts;
 import std;
 
 export namespace Core::UI{
 	template <std::derived_from<CellBase> T>
+		requires (std::is_copy_assignable_v<T> && std::is_default_constructible_v<T>)
 	struct CellAdaptor{
 		using CellType = T;
 		Element* element{};
@@ -33,27 +36,21 @@ export namespace Core::UI{
 		}
 	};
 
-	template <std::derived_from<CellBase> T, std::derived_from<CellAdaptor<T>> Adaptor = CellAdaptor<T>>
-		requires requires(Element* e, const T& cell){
+	template <std::derived_from<CellBase> CellTy, std::derived_from<CellAdaptor<CellTy>> Adaptor = CellAdaptor<CellTy>>
+		requires requires(Element* e, const CellTy& cell){
 			Adaptor{e, cell};
 		}
-	struct UniversalGroup : public Group{
-		T defaultCell{};
+	struct UniversalGroup : public LooseGroup{
+		CellTy defaultCell{};
 
 	protected:
-		std::vector<std::unique_ptr<Element>> toRemove{};
-		std::vector<std::unique_ptr<Element>> children{};
 		std::vector<Adaptor> cells{};
 
-
 	public:
-		[[nodiscard]] UniversalGroup(){
-			interactivity = Interactivity::childrenOnly;
-		}
+		[[nodiscard]] UniversalGroup() = default;
 
 		[[nodiscard]] explicit UniversalGroup(const std::string_view tyName)
-			: Group{tyName}{
-			interactivity = Interactivity::childrenOnly;
+			: LooseGroup{tyName}{
 		}
 
 		[[nodiscard]] const std::vector<Adaptor>& getCells() const noexcept{
@@ -62,7 +59,7 @@ export namespace Core::UI{
 
 		void postRemove(Element* element) override{
 			if(const auto itr = find(element); itr != children.end()){
-				cells.erase(cells.begin() + (itr - children.begin()));
+				cells.erase(cells.begin() + std::distance(children.begin(), itr));
 				toRemove.push_back(std::move(*itr));
 				children.erase(itr);
 			}
@@ -70,68 +67,31 @@ export namespace Core::UI{
 
 		void instantRemove(Element* element) override{
 			if(const auto itr = find(element); itr != children.end()){
-				cells.erase(cells.begin() + (itr - children.begin()));
+				cells.erase(cells.begin() + std::distance(children.begin(), itr));
 				children.erase(itr);
 			}
 		}
 
-		T& addChildren(std::unique_ptr<Element>&& element) override{
+		Element& addChildren(ElementUniquePtr&& element) override{
 			element->layoutState.acceptMask_context -= SpreadDirection::child;
-
-			auto& cell = cells.emplace_back(element.get(), defaultCell);
-			children.push_back(std::move(element));
-
-			// layoutState.setSelfChanged();
-			notifyLayoutChanged(SpreadDirection::upper);
-
-			return cell.cell;
+			return LooseGroup::addChildren(std::move(element));
 		}
 
-		[[nodiscard]] std::span<const std::unique_ptr<Element>> getChildren() const noexcept override{
-			return children;
-		}
-
-		[[nodiscard]] bool hasChildren() const noexcept override{
-			return !children.empty();
-		}
-
-		void update(const float delta_in_ticks) override{
-			toRemove.clear();
-
-			Element::update(delta_in_ticks);
-
-			updateChildren(delta_in_ticks);
-		}
-
-		void tryLayout() override{
-			if(layoutState.isChanged()){
-				layout();
-			}else if(layoutState.isChildrenChanged()){//TODO accurate register change?
-				layoutChildren();
-			}
-		}
-
-
-		//TODO using explicit this
-		template <std::derived_from<Element> E, typename... Args>
-		T& emplace(Args&& ...args){
-			std::unique_ptr<Element> ptr = std::make_unique<E>(std::forward<Args>(args)...);
-			modifyChildren(ptr.get());
-			return addChildren(std::move(ptr));
-		}
-
-		template <typename E/*, std::derived_from<Group> This*/, typename Init>
+		template <std::derived_from<Element> E>
 			requires (std::is_default_constructible_v<E>)
-		T& emplaceInit(Init&& init){
-			std::unique_ptr<Element> ptr = std::make_unique<E>();
-			modifyChildren(ptr.get());
-			init(*static_cast<E*>(ptr.get()));
-			return static_cast<T&>(addChildren(std::move(ptr)));
+		CellTy& emplace(){
+			return add(ElementUniquePtr{this, scene, new E});
 		}
 
-	protected:
-		auto find(Element* element){
-			return std::ranges::find(children, element, &std::unique_ptr<Element>::get);
+		template <InvocableElemInitFunc Fn>
+			requires (std::is_default_constructible_v<typename ElemInitFuncTraits<Fn>::ElemType>)
+		CellTy& emplaceInit(Fn init){
+			return add(ElementUniquePtr{this, scene, init});
+		}
+
+	private:
+		CellTy& add(ElementUniquePtr&& ptr){
+			return cells.emplace_back(&addChildren(std::move(ptr)), defaultCell).cell;
 		}
 	};
 

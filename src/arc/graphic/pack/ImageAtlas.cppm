@@ -99,7 +99,6 @@ namespace Graphic{
 					static_assert(false, "Data Type is not supported");
 				}
 
-
 				return AllocatedViewRegion{texture.getView(), texture.getSize(), rst, this};
 			}
 

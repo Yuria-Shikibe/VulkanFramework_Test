@@ -124,8 +124,8 @@ export namespace Core::UI{
 		}
 
 		template <std::invocable<Slider&> Func>
-		void setCallback(Func&& func){
-			callback = std::forward<Func>(func);
+		decltype(auto) setCallback(Func&& func){
+			return std::exchange(callback, std::forward<Func>(func));
 		}
 
 		void setInitialProgress(const Geom::Vec2 progress) noexcept{
