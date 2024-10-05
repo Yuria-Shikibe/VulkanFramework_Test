@@ -4,6 +4,8 @@
 
 export module Core.UI.Scene;
 
+export import Core.UI.ToolTipManager;
+
 import Geom.Vector2D;
 import Geom.Rect_Orthogonal;
 import Core.Ctrl.Constants;
@@ -17,16 +19,11 @@ export namespace Core{
 	class Bundle;
 }
 
-
 export namespace Graphic{
 	struct RendererUI;
 }
 
-
 namespace Core::UI{
-	export struct Element;
-	export struct Group;
-
 	struct SceneBase{
 		struct MouseState{
 			Geom::Vec2 src{};
@@ -82,6 +79,7 @@ namespace Core::UI{
 	};
 
 	export struct Scene : SceneBase{
+		ToolTipManager tooltipManager{};
 
 		[[nodiscard]] Scene() = default;
 
@@ -91,6 +89,10 @@ namespace Core::UI{
 			Bundle* bundle = nullptr);
 
 		~Scene();
+
+		[[nodiscard]] Geom::Rect_Orthogonal<float> getBound() const noexcept{
+			return Geom::Rect_Orthogonal<float>{size};
+		}
 
 		void registerAsyncTaskElement(Element* element);
 
@@ -103,8 +105,6 @@ namespace Core::UI{
 		void joinTasks();
 
 		void dropAllFocus(const Element* target);
-
-		std::vector<Element*> dfsFindDeepestElement(Element* target) const;
 
 		void trySwapFocus(Element* newFocus);
 
@@ -122,7 +122,7 @@ namespace Core::UI{
 
 		void resize(Geom::Vec2 size);
 
-		void update(float delta_in_ticks) const;
+		void update(float delta_in_ticks);
 
 		void layout();
 
@@ -139,4 +139,6 @@ namespace Core::UI{
 	private:
 		void updateInbounds(std::vector<Element*>&& next);
 	};
+
+
 }

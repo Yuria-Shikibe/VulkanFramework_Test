@@ -52,6 +52,26 @@ export namespace Test{
 							std::println(std::cout, "{}", s.getProgress());
 							std::cout.flush();
 						});
+						slider.setTooltipState({
+							.followTarget = Core::UI::TooltipFollow::owner,
+							.followTargetAlign = Align::Pos::bottom_left,
+							.tooltipSrcAlign = Align::Pos::top_left,
+						}, [](Core::UI::Element&, Core::UI::FlexTable_Dynamic& table){
+							table.defaultCell.setSize(220.f, 80.f).setMargin(5.f);
+							table.emplaceInit([](Core::UI::Slider& slider){
+								slider.setHoriOnly();
+							});
+
+							table.emplaceInit([](Core::UI::Slider& slider){
+								slider.setHoriOnly();
+							});
+
+							table.endRow();
+
+							table.emplaceInit([](Core::UI::Slider& slider){
+								// slider.setHoriOnly();
+							});
+						});
 					}).setWidth(500).setMargin(5);
 
 					v.emplaceInit([](Core::UI::TextElement& e){

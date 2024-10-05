@@ -4,10 +4,11 @@
 
 export module Core.UI.ToolTipManager;
 
-import std;
-import Core.UI.ElementUniquePtr;
-import Core.UI.ToolTipInterface;
+export import Core.UI.ElementUniquePtr;
+export import Core.UI.ToolTipInterface;
 import Geom.Vector2D;
+
+import std;
 
 export namespace Core::UI{
 	// struct Scene;
@@ -21,7 +22,7 @@ export namespace Core::UI{
 		struct ValidToolTip{
 			ElementUniquePtr element{};
 
-			ToolTipOwner* owner{};
+			TooltipOwner* owner{};
 			Geom::Vec2 lastPos{Geom::SNAN2};
 
 			[[nodiscard]] bool isPosSet() const noexcept{
@@ -44,27 +45,28 @@ export namespace Core::UI{
 
 		ElementUniquePtr root{};
 
-		Scene* scene{};
 
 		using ActivesItr = decltype(actives)::iterator;
 
 	public:
+		Scene* scene{};
+
 		[[nodiscard]] ToolTipManager() = default;
 
-		bool hasInstance(ToolTipOwner* owner){
-			return std::ranges::contains(actives | std::views::transform(&ValidToolTip::owner), owner);
+		bool hasInstance(TooltipOwner& owner){
+			return std::ranges::contains(actives | std::views::transform(&ValidToolTip::owner), &owner);
 		}
 
-		[[nodiscard]] ToolTipOwner* getTopFocus() const noexcept{
+		[[nodiscard]] TooltipOwner* getTopFocus() const noexcept{
 			return actives.empty() ? nullptr : actives.back().owner;
 		}
 
 		[[nodiscard]] Geom::Vec2 getCursorPos() const noexcept;
 
-		ValidToolTip* appendToolTip(ToolTipOwner& owner);
+		ValidToolTip* appendToolTip(TooltipOwner& owner);
 
-		ValidToolTip* tryAppendToolTip(ToolTipOwner& owner){
-			if(owner.shouldBuild(getCursorPos())){
+		ValidToolTip* tryAppendToolTip(TooltipOwner& owner){
+			if(owner.tooltipShouldBuild(getCursorPos()) && !hasInstance(owner)){
 				return appendToolTip(owner);
 			}
 
@@ -73,35 +75,33 @@ export namespace Core::UI{
 
 		void update(float delta_in_time);
 
-		void eraseToolTipByOwner(ToolTipOwner& owner){
+		bool requestDrop(const TooltipOwner& owner){
 			const auto be = std::ranges::find(actives, &owner, &ValidToolTip::owner);
-			dropFrom(be);
+
+			return dropFrom(be);
+		}
+
+		void draw() const;
+
+		// std::vector<Element*> getInbounded();
+
+		auto& getActiveTooltips() noexcept{
+			return actives;
 		}
 
 	private:
-		void drop(const ActivesItr be, const ActivesItr se){
-			auto range = std::ranges::subrange{be, se};
-			for (auto && validToolTip : range){
-				validToolTip.owner->notifyDrop();
-			}
+		bool drop(ActivesItr be, ActivesItr se);
 
-			dropped.append_range(range | std::ranges::views::as_rvalue | std::views::transform([](ValidToolTip&& validToolTip){
-				return DroppedToolTip{std::move(validToolTip).release(), 15.f};
-			}));
-
-			actives.erase(be, se);
+		bool dropOne(const ActivesItr where){
+			return drop(where, std::next(where));
 		}
 
-		void dropOne(const ActivesItr where){
-			drop(where, std::next(where));
+		bool dropAll(){
+			return drop(actives.begin(), actives.end());
 		}
 
-		void dropAll(){
-			drop(actives.begin(), actives.end());
-		}
-
-		void dropFrom(const ActivesItr where){
-			drop(where, actives.end());
+		bool dropFrom(const ActivesItr where){
+			return drop(where, actives.end());
 		}
 
 		void updateDropped(float delta_in_time);

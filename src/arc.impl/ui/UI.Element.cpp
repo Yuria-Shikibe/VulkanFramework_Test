@@ -54,13 +54,29 @@ bool Core::UI::Element::isFocusedScroll() const noexcept{
 	return scene && scene->currentScrollFocus == this;
 }
 
+bool Core::UI::Element::isFocused() const noexcept{
+	return scene && scene->currentCursorFocus == this;
+}
+
+bool Core::UI::Element::isInbounded() const noexcept{
+	return scene && std::ranges::contains(scene->lastInbounds, this);
+}
+
 void Core::UI::Element::setFocusedScroll(const bool focus) noexcept{
 	if(!focus && !isFocusedScroll())return;
 	this->scene->currentScrollFocus = focus ? this : nullptr;
 }
 
 bool Core::UI::Element::containsPos(const Geom::Vec2 absPos) const noexcept{
-	return (!parent || parent->containsPos_parent(absPos)) && property.getValidBound_absolute().containsPos_edgeExclusive(absPos);
+	return containsPos_parent(absPos) && containsPos_self(absPos);
+}
+
+bool Core::UI::Element::containsPos_self(const Geom::Vec2 absPos, const float margin) const noexcept{
+	return property.getValidBound_absolute().expand(margin, margin).containsPos_edgeExclusive(absPos);
+}
+
+bool Core::UI::Element::containsPos_parent(const Geom::Vec2 cursorPos) const{
+	return (!parent || parent->containsPos_parent(cursorPos));
 }
 
 void Core::UI::Element::notifyLayoutChanged(const SpreadDirection toDirection){
@@ -83,8 +99,40 @@ void Core::UI::Element::notifyLayoutChanged(const SpreadDirection toDirection){
 	}
 }
 
+void Core::UI::Element::update(const float delta_in_ticks){
+	cursorState.update(delta_in_ticks);
+
+	if(cursorState.focused){
+		getScene()->tooltipManager.tryAppendToolTip(*this);
+	}
+}
+
 void Core::UI::Element::drawMain() const{
 	property.graphicData.drawer->draw(*this);
+}
+
+void Core::UI::Element::dropToolTipIfMoved() const{
+	if(tooltipProp.useStagnateTime)getScene()->tooltipManager.requestDrop(*this);
+}
+
+std::vector<Core::UI::Element*> Core::UI::Element::dfsFindDeepestElement(Geom::Vec2 cursorPos){
+	std::vector<Element*> rst{};
+
+	iterateAll_DFSImpl(cursorPos, rst, this);
+
+	return rst;
+}
+
+void Core::UI::iterateAll_DFSImpl(Geom::Vec2 cursorPos, std::vector<Element*>& selected, Element* current){
+	if(current->isInteractable() && current->containsPos(cursorPos)){
+		selected.push_back(current);
+	}
+
+	if(current->touchDisabled() || !current->hasChildren()) return;
+
+	for(const auto& child : current->getChildren() | std::views::reverse){
+		iterateAll_DFSImpl(cursorPos, selected, child.get());
+	}
 }
 
 

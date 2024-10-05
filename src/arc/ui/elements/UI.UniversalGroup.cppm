@@ -40,7 +40,7 @@ export namespace Core::UI{
 		requires requires(Element* e, const CellTy& cell){
 			Adaptor{e, cell};
 		}
-	struct UniversalGroup : public LooseGroup{
+	struct UniversalGroup : public BasicGroup{
 		CellTy defaultCell{};
 
 	protected:
@@ -50,7 +50,7 @@ export namespace Core::UI{
 		[[nodiscard]] UniversalGroup() = default;
 
 		[[nodiscard]] explicit UniversalGroup(const std::string_view tyName)
-			: LooseGroup{tyName}{
+			: BasicGroup{tyName}{
 		}
 
 		[[nodiscard]] const std::vector<Adaptor>& getCells() const noexcept{
@@ -74,7 +74,7 @@ export namespace Core::UI{
 
 		Element& addChildren(ElementUniquePtr&& element) override{
 			element->layoutState.acceptMask_context -= SpreadDirection::child;
-			return LooseGroup::addChildren(std::move(element));
+			return BasicGroup::addChildren(std::move(element));
 		}
 
 		template <std::derived_from<Element> E>

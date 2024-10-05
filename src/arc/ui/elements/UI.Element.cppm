@@ -74,7 +74,8 @@ namespace Core::UI{
 		/**
 		 * @brief in tick
 		 */
-		float inboundTime{};
+		float focusedTime{};
+		float stagnateTime{};
 
 		bool inbound{};
 		bool focused{};
@@ -82,7 +83,8 @@ namespace Core::UI{
 
 		void update(const float delta_in_ticks){
 			if(focused){
-				inboundTime += delta_in_ticks;
+				focusedTime += delta_in_ticks;
+				stagnateTime += delta_in_ticks;
 			}
 		}
 
@@ -93,7 +95,11 @@ namespace Core::UI{
 
 			event_manager.on<Event::EndFocus>([this](auto){
 				focused = false;
-				inboundTime = 0.f;
+				stagnateTime = focusedTime = 0.f;
+			});
+
+			event_manager.on<Event::Moved>([this](auto){
+				stagnateTime = 0.f;
 			});
 		}
 
@@ -154,7 +160,8 @@ namespace Core::UI{
 				ext::index_of<Event::Inbound>(),
 				ext::index_of<Event::BeginFocus>(),
 				ext::index_of<Event::EndFocus>(),
-				ext::index_of<Event::Scroll>()
+				ext::index_of<Event::Scroll>(),
+				ext::index_of<Event::Moved>(),
 			}
 		};
 
@@ -207,7 +214,7 @@ namespace Core::UI{
 
 	};
 
-	export struct Element : FuncToolTipOwner<struct Element>{
+	export struct Element : StatedToolTipOwner<struct Element>{
 	protected:
 		ElemProperty property{};
 		CursorState cursorState{};
@@ -307,6 +314,10 @@ namespace Core::UI{
 
 		[[nodiscard]] bool isFocusedScroll() const noexcept;
 
+		[[nodiscard]] bool isFocused() const noexcept;
+
+		[[nodiscard]] bool isInbounded() const noexcept;
+
 		void setFocusedScroll(bool focus) noexcept;
 
 		[[nodiscard]] constexpr bool isQuietInteractable() const noexcept{
@@ -323,11 +334,20 @@ namespace Core::UI{
 
 		[[nodiscard]] bool containsPos(Geom::Vec2 absPos) const noexcept;
 
+		[[nodiscard]] bool containsPos_self(Geom::Vec2 absPos, float margin = 0.f) const noexcept;
+
+		template<ElemInitFunc InitFunc>
+		void setTooltipState(const ToolTipProperty& toolTipProperty, InitFunc&& initFunc) noexcept{
+			StatedToolTipOwner::setTooltipState(toolTipProperty, std::forward<InitFunc>(initFunc));
+			
+			events().on<Event::Moved>([this](const auto&){
+				dropToolTipIfMoved();
+			});
+		}
+
 		//interface region
 
-		virtual bool containsPos_parent(Geom::Vec2 clipSpace){
-			return true;
-		}
+		[[nodiscard]] virtual bool containsPos_parent(Geom::Vec2 cursorPos) const;
 
 		virtual void notifyLayoutChanged(SpreadDirection toDirection);
 
@@ -336,9 +356,7 @@ namespace Core::UI{
 		}
 
 
-		virtual void update(const float delta_in_ticks){
-			cursorState.update(delta_in_ticks);
-		}
+		virtual void update(float delta_in_ticks);
 
 		virtual void tryLayout(){
 			if(layoutState.isChanged()){
@@ -370,13 +388,9 @@ namespace Core::UI{
 
 		virtual void drawMain() const;
 
-		virtual void drawPost() const{
+		virtual void drawPost() const{}
 
-		}
-
-		virtual void inputKey(const int key, const int action, const int mode){
-
-		}
+		virtual void inputKey(const int key, const int action, const int mode){}
 
 		virtual bool resize(const Geom::Vec2 size /*, Direction Mask*/){
 			if(property.clampedSize.setSize(size)){
@@ -398,16 +412,26 @@ namespace Core::UI{
 
 		}
 
-		[[nodiscard]] ToolTipAlignPos alignPolicy() const override{
-			return {ToolTipFollow::none, Align::Pos::top_left};
+		[[nodiscard]] TooltipAlignPos getAlignPolicy() const override{
+			switch(tooltipProp.followTarget){
+				case TooltipFollow::owner:{
+					return {Align::getVert(tooltipProp.followTargetAlign, property.getBound_absolute()), tooltipProp.tooltipSrcAlign};
+				}
+
+				default: return {TooltipFollow::none, tooltipProp.tooltipSrcAlign};
+			}
 		}
 
-		[[nodiscard]] bool shouldDrop(Geom::Vec2 cursorPos) const override{
+		[[nodiscard]] bool tooltipShouldDrop(Geom::Vec2 cursorPos) const override{
 			return !containsPos(cursorPos);
 		}
 
-		[[nodiscard]] bool shouldBuild(Geom::Vec2 cursorPos) const override{
-			return cursorState.inboundTime > 90.f;
+		[[nodiscard]] bool tooltipShouldBuild(Geom::Vec2 cursorPos) const override{
+			return true
+				&& toolTipBuilder
+				&& tooltipProp.autoBuild()
+				&& (tooltipProp.useStagnateTime ? cursorState.stagnateTime : cursorState.focusedTime)
+				> tooltipProp.minHoverTime;
 		}
 
 
@@ -415,8 +439,14 @@ namespace Core::UI{
 		[[nodiscard]] bool inboundOf(const Rect& clipSpace_abs) const noexcept{
 			return clipSpace_abs.overlap_Exclusive(property.getValidBound_absolute());
 		}
+
+		void dropToolTipIfMoved() const;
+
+	public:
+		std::vector<Element*> dfsFindDeepestElement(Geom::Vec2 cursorPos);
 	};
 
+	void iterateAll_DFSImpl(Geom::Vec2 cursorPos, std::vector<struct Element*>& selected, struct Element* current);
 }
 
 module : private;

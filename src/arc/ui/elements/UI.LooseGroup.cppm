@@ -9,22 +9,20 @@ namespace Core::UI{
 	CellBase EmptyCell;
 
 	export
-	struct LooseGroup : Group{
+	struct BasicGroup : public Group {
 	protected:
 		std::vector<ElementUniquePtr> toRemove{};
 		std::vector<ElementUniquePtr> children{};
 
 	public:
-		[[nodiscard]] explicit LooseGroup()
+		[[nodiscard]] explicit BasicGroup()
 			: Group{}{
 			interactivity = Interactivity::childrenOnly;
-			layoutState.ignoreChildren();
 		}
 
-		[[nodiscard]] explicit LooseGroup(std::string_view tyName)
+		[[nodiscard]] explicit BasicGroup(std::string_view tyName)
 			: Group{tyName}{
 			interactivity = Interactivity::childrenOnly;
-			layoutState.ignoreChildren();
 		}
 
 		void postRemove(Element* element) override{
@@ -74,6 +72,20 @@ namespace Core::UI{
 	protected:
 		auto find(Element* element){
 			return std::ranges::find(children, element, &ElementUniquePtr::get);
+		}
+	};
+
+	export
+	struct LooseGroup : BasicGroup{
+		using BasicGroup::BasicGroup;
+
+		void tryLayout() override{
+			if(layoutState.isChanged()){
+				layout();
+				layoutChildren();
+			}else if(layoutState.isChildrenChanged()){//TODO accurate register change instead of for each?
+				layoutChildren();
+			}
 		}
 	};
 }

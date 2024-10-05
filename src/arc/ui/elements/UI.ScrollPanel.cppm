@@ -65,11 +65,20 @@ export namespace Core::UI{
 				scrollVelocity = scrollTargetVelocity.scl(VelocityScale, VelocityScale);
 			});
 
-			events().on<Event::Inbound>([this](const Event::Inbound& e){
+			events().on<Event::Inbound>([this](const auto& e){
 				setFocusedScroll(true);
 			});
 
-			events().on<Event::Exbound>([this](const Event::Exbound& e){
+			events().on<Event::Exbound>([this](const auto& e){
+				setFocusedScroll(false);
+			});
+
+
+			events().on<Event::BeginFocus>([this](const auto& e){
+				setFocusedScroll(true);
+			});
+
+			events().on<Event::EndFocus>([this](const auto& e){
 				setFocusedScroll(false);
 			});
 
@@ -147,8 +156,8 @@ export namespace Core::UI{
 		void drawMain() const override;
 		void drawPost() const override;
 
-		bool containsPos_parent(const Geom::Vec2 clipSpace) override{
-			return Rect{Geom::FromExtent, absPos(), getViewportSize()}.containsPos_edgeExclusive(clipSpace);
+		[[nodiscard]] bool containsPos_parent(const Geom::Vec2 cursorPos) const override{
+			return (!parent || Rect{Geom::FromExtent, absPos(), getViewportSize()}.containsPos_edgeExclusive(cursorPos));
 		}
 
 	private:

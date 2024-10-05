@@ -1,50 +1,25 @@
 module;
 
-
-//fuck the resharper
-import Core.UI.Group;
-
 module Core.UI.Scene;
 
 import Core.UI.Group;
 import Core.UI.Element;
-import Core.Ctrl.KeyPack;
 import Graphic.Renderer.UI;
+import Core.Ctrl.KeyPack;
 import Core.UI.Event;
 import ext.concepts;
 import ext.algo;
 
-void iterateAll_DFSImpl(const Core::UI::Scene& scene, std::vector<Core::UI::Element*>& selected, Core::UI::Element* current){
-	if(current->isInteractable() && current->containsPos(scene.cursorPos)){
-		selected.push_back(current);
-	}
-
-	if(current->touchDisabled() || !current->hasChildren())return;
-
-	for(const auto& child : current->getChildren() | std::views::reverse){
-		iterateAll_DFSImpl(scene, selected, child.get());
-	}
-}
-
 void Core::UI::Scene::joinTasks(){
-	for (auto && asyncTaskOwner : asyncTaskOwners){
+	for(auto&& asyncTaskOwner : asyncTaskOwners){
 		asyncTaskOwner->getFuture();
 	}
 
 	asyncTaskOwners.clear();
 }
 
-std::vector<Core::UI::Element*> Core::UI::Scene::dfsFindDeepestElement(Element* target) const{
-	std::vector<Core::UI::Element*> rst{};
-
-	iterateAll_DFSImpl(*this, rst, target);
-
-	return rst;
-}
-
 Core::UI::Scene::Scene(const ext::owner<Group*> root, Graphic::RendererUI* renderer, Bundle* bundle) :
 	SceneBase{root, renderer, bundle}{
-
 	root->setScene(this);
 	root->interactivity = Interactivity::childrenOnly;
 }
@@ -72,25 +47,26 @@ void Core::UI::Scene::registerIndependentLayout(Element* element){
 }
 
 void Core::UI::Scene::dropAllFocus(const Element* target){
-	if(currentCursorFocus == target)currentCursorFocus = nullptr;
-	if(currentScrollFocus == target)currentScrollFocus = nullptr;
+	if(currentCursorFocus == target) currentCursorFocus = nullptr;
+	if(currentScrollFocus == target) currentScrollFocus = nullptr;
 	std::erase(lastInbounds, target);
 	asyncTaskOwners.erase(const_cast<Element*>(target));
 	independentLayout.erase(const_cast<Element*>(target));
+	tooltipManager.requestDrop(*target);
 }
 
 void Core::UI::Scene::trySwapFocus(Element* newFocus){
-	if(newFocus == currentCursorFocus)return;
+	if(newFocus == currentCursorFocus) return;
 
 	if(currentCursorFocus){
 		if(currentCursorFocus->maintainFocusByMouse()){
 			if(!isMousePressed()){
 				swapFocus(newFocus);
-			}else return;
-		}else{
+			} else return;
+		} else{
 			swapFocus(newFocus);
 		}
-	}else{
+	} else{
 		swapFocus(newFocus);
 	}
 }
@@ -111,7 +87,8 @@ void Core::UI::Scene::swapFocus(Element* newFocus){
 }
 
 void Core::UI::Scene::onMouseAction(const int key, const int action, const int mode){
-	if(currentCursorFocus)currentCursorFocus->events().fire(
+	if(currentCursorFocus)
+		currentCursorFocus->events().fire(
 			Event::Click{cursorPos, Ctrl::KeyPack{key, action, mode}}
 		);
 
@@ -134,47 +111,59 @@ void Core::UI::Scene::onKeyAction(const int key, const int action, const int mod
 	}
 }
 
-void Core::UI::Scene::onTextInput(int code, int mode){
-
-}
+void Core::UI::Scene::onTextInput(int code, int mode){}
 
 void Core::UI::Scene::onScroll(const Geom::Vec2 scroll) const{
-	if(currentScrollFocus)currentScrollFocus->events().fire(Event::Scroll{scroll});
+	if(currentScrollFocus) currentScrollFocus->events().fire(Event::Scroll{scroll});
 }
 
 void Core::UI::Scene::onCursorPosUpdate(const Geom::Vec2 newPos){
+	auto delta = newPos - cursorPos;
 	cursorPos = newPos;
 
-	auto elem = dfsFindDeepestElement(root);
-	trySwapFocus(elem.empty() ? nullptr : elem.back());
-	updateInbounds(std::move(elem));
+	std::vector<Element*> inbounds{};
 
-	if(!currentCursorFocus)return;
+	for (auto && activeTooltip : tooltipManager.getActiveTooltips() | std::views::reverse){
+		inbounds = activeTooltip.element->dfsFindDeepestElement(cursorPos);
+		if(!inbounds.empty())break;
+	}
+
+	if(inbounds.empty()){
+		inbounds = root->dfsFindDeepestElement(cursorPos);
+	}
+
+	trySwapFocus(inbounds.empty() ? nullptr : inbounds.back());
+	updateInbounds(std::move(inbounds));
+
+	if(!currentCursorFocus) return;
 
 	Event::Drag dragEvent{};
-	for (const auto& [i, state] : mouseKeyStates | std::views::enumerate){
-		if(!state.pressed)continue;
+	for(const auto& [i, state] : mouseKeyStates | std::views::enumerate){
+		if(!state.pressed) continue;
 
 		dragEvent = {state.src, newPos, {static_cast<int>(i), 0, 0}};
 		currentCursorFocus->events().fire(dragEvent);
 	}
+
+	currentCursorFocus->events().fire(Event::Moved{delta});
 }
 
 void Core::UI::Scene::resize(const Geom::Vec2 size){
-	if(this->size == size)return;
+	if(this->size == size) return;
 
 	this->size = size;
 	root->resize(size);
 }
 
-void Core::UI::Scene::update(const float delta_in_ticks) const{
+void Core::UI::Scene::update(const float delta_in_ticks){
+	tooltipManager.update(delta_in_ticks);
 	root->update(delta_in_ticks);
 }
 
 void Core::UI::Scene::layout(){
 	root->tryLayout();
 
-	for (const auto layout : independentLayout){
+	for(const auto layout : independentLayout){
 		layout->tryLayout();
 	}
 	independentLayout.clear();
@@ -182,15 +171,19 @@ void Core::UI::Scene::layout(){
 
 void Core::UI::Scene::draw() const{
 	root->drawChildren(renderer->getCurrentScissor());
+	tooltipManager.draw();
 }
 
-Core::UI::Scene::Scene(Scene&& other) noexcept: SceneBase{std::move(other)}{
+Core::UI::Scene::Scene(Scene&& other) noexcept: SceneBase{std::move(other)},
+                                                tooltipManager{std::move(other.tooltipManager)}{
 	root->setScene(this);
+	tooltipManager.scene = this;
 }
 
 Core::UI::Scene& Core::UI::Scene::operator=(Scene&& other) noexcept{
 	if(this == &other) return *this;
 	SceneBase::operator =(std::move(other));
+	tooltipManager = std::move(other.tooltipManager);
 	root->setScene(this);
 	return *this;
 }
@@ -198,11 +191,11 @@ Core::UI::Scene& Core::UI::Scene::operator=(Scene&& other) noexcept{
 void Core::UI::Scene::updateInbounds(std::vector<Element*>&& next){
 	auto [i1, i2] = std::ranges::mismatch(lastInbounds, next);
 
-	for (const auto& element : std::ranges::subrange{i1, lastInbounds.end()}){
+	for(const auto& element : std::ranges::subrange{i1, lastInbounds.end()}){
 		element->events().fire(Event::Exbound{cursorPos});
 	}
 
-	for (const auto& element : std::ranges::subrange{i2, next.end()}){
+	for(const auto& element : std::ranges::subrange{i2, next.end()}){
 		element->events().fire(Event::Inbound{cursorPos});
 	}
 

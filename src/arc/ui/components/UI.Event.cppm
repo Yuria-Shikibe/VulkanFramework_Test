@@ -37,6 +37,10 @@ export namespace Core::UI{
 			using MouseEvent::MouseEvent;
 		};
 
+		struct Moved final : PosedEvent{
+			using PosedEvent::PosedEvent;
+		};
+
 		struct Drag final : MouseEvent{
 			Geom::Vec2 dst{};
 

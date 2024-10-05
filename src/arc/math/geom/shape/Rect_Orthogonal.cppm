@@ -185,7 +185,7 @@ export namespace Geom{
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires ext::signed_number<T> {
+		constexpr Rect_Orthogonal& addSize(const T x, const T y) noexcept requires (ext::signed_number<T>) {
 			this->setWidth<T>(size_.x + x);
 			this->setHeight<T>(size_.y + y);
 
@@ -553,7 +553,17 @@ export namespace Geom{
 		}
 
 		constexpr Rect_Orthogonal& expand(const T x, const T y) noexcept{
-			return this->set(src.x - x, src.y - y, size_.x + x * TWO,  size_.y + y * TWO);
+			src.x -= x;
+			src.y -= y;
+
+			if constexpr (std::is_unsigned_v<T>){
+				size_.x += x * TWO;
+				size_.y += y * TWO;
+			}else{
+				Rect_Orthogonal::addSize(x * TWO, y * TWO);
+			}
+
+			return *this;
 		}
 
 		/**
