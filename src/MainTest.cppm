@@ -22,6 +22,7 @@ export import Core.UI.TextElement;
 export import Core.UI.ImageDisplay;
 export import Core.UI.Slider;
 export import Core.UI.RegionDrawable;
+export import Core.UI.Button;
 
 export import Core.Global.UI;
 export import Core.Global;
@@ -92,6 +93,7 @@ export namespace Test{
 				pane.setItem([](Core::UI::FlexTable_Dynamic& v){
 					v.align = Align::Pos::top_left;
 					v.emplaceInit([](Core::UI::Slider& slider){
+						slider.prop().boarder.set(5);
 						slider.setCallback([](Core::UI::Slider& s){
 							std::println(std::cout, "{}", s.getProgress());
 							std::cout.flush();
@@ -109,6 +111,15 @@ export namespace Test{
 
 							table.emplaceInit([](Core::UI::Slider& slider){
 								slider.setHoriOnly();
+							});
+
+							table.emplaceInit([](Core::UI::Button<Core::UI::ImageDisplay>& display){
+								display.setDrawable(Core::UI::TextureNineRegionDrawable_Ref{&nineRegion_edge});
+								display.scaling = Align::Scale::stretch;
+								display.setButtonCallback(Core::UI::ButtonTag::Normal, []{
+									std::println(std::cout, "pressed");
+									std::cout.flush();
+								});
 							});
 
 							table.endRow();
@@ -133,6 +144,7 @@ export namespace Test{
 						e.glyphSizeDependency = {true, true};
 						// e.resize({500, 500});
 						e.setTextScale(.5);
+						e.prop().boarder.set(5);
 						e.setText("ajsdhash\n叮咚鸡大狗叫djahjsdhasdh;hjgfhajshgj123123123");
 						e.textAlignMode = Align::Pos::top_left;
 					}).setExternal({true, true}).setMargin(5);

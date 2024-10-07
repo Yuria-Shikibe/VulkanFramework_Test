@@ -4,6 +4,7 @@ module;
 #define FT_CONFIG_OPTION_ERROR_STRINGS
 #endif
 
+#include <cassert>
 #include <ft2build.h>
 #include <freetype/freetype.h>
 #include <freetype/ftstroke.h>
@@ -48,13 +49,12 @@ namespace Font{
 
 		Library& operator=(Library&& other) noexcept{
 			if(this == &other) return *this;
-			library = other.library;
-			other.library = nullptr;
+			std::swap(library, other.library);
 			return *this;
 		}
 	};
 
-	export inline const Library GlobalFreeTypeLib{};
+	export inline const Library GlobalFreeTypeLib{}; // NOLINT(*-err58-cpp)
 
 	export using CharCode = char32_t;
 	export using GlyphSizeType = Geom::Vector2D<std::uint16_t>;
@@ -66,7 +66,7 @@ namespace Font{
 		CharCode code{};
 		GlyphSizeType size{};
 
-		constexpr bool operator==(const GlyphKey&) const = default;
+		constexpr friend bool operator==(const GlyphKey&, const GlyphKey&) noexcept = default;
 	};
 
 
@@ -284,20 +284,21 @@ namespace Font{
 	};
 
 	export struct FontFaceStorage{
-		GlyphSizeType lastSize{};
-
-		FontFace_Internal face{};
-
-		//OPTM flat it?
-		std::unordered_map<CharCode, std::unordered_map<GlyphSizeType, BitmapGlyph>> glyphs{};
-
-		FontFaceStorage* fallback{};
-		ext::TransferAdaptor<std::shared_mutex> readMutex{};
-
 		struct EmptyFontGlyphGenerator{
 			CharCode referenceCode{U' '};
 			Geom::Vec2 scale{Geom::norBaseVec2<float>};
 		};
+
+	private:
+		GlyphSizeType lastSize{};
+		std::shared_mutex readMutex{};
+
+	public:
+		FontFaceStorage* fallback{};
+		FontFace_Internal face{};
+
+		//OPTM flat it?
+		std::unordered_map<CharCode, std::unordered_map<GlyphSizeType, BitmapGlyph>> glyphs{};
 
 		std::unordered_map<CharCode, EmptyFontGlyphGenerator> emptyFontGlyphGenerators{
 				{U'\0', EmptyFontGlyphGenerator{U'\n', Geom::zeroVec2<float>}},
@@ -315,9 +316,7 @@ namespace Font{
 			: face{fontPath.data()}{}
 
 		auto& tryLoad(const CharCode code, const GlyphSizeType size){
-			if(size.x == 0 && size.y == 0){
-				throw std::invalid_argument("Invalid Size");
-			}
+			assert((size.x != 0 || size.y != 0) && "must at least one none zero");
 
 			{
 				std::shared_lock readLock{readMutex};
@@ -371,6 +370,14 @@ namespace Font{
 				return std::make_pair(toString(pair.second.code, pair.first), std::ref(pair.second));
 			});
 		}
+
+		FontFaceStorage(const FontFaceStorage& other) = delete;
+
+		FontFaceStorage(FontFaceStorage&& other) noexcept = delete;
+
+		FontFaceStorage& operator=(const FontFaceStorage& other) = delete;
+
+		FontFaceStorage& operator=(FontFaceStorage&& other) noexcept = delete;
 	};
 
 	export struct FontGlyphLoader{

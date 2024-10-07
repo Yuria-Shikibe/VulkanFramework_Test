@@ -85,7 +85,7 @@ export namespace Core::Ctrl{
 		}
 
 		constexpr bool hasCustomData() const noexcept{
-			return customeBind.getFullKey() != defaultBind.getFullKey();
+			return customeBind.pack() != defaultBind.pack();
 		}
 
 		[[nodiscard]] bool isHidden() const{ return hide; }
@@ -97,7 +97,7 @@ export namespace Core::Ctrl{
 		void updateRelativeBinds() const;
 
 		friend bool operator==(const Operation& lhs, const Operation& rhs){
-			return lhs.name == rhs.name && lhs.customeBind.getFullKey() == rhs.customeBind.getFullKey();
+			return lhs.name == rhs.name && lhs.customeBind.pack() == rhs.customeBind.pack();
 		}
 
 		friend bool operator!=(const Operation& lhs, const Operation& rhs){ return !(lhs == rhs); }
@@ -114,7 +114,7 @@ export namespace Core::Ctrl{
 		 * @return false if conflicted
 		 */
 		bool registerInfo(Operation& operation){
-			const auto key = operation.customeBind.getFullKey();
+			const auto key = operation.customeBind.pack();
 			if(const auto itr = groupOccupiedKeys.find(key); itr != groupOccupiedKeys.end()){
 				itr->second++;
 				if(itr->second > 1)return false;
@@ -152,7 +152,7 @@ export namespace Core::Ctrl{
 		}
 	public:
 		Instruction instruction{};
-		InputBindGroup* targetGroup{};
+		KeyMapping* targetGroup{};
 
 		[[nodiscard]] OperationGroup() = default;
 
@@ -267,7 +267,7 @@ export namespace Core::Ctrl{
 			if(!targetGroup)return false;
 
 			// new (targetGroup) InputBindGroup;
-			targetGroup->clearAllBinds();
+			targetGroup->clear();
 
 			for (const auto & bind : binds | std::views::values){
 				targetGroup->registerBind(InputBind{bind.customeBind});
@@ -288,11 +288,15 @@ export namespace Core::Ctrl{
 	};
 
 	void Operation::setCustom(const int key, const int mode){
-		group->eraseCount(customeBind.getFullKey());
-		customeBind.setKey(key);
-		customeBind.setMode(mode);
-		customeBind.setIgnoreMode(defaultBind.isIgnoreMode() && mode == Mode::None);
-		group->addCount(customeBind.getFullKey());
+		group->eraseCount(customeBind.pack());
+		customeBind.key = key;
+		customeBind.mode = mode;
+
+		// customeBind.setKey(key);
+		// customeBind.setMode(mode);
+		// customeBind.setIgnoreMode(defaultBind.isIgnoreMode() && mode == Mode::None);
+
+		group->addCount(customeBind.pack());
 
 		updateRelativeBinds();
 	}
@@ -304,7 +308,7 @@ export namespace Core::Ctrl{
 
 		for (const auto& relativeOperation : relativeOperations){
 			if(auto itr = bind.find(relativeOperation); itr != bind.end()){
-				itr->second.setCustom(customeBind.getKey(), customeBind.mode());
+				itr->second.setCustom(customeBind.key, customeBind.mode);
 			}
 		}
 	}
@@ -331,9 +335,7 @@ template <>
 	struct ext::json::JsonSerializator<Core::Ctrl::Operation>{
 	static void write(JsonValue& jsonValue, const Core::Ctrl::Operation& data){
 		jsonValue.asObject();
-		jsonValue.append("full", static_cast<Integer>(data.customeBind.getFullKey()));
-		jsonValue.append("ignore", data.customeBind.isIgnoreMode());
-
+		jsonValue.append("full", static_cast<Integer>(data.customeBind.pack()));
 	}
 
 	static void read(const JsonValue& jsonValue, Core::Ctrl::Operation& data){
@@ -341,10 +343,6 @@ template <>
 		if(const auto val = map.try_find("full")){
 			auto [k, a, m] = Core::Ctrl::unpackKey(val->as<int>());
 			data.setCustom(k, m);
-		}
-
-		if(const auto val = map.try_find("ignore")){
-			data.customeBind.setIgnoreMode(val->as<bool>());
 		}
 	}
 };

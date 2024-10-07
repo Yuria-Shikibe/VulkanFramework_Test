@@ -1,3 +1,7 @@
+module;
+
+#include <cassert>
+
 export module ext.event;
 
 import std;
@@ -40,8 +44,7 @@ namespace ext {
 		template <typename T>
 		void checkRegister() const{
 #if DEBUG_CHECK
-			if(!registered.empty() && !registered.contains(index_of<T>()))
-				throw std::runtime_error{"Unexpected Event Type!"};
+			assert(registered.empty() || registered.contains(index_of<T>()));
 #endif
 		}
 

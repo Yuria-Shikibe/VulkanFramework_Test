@@ -81,7 +81,7 @@ namespace Assets::Ctrl{
 	})};
 
 	export{
-		CC::InputBindGroup mainControlGroup{};
+		CC::KeyMapping mainControlGroup{};
 
 		CC::OperationGroup basicGroup{
 				"basic-group", {
@@ -107,10 +107,10 @@ namespace Assets::Ctrl{
 			{gameGroup.getName(), &gameGroup}
 		};
 
-		ext::string_hash_map<CC::InputBindGroup*> relatives{};
+		ext::string_hash_map<CC::KeyMapping*> relatives{};
 
 		void apply(){
-			mainControlGroup.clearAllBinds();
+			mainControlGroup.clear();
 
 			for (auto group : allGroups | std::ranges::views::values){
 				for (const auto & bind : group->getBinds() | std::ranges::views::values){

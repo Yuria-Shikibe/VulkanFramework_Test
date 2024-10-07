@@ -4,6 +4,7 @@ import ext.stack_trace;
 import std;
 
 export namespace ext{
+	//all deprecated
 
 	class RuntimeException : public std::exception{
 	public:
@@ -12,7 +13,6 @@ export namespace ext{
 		std::string data{};
 
 		explicit RuntimeException(const std::string& str, const std::source_location& location = std::source_location::current());
-
 
 		[[nodiscard]] char const* what() const override;
 

@@ -465,11 +465,11 @@ namespace Core::UI{
 			}
 		}
 
-		[[nodiscard]] bool tooltipShouldDrop(Geom::Vec2 cursorPos) const override{
+		[[nodiscard]] bool tooltipShouldDrop(const Geom::Vec2 cursorPos) const override{
 			return !containsPos(cursorPos);
 		}
 
-		[[nodiscard]] bool tooltipShouldBuild(Geom::Vec2 cursorPos) const override{
+		[[nodiscard]] bool tooltipShouldBuild(const Geom::Vec2 cursorPos) const override{
 			return true
 				&& hasTooltip()
 				&& tooltipProp.autoBuild()

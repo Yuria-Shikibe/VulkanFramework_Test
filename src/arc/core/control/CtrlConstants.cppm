@@ -60,12 +60,10 @@ export namespace Core::Ctrl{
 		constexpr int Bits = 8;
 		constexpr int Mask = genMaskFromBits(Bits);
 
-		static_assert(Mask == 0b11'11'11'11);
-
 		constexpr int Frequent_Bound = Shift | Ctrl | Alt/* | Super | CapLock | NumLock */ + 1;
 
 		[[nodiscard]] constexpr bool matched(const int mode, const int expectedMode) noexcept{
-			return (mode & Mask) == (expectedMode & Mask) || (expectedMode & Mask) == Ignore;
+			return (mode & Mask) == (expectedMode & Mask) || (expectedMode & Mask) & Ignore;
 		}
 
 

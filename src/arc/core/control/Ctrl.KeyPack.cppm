@@ -12,12 +12,6 @@ export namespace Core::Ctrl{
 
 	using PackedKey = unsigned;
 
-	struct UnpackedKey{
-		int keyCode;
-		int act;
-		int mode;
-	};
-
 	/**
 	* @code
 	*	0b 0000'0000  0000'0000  0000'0000  0000'0000
@@ -31,6 +25,19 @@ export namespace Core::Ctrl{
 			| (mode & Mode::Mask) << (16 + Act::Bits);
 	}
 
+	struct UnpackedKey{
+		int key;
+		int act;
+		int mode;
+
+		[[nodiscard]] constexpr PackedKey pack() const noexcept{
+			return packKey(key, act, mode);
+		}
+
+		constexpr friend bool operator==(const UnpackedKey& lhs, const UnpackedKey& rhs) noexcept = default;
+	};
+
+
 
 	/**
 	 * @brief
@@ -38,7 +45,7 @@ export namespace Core::Ctrl{
 	 */
 	constexpr decltype(auto) unpackKey(const PackedKey fullKey) noexcept{
 		return UnpackedKey{
-				.keyCode = static_cast<int>(fullKey & KeyMask),
+				.key = static_cast<int>(fullKey & KeyMask),
 				.act = static_cast<int>(fullKey >> 16 & Act::Mask),
 				.mode = static_cast<int>(fullKey >> 24 & Mode::Mask)
 			};
@@ -79,6 +86,4 @@ export namespace Core::Ctrl{
 			return Key::matched(tk, ok) && Act::matched(ta, oa) && Mode::matched(tm, om);
 		}
 	};
-
-
 }

@@ -59,7 +59,8 @@ export bool operator&(const ext::algo::merge_policy l, const ext::algo::merge_po
 export namespace ext::algo{
 	template <typename K, typename V, typename Hs, typename Eq, typename Alloc, typename Append>
 		requires std::same_as<std::decay_t<Append>, std::unordered_map<K, V, Hs, Eq, Alloc>>
-	void bool_merge(const merge_policy op,
+	void bool_merge(
+		const merge_policy op,
 		std::unordered_map<K, V, Hs, Eq, Alloc>& to,
 		Append&& append
 	){

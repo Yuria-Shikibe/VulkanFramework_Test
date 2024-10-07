@@ -15,10 +15,7 @@ namespace Core::UI{
 	namespace ButtonTag{
 		export enum TagEnum : unsigned{
 			none = 0,
-			forwardKey = 1 << 0,
-			// onReleaseOnly = 1 << 1,
-			// forward = std::bit_ceil(static_cast<unsigned>(Ctrl::Mouse::Count)),
-			// onReleaseOnly = forward << 1,
+			ignoreKey = 1 << 0,
 		};
 
 		export
@@ -29,21 +26,10 @@ namespace Core::UI{
 		};
 
 		export {
-			constexpr auto Forward = InvokeTag<forwardKey, Ctrl::KeyPack{0, Ctrl::Act::Ignore, Ctrl::Mode::Ignore}>{};
-			constexpr auto Normal = InvokeTag<forwardKey, Ctrl::KeyPack{0, Ctrl::Act::Release, Ctrl::Mode::Ignore}>{};
+			constexpr auto Forward = InvokeTag<ignoreKey, Ctrl::KeyPack{0, Ctrl::Act::Ignore, Ctrl::Mode::Ignore}>{};
+			constexpr auto Normal = InvokeTag<ignoreKey, Ctrl::KeyPack{0, Ctrl::Act::Release, Ctrl::Mode::Ignore}>{};
 		}
 	}
-
-	struct T{
-		int value;
-	};
-
-	struct T2 :T{
-		void foo(){
-			T::value = 1;
-		}
-	};
-
 
 	export
 	template <std::derived_from<Element> T>
@@ -57,21 +43,21 @@ namespace Core::UI{
 			Element::cursorState.registerDefEvent(Element::events());
 
 			Element::events().template on<Event::Click>([this](const Event::Click& e){
-				if(callback && Element::containsPos(e.pos)) std::invoke(callback, *this, e);
+				if(callback && Element::containsPos(e.pos))callback(*this, e);
 			});
 
 			Element::interactivity = Interactivity::enabled;
 			Element::property.maintainFocusUntilMouseDrop = true;
 		}
 
-		void setCallback(CallbackType&& func){
+		void setButtonCallback(CallbackType&& func){
 			callback = std::move(func);
 		}
 
 	private:
 		template <ButtonTag::TagEnum tag, Ctrl::KeyPack keyPack, std::invocable<Button&, Event::Click> Func>
 		decltype(auto) assignTagToFunc(Func&& func){
-			if constexpr(tag & ButtonTag::forwardKey){
+			if constexpr(tag & ButtonTag::ignoreKey){
 				if constexpr(keyPack.action() == Ctrl::Act::Ignore && keyPack.mode() == Ctrl::Mode::Ignore){
 					return std::forward<Func>(func);
 				} else{
@@ -92,7 +78,7 @@ namespace Core::UI{
 
 	public:
 		template <ButtonTag::TagEnum tag, Ctrl::KeyPack keyPack, typename Func>
-		void setCallback(ButtonTag::InvokeTag<tag, keyPack>, Func&& callback){
+		void setButtonCallback(ButtonTag::InvokeTag<tag, keyPack>, Func&& callback){
 
 			if constexpr(std::invocable<Func, Button&, Event::Click> && std::assignable_from<CallbackType, Func>){
 				this->callback = Button::assignTagToFunc<tag, keyPack>(std::forward<Func>(callback));
@@ -112,7 +98,7 @@ namespace Core::UI{
 
 	void foo(){
 		Button<Element> button;
-		button.setCallback(
+		button.setButtonCallback(
 			ButtonTag::InvokeTag<ButtonTag::none, Ctrl::KeyPack{Ctrl::Mouse::LMB}>{},
 			[](Event::Click){
 

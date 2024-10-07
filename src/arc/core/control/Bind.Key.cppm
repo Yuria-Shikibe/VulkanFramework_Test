@@ -12,7 +12,7 @@ export namespace Core::Ctrl{
 		using InputBind::InputBind;
 
 		bool activated(GLFWwindow* window) const {
-			return glfwGetKey(window, key) == expectedAct;
+			return glfwGetKey(window, key) == act;
 		}
 	};
 }

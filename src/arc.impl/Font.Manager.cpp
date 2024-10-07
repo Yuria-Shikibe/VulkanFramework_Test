@@ -28,10 +28,11 @@ obtainGlyph(const GlyphKey key, const Graphic::ImageAtlas* atlas, Graphic::Image
 }
 
 
-Font::FontManager::FontManager(Graphic::ImageAtlas& atlas, const std::string_view fontPageName): atlas{&atlas},
-                                                                                                 fontPageName{fontPageName}, fontPage{&atlas.registerPage(fontPageName)}{}
+Font::FontManager::FontManager(Graphic::ImageAtlas& atlas, const std::string_view fontPageName):
+	atlas{&atlas},
+	fontPage{&atlas.registerPage(fontPageName)}, fontPageName{fontPageName}{}
 
-Font::IndexedFontFace* Font::FontManager::getFontFace(FontFaceID id) const{
+Font::IndexedFontFace* Font::FontManager::getFontFace(const FontFaceID id) const{
 	if(id < fontFaces_fastAccess.size()){
 		return fontFaces_fastAccess[id];
 	}
@@ -57,15 +58,14 @@ Font::Glyph& Font::FontManager::getGlyph(const std::string_view fontName, const 
 	throw std::invalid_argument("Failed To Find Face with given id.");
 }
 
-Font::FontFaceID Font::FontManager::registerFace(FontFaceStorage&& faceStorage){
-	auto name = faceStorage.face.getFullname();
+Font::FontFaceID Font::FontManager::registerFace(const std::string_view keyName, const std::string_view fontName){
 	const auto index = fontFaces.size();
-	auto [itr, suc] = fontFaces.try_emplace(std::move(name), IndexedFontFace{std::move(faceStorage)});
+	auto [itr, suc] = fontFaces.try_emplace(std::string(keyName), fontName, index);
+
 	if(suc){
-		itr->second.index = index;
 		fontFaces_fastAccess.resize(index + 1);
 		fontFaces_fastAccess[index] = &itr->second;
 	}
 
-	return itr->second.index;
+	return itr->second.getIndex();
 }

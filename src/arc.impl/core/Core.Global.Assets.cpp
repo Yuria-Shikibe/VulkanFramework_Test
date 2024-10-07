@@ -37,7 +37,7 @@ void Core::Global::Asset::init(const Vulkan::VulkanManager& manager){
 		imageAtlas.registerNamedImageViewRegionGuaranteed("ui.cent", Graphic::Pixmap{::Assets::Dir::texture.find("test-1.png")});
 	}
 
-	fonts = new Font::FontManager{*atlas};
+	fonts = new Font::FontManager{*atlas, AtlasPages::Font};
 
 	{
 		Font::GlobalFontManager = fonts;
@@ -45,7 +45,7 @@ void Core::Global::Asset::init(const Vulkan::VulkanManager& manager){
 		for (const auto & [name, abbr] : DefFonts){
 			Font::FontFaceStorage fontStorage{Assets::Dir::font.subFile(name).absolutePath().string().c_str()};
 
-			auto id = fonts->registerFace(std::move(fontStorage));
+			auto id = fonts->registerFace(abbr, Assets::Dir::font.subFile(name).absolutePath().string());
 			Font::namedFonts.insert_or_assign(abbr, id);
 		}
 	}

@@ -21,7 +21,7 @@ export namespace Core::Ctrl{
 		std::vector<InputListener*> inputKeyListeners{};
 		std::vector<InputListener*> inputMouseListeners{};
 
-		InputBindGroup binds{};
+		KeyMapping binds{};
 
 	protected:
 		bool isInbound{false};
@@ -31,13 +31,13 @@ export namespace Core::Ctrl{
 		Geom::Vec2 mouseVelocity{};
 		Geom::Vec2 scrollOffset{};
 
-		std::vector<InputBindGroup*> subInputs{};
+		std::vector<KeyMapping*> subInputs{};
 
 	public:
 		/**
 		 * @return false if Notfound
 		 */
-		bool activeBinds(const InputBindGroup* binds){
+		bool activeBinds(const KeyMapping* binds){
 			if(const auto itr = std::ranges::find(subInputs, binds); itr != subInputs.end()){
 				itr.operator*()->activate();
 				return true;
@@ -48,7 +48,7 @@ export namespace Core::Ctrl{
 		/**
 		* @return false if Notfound
 		*/
-		bool deactiveBinds(const InputBindGroup* binds){
+		bool deactiveBinds(const KeyMapping* binds){
 			if(const auto itr = std::ranges::find(subInputs, binds); itr != subInputs.end()){
 				itr.operator*()->deactivate();
 				return true;
@@ -56,12 +56,20 @@ export namespace Core::Ctrl{
 			return false;
 		}
 
-		void registerSubInput(InputBindGroup* input){
+		void registerSubInput(KeyMapping* input){
 			subInputs.push_back(input);
 		}
 
-		void eraseSubInput(InputBindGroup* input){
+		void eraseSubInput(KeyMapping* input){
 			std::erase(subInputs, input);
+		}
+
+		void inform(const int button, const int action, const int mods){
+			binds.mapping.inform(button, action, mods);
+
+			for(auto* subInput : subInputs){
+				subInput->mapping.inform(button, action, mods);
+			}
 		}
 
 		/**
@@ -69,27 +77,19 @@ export namespace Core::Ctrl{
 		 * this is an infrequent operation so just keep the code clean.
 		 */
 		void informMouseAction(const int button, const int action, const int mods){
-			binds.informMouseAction(button, action, mods);
-
 			for(const auto& listener : inputMouseListeners){
 				listener->inform(button, action, mods);
 			}
 
-			for(auto* subInput : subInputs){
-				subInput->informMouseAction(button, action, mods);
-			}
+			inform(button, action, mods);
 		}
 
 		void informKeyAction(const int key, const int scanCode, const int action, const int mods){
-			binds.informKeyAction(key, action, mods);
-
 			for(const auto& listener : inputKeyListeners){
 				listener->inform(key, action, mods);
 			}
 
-			for(auto* subInput : subInputs){
-				subInput->informKeyAction(key, action, mods);
-			}
+			inform(key, action, mods);
 		}
 
 		void cursorMoveInform(const float x, const float y){

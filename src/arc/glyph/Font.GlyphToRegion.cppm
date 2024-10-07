@@ -34,11 +34,23 @@ export namespace Font{
 		}
 	};
 
-	struct IndexedFontFace : FontFaceStorage{
+	class IndexedFontFace : FontFaceStorage{
 		FontFaceID index{};
+
+	public:
+		using FontFaceStorage::FontFaceStorage;
 
 		std::unordered_map<GlyphKey, Glyph> validGlyphs{};
 
+		[[nodiscard]] IndexedFontFace() = default;
+
+		[[nodiscard]] IndexedFontFace(const std::string_view fontPath, const FontFaceID index)
+			: FontFaceStorage{fontPath},
+			  index{index}{}
+
+		[[nodiscard]] FontFaceID getIndex() const noexcept{
+			return index;
+		}
 
 		/**
 		 * @brief If guaranteed to get a glyph from cache, then atlas and page can be @code nullptr@endcode
@@ -59,17 +71,21 @@ export namespace Font{
 	};
 
 	struct FontManager{
+	private:
 		Graphic::ImageAtlas* atlas{};
 		Graphic::ImagePage* fontPage{};
-
 		std::string fontPageName{"font"};
-
 		ext::string_hash_map<IndexedFontFace> fontFaces{};
 		std::vector<IndexedFontFace*> fontFaces_fastAccess{};
 
+	public:
 		[[nodiscard]] FontManager() = default;
 
 		[[nodiscard]] explicit FontManager(Graphic::ImageAtlas& atlas, std::string_view fontPageName = "font");
+
+		[[nodiscard]] std::string_view pageName() const noexcept{
+			return fontPageName;
+		}
 
 		[[nodiscard]] IndexedFontFace* getFontFace(FontFaceID id) const;
 
@@ -77,7 +93,7 @@ export namespace Font{
 
 		[[nodiscard]] Glyph& getGlyph(std::string_view fontName, GlyphKey key);
 
-		FontFaceID registerFace(FontFaceStorage&& faceStorage);
+		FontFaceID registerFace(std::string_view keyName, std::string_view fontName);
 
 		//TODO allow erase registered face?
 

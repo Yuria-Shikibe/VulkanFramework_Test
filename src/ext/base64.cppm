@@ -29,30 +29,32 @@ export namespace ext::encode{
 	};
 
 	template<typename RetContainer, std::ranges::sized_range Range>
-		requires requires(Range range, RetContainer cont){
-			range.operator[](0);
+		requires requires(RetContainer cont){
+			requires std::ranges::random_access_range<Range>;
 			requires sizeof(std::ranges::range_value_t<Range>) == 1;
 			cont.push_back(std::uint8_t{});
 		}
 	[[nodiscard]] constexpr RetContainer encode(Range&& toEncode){
 		RetContainer encoded{};
 
+		const auto sz = std::ranges::size(toEncode);
+
 		if constexpr (requires (RetContainer cont){
 			cont.reserve(std::size_t{});
 		}){
-			encoded.reserve(std::ranges::size(toEncode) * 4);
+			encoded.reserve(sz * 4);
 		}
 
 		size_t i;
-		for(i = 0; i + 3 <= std::ranges::size(toEncode); i += 3){
+		for(i = 0; i + 3 <= sz; i += 3){
 			encoded.push_back(alphabet_map[toEncode[i] >> 2]);
 			encoded.push_back(alphabet_map[toEncode[i] << 4 & 0x30 | toEncode[i + 1] >> 4]);
 			encoded.push_back(alphabet_map[toEncode[i + 1] << 2 & 0x3c | toEncode[i + 2] >> 6]);
 			encoded.push_back(alphabet_map[toEncode[i + 2] & 0x3f]);
 		}
 
-		if(i < std::ranges::size(toEncode)){
-			if(const size_t tail = std::ranges::size(toEncode) - i; tail == 1){
+		if(i < sz){
+			if(const size_t tail = sz - i; tail == 1){
 				encoded.push_back(alphabet_map[toEncode[i] >> 2]);
 				encoded.push_back(alphabet_map[toEncode[i] << 4 & 0x30]);
 				encoded.push_back('=');
@@ -69,8 +71,8 @@ export namespace ext::encode{
 	}
 
 	template<typename RetContainer, std::ranges::sized_range Range>
-	requires requires(Range range, RetContainer cont){
-		range.operator[](0);
+	requires requires(RetContainer cont){
+		requires std::ranges::random_access_range<Range>;
 		requires sizeof(std::ranges::range_value_t<Range>) == 1;
 		cont.push_back(std::uint8_t{});
 	}

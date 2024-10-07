@@ -8,11 +8,11 @@ import :InputBind;
 import std;
 
 export namespace Core::Ctrl{
-	struct MouseBind : InputBind{
+	struct [[deprecated]] MouseBind : InputBind{
 		using InputBind::InputBind;
 
 		bool queryActivated(GLFWwindow* window) const noexcept{
-			return glfwGetMouseButton(window, getKey()) == expectedAct;
+			return glfwGetMouseButton(window, key) == act;
 		}
 	};
 }
