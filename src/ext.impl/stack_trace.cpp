@@ -38,7 +38,7 @@ void ext::print_stack_trace(std::ostream& ss, unsigned skip){
 
 				if(spec){
 					for(const auto& basic_string_view : splited
-						| std::views::transform(ext::to<std::string_view>{})
+						| std::views::transform(ext::convert_to<std::string_view>{})
 						| std::views::drop_while(ext::algo::begin_with_digit)
 						| std::views::take(1)
 					){
@@ -46,7 +46,7 @@ void ext::print_stack_trace(std::ostream& ss, unsigned skip){
 					}
 				} else{
 					for(const auto& basic_string_view : splited
-						| std::views::transform(ext::to<std::string_view>{})
+						| std::views::transform(ext::convert_to<std::string_view>{})
 						| std::views::drop_while(ext::algo::begin_with_digit)
 					){
 						std::print(ss, "::{}", basic_string_view, spec ? "->" : "");

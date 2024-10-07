@@ -11,6 +11,8 @@ export import Core.UI.Event;
 export import Core.UI.Flags;
 export import Core.UI.Util;
 export import Core.UI.CellBase;
+export import Core.UI.Action;
+
 export import Core.Ctrl.Constants;
 
 import Core.UI.StatedLength;
@@ -28,6 +30,7 @@ import std;
 //
 //
 export namespace Graphic{
+	struct RendererUI;
 	struct Batch_Exclusive;
 	// struct RendererUI;
 }
@@ -51,9 +54,19 @@ namespace Core::UI{
 
 	export struct ElemGraphicData{
 		Graphic::Color baseColor{};
-		mutable Graphic::Color tmpColor{};
-		float baseOpacity{};
-		float opacity{};
+		float inherentOpacity{1.f};
+		float contextOpacity{1.f};
+
+
+		[[nodiscard]] constexpr float getOpacity() const noexcept{
+			return inherentOpacity * contextOpacity;
+		}
+
+		[[nodiscard]] constexpr Graphic::Color getScaledColor() const noexcept{
+			return baseColor.copy().mulA(getOpacity());
+		}
+
+		// mutable Graphic::Color tmpColor{};
 		//TODO drawer
 
 		const ElementDrawer* drawer{&DefaultDrawer};
@@ -221,6 +234,9 @@ namespace Core::UI{
 
 		Group* parent{};
 		Scene* scene{};
+
+		std::queue<std::unique_ptr<Action<Element>>> actions{};
+
 	public:
 		//Layout Spec
 		LayoutState layoutState{};
@@ -240,6 +256,8 @@ namespace Core::UI{
 		}
 
 		[[nodiscard]] Graphic::Batch_Exclusive& getBatch() const noexcept;
+
+		[[nodiscard]] Graphic::RendererUI& getRenderer() const noexcept;
 
 		[[nodiscard]] const CursorState& getCursorState() const noexcept{
 			return cursorState;
@@ -273,6 +291,8 @@ namespace Core::UI{
 			return parent;
 		}
 
+		void updateOpacity(float val);
+
 		void setParent(Group* p) noexcept{
 			parent = p;
 		}
@@ -289,8 +309,13 @@ namespace Core::UI{
 		[[nodiscard]] ElemProperty& prop() noexcept{
 			return property;
 		}
+
 		[[nodiscard]] const ElemProperty& prop() const noexcept{
 			return property;
+		}
+
+		[[nodiscard]] const auto& graphicProp() const noexcept{
+			return property.graphicData;
 		}
 
 		ext::event_manager& events() noexcept{
@@ -306,6 +331,9 @@ namespace Core::UI{
 			return property.absoluteSrc + property.boarder.bot_lft();
 		}
 
+		void removeSelfFromParent();
+		void removeSelfFromParent_instantly();
+
 		void registerAsyncTask();
 
 		void notifyRemove();
@@ -319,13 +347,13 @@ namespace Core::UI{
 		[[nodiscard]] bool isInbounded() const noexcept;
 
 		void setFocusedScroll(bool focus) noexcept;
-
-		[[nodiscard]] constexpr bool isQuietInteractable() const noexcept{
-			return (interactivity != Interactivity::enabled /*&& static_cast<bool>(tooltipbuilder)*/) && isVisible();
-		}
+		//
+		// [[nodiscard]] constexpr bool isQuietInteractable() const noexcept{
+		// 	return (interactivity != Interactivity::enabled && hasTooltip()) && isVisible();
+		// }
 
 		[[nodiscard]] constexpr bool isInteractable() const noexcept{
-			return (interactivity == Interactivity::enabled/* || static_cast<bool>(tooltipbuilder)*/) && isVisible();
+			return (interactivity == Interactivity::enabled || hasTooltip()) && isVisible();
 		}
 
 		[[nodiscard]] constexpr bool touchDisabled() const noexcept{
@@ -345,7 +373,22 @@ namespace Core::UI{
 			});
 		}
 
-		//interface region
+		void buildTooltip() noexcept;
+
+		template <std::derived_from<Action<Element>> ActionType, typename ...T>
+		void pushAction(T&&... args){
+			actions.push(std::make_unique<ActionType>(std::forward<T>(args)...));
+		}
+
+		template <typename ...ActionType>
+			requires (std::derived_from<std::decay_t<ActionType>, Action<Element>> && ...)
+		void pushAction(ActionType&&... args){
+			actions.push(std::make_unique<std::decay_t<ActionType>>(std::forward<ActionType>(args)) ...);
+		}
+
+		// ------------------------------------------------------------------------------------------------------------------
+		// interface region
+		// ------------------------------------------------------------------------------------------------------------------
 
 		[[nodiscard]] virtual bool containsPos_parent(Geom::Vec2 cursorPos) const;
 
@@ -414,11 +457,11 @@ namespace Core::UI{
 
 		[[nodiscard]] TooltipAlignPos getAlignPolicy() const override{
 			switch(tooltipProp.followTarget){
-				case TooltipFollow::owner:{
+				case TooltipFollow::depends:{
 					return {Align::getVert(tooltipProp.followTargetAlign, property.getBound_absolute()), tooltipProp.tooltipSrcAlign};
 				}
 
-				default: return {TooltipFollow::none, tooltipProp.tooltipSrcAlign};
+				default: return {tooltipProp.followTarget, tooltipProp.tooltipSrcAlign};
 			}
 		}
 
@@ -428,12 +471,15 @@ namespace Core::UI{
 
 		[[nodiscard]] bool tooltipShouldBuild(Geom::Vec2 cursorPos) const override{
 			return true
-				&& toolTipBuilder
+				&& hasTooltip()
 				&& tooltipProp.autoBuild()
 				&& (tooltipProp.useStagnateTime ? cursorState.stagnateTime : cursorState.focusedTime)
 				> tooltipProp.minHoverTime;
 		}
 
+		void notifyDrop() override{
+			cursorState.focusedTime = cursorState.stagnateTime = -15.f;
+		}
 
 	protected:
 		[[nodiscard]] bool inboundOf(const Rect& clipSpace_abs) const noexcept{

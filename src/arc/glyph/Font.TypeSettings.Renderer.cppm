@@ -21,7 +21,7 @@ import Core.Vulkan.Vertex;
 
 export namespace Font::TypeSettings{
 
-	void draw(Graphic::Batch_Exclusive& batch, const std::shared_ptr<GlyphLayout>& layout, const Geom::Vec2 offset){
+	void draw(Graphic::Batch_Exclusive& batch, const std::shared_ptr<GlyphLayout>& layout, const Geom::Vec2 offset, float opacityScl = 1.f){
 		using namespace Graphic;
 
 		// Draw::DrawContext context{};
@@ -32,6 +32,8 @@ export namespace Font::TypeSettings{
 		// context.color.a = 0.45f;
 
 
+		Graphic::Color tempColor{};
+
 		for (const auto& row : layout->elements){
 			const auto lineOff = row.src + offset;
 			// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, row.getRectBound().move(offset), context.color);
@@ -40,11 +42,17 @@ export namespace Font::TypeSettings{
 				if(!glyph.glyph->view)continue;
 				auto [imageIndex, sz, dataPtr] = batch.acquire(glyph.glyph->view, 1);
 
+				tempColor = glyph.fontColor;
+
+				if(opacityScl != 1.f){
+					tempColor.a *= opacityScl;
+				}
+
 				new(dataPtr) std::array{
-					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v01},
-					Core::Vulkan::Vertex_UI{glyph.v10().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v11},
-					Core::Vulkan::Vertex_UI{glyph.v11().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v10},
-					Core::Vulkan::Vertex_UI{glyph.v01().add(lineOff), {imageIndex}, glyph.fontColor, glyph.glyph->v00},
+					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v01},
+					Core::Vulkan::Vertex_UI{glyph.v10().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v11},
+					Core::Vulkan::Vertex_UI{glyph.v11().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v10},
+					Core::Vulkan::Vertex_UI{glyph.v01().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v00},
 				};
 
 				// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{glyph.src, glyph.end}.move(lineOff), context.color);

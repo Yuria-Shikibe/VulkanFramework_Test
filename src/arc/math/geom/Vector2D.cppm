@@ -289,7 +289,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr float dst(const PassType other) const noexcept{
-			return std::sqrt(static_cast<float>(this->dst2(other)));
+			return Math::dst(x, y, other.x, other.y);
 		}
 
 		[[nodiscard]] constexpr float dst(const float tx, const float ty) const noexcept{

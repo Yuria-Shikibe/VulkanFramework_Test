@@ -63,135 +63,31 @@ import ext.heterogeneous;
 
 import Core.Vulkan.Vertex;
 
-import Graphic.Renderer.UI;
-import Graphic.Renderer.World;
-import Graphic.Color;
-import Graphic.ImageRegion;
-import Graphic.ImageNineRegion;
-import Graphic.Batch.Exclusive;
-import Graphic.Draw.Func;
-import Graphic.Draw.NinePatch;
-import Graphic.Batch.AutoDrawParam;
-
-
-import Core.Global;
-import Core.Global.Graphic;
-import Core.Global.UI;
-import Core.UI.Root;
-
 import Font;
-import Font.GlyphToRegion;
+import Font.Manager;
 import Font.TypeSettings;
 import Font.TypeSettings.Renderer;
 
 import Math.Rand;
 
-Core::Vulkan::Texture texturePester{};
-Core::Vulkan::Texture texturePesterLight{};
-
-Graphic::ImageViewNineRegion nineRegion_edge{};
-Graphic::ImageViewNineRegion nineRegion_base{};
-
-Graphic::ImageAtlas loadTex(){
-
-    std::unordered_map<std::string, std::uint64_t> tags{};
-
-    using namespace Core;
-    Graphic::ImageAtlas imageAtlas{Global::vulkanManager->context};
-
-    auto& mainPage = imageAtlas.registerPage("main");
-    auto& uiPage = imageAtlas.registerPage("ui");
-    auto& tempPage = imageAtlas.registerPage("temp");
-    auto& fontPage = imageAtlas.registerPage("font");
-
-    auto& page = fontPage.createPage(imageAtlas.context);
-
-    page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {1., 1., 1., 0.});
-
-    auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{Assets::Dir::texture.find("white.png")});
-    region.shrink(15);
-    Graphic::Draw::WhiteRegion = &mainPage.registerNamedRegion("white", std::move(region)).first;
-
-    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.base", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-back.png")});
-    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.edge", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-edge.png")});
-    imageAtlas.registerNamedImageViewRegionGuaranteed("ui.cent", Graphic::Pixmap{Assets::Dir::texture.find("test-1.png")});
-
-    nineRegion_base = {imageAtlas.at("ui.base"), Align::Pad<std::uint32_t>{8, 8, 8, 8}};
-    nineRegion_edge = {
-        imageAtlas.at("ui.edge"),
-        Align::Pad<std::uint32_t>{8, 8, 8, 8},
-        imageAtlas.at("ui.cent"),
-        // {200, 200},
-        Align::Scale::bounded
-    };
-
-
-    return imageAtlas;
-}
-
-Font::FontManager initFontManager(Graphic::ImageAtlas& atlas){
-    Font::FontManager fontManager{atlas};
-
-    //must with NRVO
-    Font::GlobalFontManager = &fontManager;
-
-    std::vector<std::pair<std::string_view, std::string_view>> font{
-        {"SourceHanSerifSC-SemiBold.otf", "srcH"},
-        {"telegrama.otf", "tele"}
-    };
-
-    for (const auto & [name, key] : font){
-        Font::FontFaceStorage fontStorage{Assets::Dir::font.subFile(name).absolutePath().string().c_str()};
-        Font::FontGlyphLoader loader{
-            .storage = fontStorage,
-            .size = {0, 48},
-            .sections = {{std::from_range, Font::ASCII_CHARS}}
-        };
-
-        auto id = fontManager.registerFace(std::move(fontStorage));
-        Font::namedFonts.insert_or_assign(key, id);
-    }
-
-    return fontManager;
-}
-
-struct TestT{
-    int v1{};
-    int rank{};
-};
-
-// int main(){
-//     std::vector<int> arr {5, 6, 7, 8 ,9 ,0};
-//
-//     for(int index; auto val : arr | std::views::enumerate){
-//         std::println("[{}] = {}", index, val);
-//
-//         ++index;
-//     }
-//
-//     for(auto&& [i, val] : arr | std::views::enumerate){
-//         std::println("[{}] = {}", i, val);
-//     }
-// }
+import Core.Global;
 
 
 int main(){
     using namespace Core;
 
-	Global::init();
+	Global::init_context();
 
     Test::compileAllShaders();
 
 	Assets::load(Global::vulkanManager->context);
 
-    Global::postInit();
+    Global::init_assetsAndRenderers();
 
     using namespace Core::Global;
 
     File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
-    auto imageAtlas = loadTex();
-
-    Font::FontManager fontManager = initFontManager(imageAtlas);
+    Test::loadTex();
 
     Test::initDefUI();
 
@@ -204,11 +100,11 @@ int main(){
     // parser.taskQueue.handleAll();
     // rst->get();
 
-	texturePester = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
-	texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.png)");
+	Test::texturePester = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
+	Test::texturePester.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.png)");
 
-	texturePesterLight = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
-	texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
+	Test::texturePesterLight = Vulkan::Texture{vulkanManager->context.physicalDevice, vulkanManager->context.device};
+	Test::texturePesterLight.loadPixmap(vulkanManager->obtainTransientCommand(), Assets::Dir::texture / R"(pester.light.png)");
 
     std::uint32_t fps_count{};
     float sec{};
@@ -250,7 +146,7 @@ int main(){
 
         if constexpr (false){
             {
-                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(Test::texturePester.getView());
                 new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, baseColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, baseColor, {1.0f, 1.0f}},
@@ -260,7 +156,7 @@ int main(){
             }
 
             {
-                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(Test::texturePesterLight.getView());
                 new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off), 0.7f, {imageIndex}, lightColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off), 0.7f, {imageIndex}, lightColor, {1.0f, 1.0f}},
@@ -270,7 +166,7 @@ int main(){
             }
 
             {
-                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePester.getView());
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(Test::texturePester.getView());
                 new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, baseColor, {1.0f, 1.0f}},
@@ -280,7 +176,7 @@ int main(){
             }
 
             {
-                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(texturePesterLight.getView());
+                auto [imageIndex, s, dataPtr, captureLock] = rendererWorld->batch.acquire(Test::texturePesterLight.getView());
                 new(dataPtr) std::array{
                     Vulkan::Vertex_World{Geom::Vec2{0  , 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {0.0f, 1.0f}},
                     Vulkan::Vertex_World{Geom::Vec2{800, 0  }.add(off2), 0.5f, {imageIndex}, lightColor, {1.0f, 1.0f}},
@@ -310,7 +206,7 @@ int main(){
         // param << imageAtlas.find("main.frame");
         //
         // Graphic::Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Graphic::Colors::AQUA);
-        Graphic::Draw::drawNinePatch(param, nineRegion_edge, rect, Graphic::Colors::AQUA);
+        Graphic::Draw::drawNinePatch(param, Test::nineRegion_edge, rect, Graphic::Colors::AQUA);
 
         // Font::TypeSettings::draw(Global::UI::renderer->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 
@@ -335,13 +231,9 @@ int main(){
 
 
     vkDeviceWaitIdle(vulkanManager->context.device);
-    // gcm = {};
 
-
-    imageAtlas = {};
-    fontManager = {};
-    texturePester = {};
-	texturePesterLight = {};
+    Test::texturePester = {};
+	Test::texturePesterLight = {};
 
 	Assets::dispose();
 

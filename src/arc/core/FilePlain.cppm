@@ -47,7 +47,7 @@ export namespace Core{
 		ext::string_hash_map<File> directories{};
 
 		void build(){
-			for(File&& file : std::filesystem::recursive_directory_iterator(rootDir.getPath()) | std::views::transform(ext::to<File>{})){
+			for(File&& file : std::filesystem::recursive_directory_iterator(rootDir.getPath()) | std::views::transform(ext::convert_to<File>{})){
 				std::pair<ext::string_hash_map<File>::iterator, bool> rst{};
 
 				if(file.isDir()){

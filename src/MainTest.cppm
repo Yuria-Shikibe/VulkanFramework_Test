@@ -11,18 +11,62 @@ import ext.meta_programming;
 
 import std;
 
-import Core.UI.Root;
-import Core.UI.BedFace;
-import Core.UI.ScrollPanel;
-import Core.UI.CellEmbryo;
-import Core.UI.Table;
-import Core.UI.TextElement;
-import Core.UI.Slider;
+import Core.Global;
 
-import Core.Global.UI;
+export import Core.UI.Root;
+export import Core.UI.BedFace;
+export import Core.UI.ScrollPanel;
+export import Core.UI.CellEmbryo;
+export import Core.UI.Table;
+export import Core.UI.TextElement;
+export import Core.UI.ImageDisplay;
+export import Core.UI.Slider;
+export import Core.UI.RegionDrawable;
+
+export import Core.Global.UI;
+export import Core.Global;
+export import Core.Global.Graphic;
+export import Core.Global.Assets;
+import Core.InitAndTerminate;
+
+export import Graphic.Renderer.UI;
+export import Graphic.Renderer.World;
+export import Graphic.Color;
+export import Graphic.ImageRegion;
+export import Graphic.ImageNineRegion;
+export import Graphic.Batch.Exclusive;
+export import Graphic.Draw.Func;
+export import Graphic.Draw.NinePatch;
+export import Graphic.Batch.AutoDrawParam;
+export import Graphic.Pixmap;
+export import Graphic.ImageAtlas;
+
+import Core.Vulkan.Texture;
 
 export namespace Test{
 	static_assert(Core::UI::ElemInitFunc<decltype([](int, Core::UI::BedFace&){})>);
+
+	Core::Vulkan::Texture texturePester{};
+	Core::Vulkan::Texture texturePesterLight{};
+
+	Graphic::ImageViewNineRegion nineRegion_edge{};
+	Graphic::ImageViewNineRegion nineRegion_base{};
+
+	void loadTex(){
+		using namespace Core::Global::Asset;
+		atlas->registerNamedImageViewRegionGuaranteed("ui.base", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-back.png")});
+		atlas->registerNamedImageViewRegionGuaranteed("ui.edge", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-edge.png")});
+		atlas->registerNamedImageViewRegionGuaranteed("ui.cent", Graphic::Pixmap{Assets::Dir::texture.find("test-1.png")});
+
+		nineRegion_base = {atlas->at("ui.base"), Align::Pad<std::uint32_t>{8, 8, 8, 8}};
+		nineRegion_edge = {
+			atlas->at("ui.edge"),
+			Align::Pad<std::uint32_t>{8, 8, 8, 8},
+			atlas->at("ui.cent"),
+			// {200, 200},
+			Align::Scale::clamped
+		};
+	}
 
 	void initDefUI(){
 		//return;
@@ -52,11 +96,12 @@ export namespace Test{
 							std::println(std::cout, "{}", s.getProgress());
 							std::cout.flush();
 						});
+
 						slider.setTooltipState({
-							.followTarget = Core::UI::TooltipFollow::owner,
+							.followTarget = Core::UI::TooltipFollow::depends,
 							.followTargetAlign = Align::Pos::bottom_left,
 							.tooltipSrcAlign = Align::Pos::top_left,
-						}, [](Core::UI::Element&, Core::UI::FlexTable_Dynamic& table){
+						}, [](Core::UI::FlexTable_Dynamic& table){
 							table.defaultCell.setSize(220.f, 80.f).setMargin(5.f);
 							table.emplaceInit([](Core::UI::Slider& slider){
 								slider.setHoriOnly();
@@ -68,15 +113,26 @@ export namespace Test{
 
 							table.endRow();
 
-							table.emplaceInit([](Core::UI::Slider& slider){
-								// slider.setHoriOnly();
+							table.emplaceInit([](Core::UI::TextElement& text){
+								text.setText("叮咚鸡ahsf;hl");
+								text.setTextScale(.8f);
 							});
+
+							table.emplaceInit([](Core::UI::ImageDisplay& display){
+								display.setDrawable(Core::UI::TextureNineRegionDrawable_Ref{&nineRegion_edge});
+								display.scaling = Align::Scale::stretch;
+							});
+
+							table.emplace<Core::UI::ImageDisplay>(
+								Core::UI::TextureNineRegionDrawable_Ref{&nineRegion_edge},
+								Align::Scale::stretch);
 						});
 					}).setWidth(500).setMargin(5);
 
 					v.emplaceInit([](Core::UI::TextElement& e){
 						e.glyphSizeDependency = {true, true};
 						// e.resize({500, 500});
+						e.setTextScale(.5);
 						e.setText("ajsdhash\n叮咚鸡大狗叫djahjsdhasdh;hjgfhajshgj123123123");
 						e.textAlignMode = Align::Pos::top_left;
 					}).setExternal({true, true}).setMargin(5);

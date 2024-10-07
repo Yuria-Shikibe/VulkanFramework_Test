@@ -68,6 +68,9 @@ namespace Graphic{
 			this->uv = region;
 		}
 
+		[[nodiscard]] InstantBatchAutoParam(Batch_Exclusive& batch)
+			: batch{&batch}{}
+
 		InstantBatchAutoParam& operator++(){
 			auto param = batch->acquire(imageView);
 			this->dataPtr = param.dataPtr;
@@ -107,6 +110,18 @@ namespace Graphic{
 
 		}
 	};
+
+	export
+	template <typename Vertex = int, Draw::VertexModifier<Vertex> T = std::identity>
+	Draw::DrawParam<T> getParamOf(Batch_Exclusive& batch, const ImageViewRegion& region, T modifier = {}){
+		auto rst = batch.acquire(region.view, 1);
+		return Draw::DrawParam<T>{
+			.dataPtr = rst.dataPtr,
+			.index = Core::Vulkan::TextureIndex{rst.imageIndex},
+			.modifier = std::move(modifier),
+			.uv = &region
+		};
+	}
 
 	// struct T{
 	// 	struct iterator{

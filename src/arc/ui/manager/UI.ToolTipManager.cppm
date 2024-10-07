@@ -14,9 +14,12 @@ export namespace Core::UI{
 	// struct Scene;
 
 	class ToolTipManager{
+		static constexpr float RemoveFadeTime = 15.f;
 		struct DroppedToolTip{
 			ElementUniquePtr element{};
 			float remainTime{};
+
+			[[nodiscard]] DroppedToolTip(ElementUniquePtr&& element, float remainTime);
 		};
 
 		struct ValidToolTip{
@@ -43,9 +46,6 @@ export namespace Core::UI{
 		std::vector<DroppedToolTip> dropped{};
 		std::vector<ValidToolTip> actives{};
 
-		ElementUniquePtr root{};
-
-
 		using ActivesItr = decltype(actives)::iterator;
 
 	public:
@@ -54,7 +54,7 @@ export namespace Core::UI{
 		[[nodiscard]] ToolTipManager() = default;
 
 		bool hasInstance(TooltipOwner& owner){
-			return std::ranges::contains(actives | std::views::transform(&ValidToolTip::owner), &owner);
+			return std::ranges::contains(actives | std::views::reverse | std::views::transform(&ValidToolTip::owner), &owner);
 		}
 
 		[[nodiscard]] TooltipOwner* getTopFocus() const noexcept{
@@ -83,10 +83,13 @@ export namespace Core::UI{
 
 		void draw() const;
 
-		// std::vector<Element*> getInbounded();
-
 		auto& getActiveTooltips() noexcept{
 			return actives;
+		}
+
+		void clear() noexcept{
+			dropAll();
+			dropped.clear();
 		}
 
 	private:

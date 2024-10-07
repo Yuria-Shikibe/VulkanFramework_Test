@@ -27,6 +27,7 @@ import Core.Vulkan.EXT;
 import Core.Global;
 import Core.Global.Graphic;
 import Core.Global.UI;
+import Core.Global.Assets;
 
 import std;
 
@@ -64,7 +65,7 @@ void Core::Global::loadEXT(){
     Core::Vulkan::EXT::load(vulkanManager->context.instance);
 }
 
-void Core::Global::init(){
+void Core::Global::init_context(){
     GLFW::init();
 
     initFileSystem();
@@ -100,8 +101,11 @@ void Core::Global::initUI(){
     UI::init(*vulkanManager);
 }
 
-void Core::Global::postInit(){
+
+void Core::Global::init_assetsAndRenderers(){
     initUI();
+
+    Asset::init(*vulkanManager);
 
     rendererWorld = new Graphic::RendererWorld{vulkanManager->context};
     vulkanManager->registerResizeCallback(
@@ -120,6 +124,7 @@ void Core::Global::postInit(){
 
 void Core::Global::terminate(){
     UI::terminate();
+    Asset::terminate();
 
     delete rendererWorld;
 

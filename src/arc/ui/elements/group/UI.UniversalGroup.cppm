@@ -77,10 +77,10 @@ export namespace Core::UI{
 			return BasicGroup::addChildren(std::move(element));
 		}
 
-		template <std::derived_from<Element> E>
-			requires (std::is_default_constructible_v<E>)
-		CellTy& emplace(){
-			return add(ElementUniquePtr{this, scene, new E});
+		template <std::derived_from<Element> E, typename ...Args>
+			requires (std::constructible_from<E, Args...>)
+		CellTy& emplace(Args&&... args){
+			return add(ElementUniquePtr{this, scene, new E{std::forward<Args>(args) ...}});
 		}
 
 		template <InvocableElemInitFunc Fn>

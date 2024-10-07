@@ -4,6 +4,7 @@ import Core.Ctrl.Constants;
 import Core.Ctrl.KeyPack;
 import std;
 import ext.concepts;
+import ext.algo;
 
 export namespace Core::Ctrl{
 	struct InputBind{
@@ -69,7 +70,7 @@ export namespace Core::Ctrl{
 		}
 
 		[[nodiscard]] constexpr bool modeMatch(const int mode) const noexcept{
-			return ignoreMode || Mode::isModeMatched(mode, expectedMode);
+			return ignoreMode || Mode::matched(mode, expectedMode);
 		}
 
 		void tryRun(const int state, const int mode) const {
@@ -91,7 +92,16 @@ export namespace Core::Ctrl{
 
 	class InputBindGroup{
 		class InputGroup{
-			using Signal = int;
+			struct DoubleClickTimer{
+				int key{};
+				float time{};
+
+				[[nodiscard]] DoubleClickTimer() = default;
+
+				[[nodiscard]] explicit DoubleClickTimer(const int key)
+					: key{key}, time{Act::doublePressMaxSpacing}{}
+			};
+			using Signal = unsigned short;
 			/**
 			 * @code
 			 * | 0b'0000'0000'0000'0000
@@ -102,7 +112,6 @@ export namespace Core::Ctrl{
 			 * | p - press
 			 * @endcode
 			 */
-			static constexpr Signal ModeMask = 0xff;
 			static constexpr Signal DoubleClick = 0b0001'0000'0000'0000;
 			static constexpr Signal Continuous = 0b1000'0000'0000;
 			static constexpr Signal Repeat = 0b0100'0000'0000;
@@ -112,18 +121,28 @@ export namespace Core::Ctrl{
 
 			std::array<std::vector<InputBind>, AllKeyCount> binds{};
 			std::array<std::vector<InputBind>, AllKeyCount> continuous{};
-			std::array<float, AllKeyCount> doubleClick{};
-			std::array<unsigned short, AllKeyCount> pressed{};
+			std::array<Signal, AllKeyCount> pressed{};
 
-		    //Just uses vector??
-			std::unordered_set<Signal> markedSignal{};
+			//OPTM using array instead of vector
+			std::vector<Signal> markedSignal{};
+			std::vector<DoubleClickTimer> doubleClickTimers{};
 
 		private:
-			void updateSignal(const int code){
-				if(code == Act::Release){
-					markedSignal.erase(code);
-				}else{
-					markedSignal.insert(code);
+			void updateSignal(const int key, const int act){
+				switch(act){
+					case Act::Press:{
+						if(!std::ranges::contains(markedSignal | std::views::reverse, key)){
+							markedSignal.push_back(key);
+						}
+						break;
+					}
+
+					case Act::Release:{
+						ext::algo::erase_unique_unstable(markedSignal, key);
+						break;
+					}
+
+					default: break;
 				}
 			}
 
@@ -131,67 +150,69 @@ export namespace Core::Ctrl{
 			 * @return isDoubleClick
 			 */
 			bool insert(const int code, const int action, const int mode){
-				Signal pushIn = pressed[code] & ~ModeMask;
+				Signal pushIn = pressed[code] & ~Mode::Mask;
 
 				bool isDoubleClick = false;
 
 				switch(action){
 					case Act::Press :{
-						if(doubleClick[code] <= 0){
-							doubleClick[code] = Mode::doublePressMaxSpacing;
-							pushIn = Press | Continuous;
-						} else{
-							doubleClick[code] = -1;
+						if(const auto itr = std::ranges::find(doubleClickTimers, code, &DoubleClickTimer::key); itr != doubleClickTimers.end()){
+							doubleClickTimers.erase(itr);
 							isDoubleClick = true;
-							pushIn = Press | DoubleClick;
+							pushIn = Press | Continuous | DoubleClick;
+						} else{
+							doubleClickTimers.emplace_back(code);
+							pushIn = Press | Continuous;
 						}
 
 						break;
 					}
+
 					case Act::Release : pushIn = Release;
 						break;
 					case Act::Repeat : pushIn = Repeat | Continuous;
 						break;
+
 					default : break;
 				}
 
-				pressed[code] = pushIn | (mode & ModeMask);
+				pressed[code] = pushIn | (mode & Mode::Mask);
 
 				return isDoubleClick;
 			}
 
 		public:
 			[[nodiscard]] bool get(const int code, const int action, const int mode) const{
-				Signal actionTgt{};
 				const Signal target = pressed[code];
 
-				if(mode != Mode::Ignore){
-					if((target & ModeMask) != (mode & ModeMask)) return false;
-				}
+				if(!Mode::matched(target, mode))return false;
 
+				Signal actionTgt{};
 				switch(action){
 					case Act::Press : actionTgt = Press;
-					break;
+						break;
 					case Act::Continuous : actionTgt = Continuous;
-					break;
+						break;
 					case Act::Release : actionTgt = Release;
-					break;
+						break;
 					case Act::Repeat : actionTgt = Repeat;
-					break;
+						break;
 					case Act::DoubleClick : actionTgt = DoubleClick;
-					break;
-					default : break;
+						break;
+					case Act::Ignore : actionTgt = Press | Continuous | Release | Repeat | DoubleClick;
+						break;
+					default : std::unreachable();
 				}
 
 				return target & actionTgt;
 			}
 
-			[[nodiscard]] bool hasAction(const int code) const{
+			[[nodiscard]] bool hasAny(const int code) const{
 				return static_cast<bool>(pressed[code]);
 			}
 
 			void inform(const int code, const int action, const int mods){
-				updateSignal(code);
+				updateSignal(code, action);
 				const bool doubleClick = insert(code, action, mods);
 
 				const auto& targets = binds[code];
@@ -212,19 +233,20 @@ export namespace Core::Ctrl{
 					pressed[key] &= RP_Eraser;
 					if(pressed[key] & Continuous){
 						for(const auto& bind : continuous[key]){
-							bind.tryRun(Act::Continuous, pressed[key]);
+							bind.tryRun(Act::Continuous, pressed[key] & Mode::Mask);
 						}
 					}
 				}
 
-				for(float& reload : doubleClick){
-					if(reload > 0) reload -= delta;
-				}
+				std::erase_if(doubleClickTimers, [delta](DoubleClickTimer& timer){
+					timer.time -= delta;
+					return timer.time <= 0.f;
+				});
 			}
 
 			void registerBind(InputBind&& bind){
 				if(bind.getKey() >= AllKeyCount)return;
-				auto& container = Mode::isContinuous(bind.state()) ? continuous : binds;
+				auto& container = Act::isContinuous(bind.state()) ? continuous : binds;
 
 				container[bind.getKey()].emplace_back(std::move(bind));
 			}
@@ -232,6 +254,7 @@ export namespace Core::Ctrl{
 			void clear(){
 				std::ranges::for_each(binds, &std::vector<InputBind>::clear);
 				std::ranges::for_each(continuous, &std::vector<InputBind>::clear);
+				markedSignal.clear();
 			}
 		};
 
@@ -284,7 +307,7 @@ export namespace Core::Ctrl{
 		}
 
 		[[nodiscard]] bool isPressedKey(const int key) const{
-			return registerList.hasAction(key);
+			return registerList.hasAny(key);
 		}
 
 		void clearAllBinds(){

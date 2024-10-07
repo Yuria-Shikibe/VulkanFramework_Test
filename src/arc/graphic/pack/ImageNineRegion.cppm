@@ -101,12 +101,17 @@ namespace Graphic{
 	export
 	struct NinePatchBrief{
 		Align::Spacing edge{};
-
 		Geom::Vec2 innerSize{};
 		Align::Scale centerScale{DefaultScale};
 
+
+
 		[[nodiscard]] constexpr NinePatchRaw<float> getPatches(const NinePatchRaw<float>::Rect bound) const noexcept{
 			return NinePatchRaw{edge, bound, innerSize, centerScale};
+		}
+
+		[[nodiscard]] constexpr Geom::Vec2 getRecommendedSize() const noexcept{
+			return innerSize + edge.getSize();
 		}
 	};
 

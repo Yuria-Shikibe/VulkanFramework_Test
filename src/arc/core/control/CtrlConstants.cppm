@@ -6,6 +6,16 @@ export module Core.Ctrl.Constants;
 
 import std;
 
+consteval std::size_t genMaskFromBits(std::size_t bits){
+	std::size_t rst{};
+
+	for(std::size_t i = 0; i < bits; ++i){
+		rst |= 1 << i;
+	}
+
+	return rst;
+}
+
 export namespace Core::Ctrl{
 	namespace Act{
 		constexpr int Press = GLFW_PRESS;
@@ -13,6 +23,21 @@ export namespace Core::Ctrl{
 		constexpr int Repeat = GLFW_REPEAT;
 		constexpr int Continuous = 3;
 		constexpr int DoubleClick = 4;
+
+		constexpr std::size_t Bits = 8;
+		constexpr std::size_t Mask = genMaskFromBits(Bits);
+		constexpr int Ignore = std::numeric_limits<int>::max() & Mask;
+
+		constexpr float multiPressMaxSpacing = 0.25f * 60;  //ticks!
+		constexpr float doublePressMaxSpacing = 0.25f * 60; //ticks!
+
+		[[nodiscard]] constexpr bool matched(const int act, const int expectedAct) noexcept{
+			return act == expectedAct || expectedAct & Mask == Ignore;
+		}
+
+		[[nodiscard]] constexpr bool isContinuous(const int mode) noexcept{
+			return mode == Continuous;
+		}
 	}
 
 
@@ -26,37 +51,23 @@ export namespace Core::Ctrl{
 		constexpr int CapLock = GLFW_MOD_CAPS_LOCK;
 		constexpr int NumLock = GLFW_MOD_NUM_LOCK;
 		//6Bit
-		constexpr int Mask = 0b00'11'11'11;
 
 		constexpr int Ctrl_Shift = Ctrl | Shift;
 
-		constexpr int NoIgnore = static_cast<int>(0xff'00'00'00);
-		constexpr int Ignore = static_cast<int>(0xf0'00'00'00);
-		constexpr int Disable = -1;
+		// constexpr int NoIgnore = static_cast<int>(0b11'00'00'00);
+		constexpr int Ignore = 0b10'00'00'00;
 
-		constexpr int Total = Mask + 1;
-		constexpr int TotalBits = 6;
+		constexpr int Bits = 8;
+		constexpr int Mask = genMaskFromBits(Bits);
+
+		static_assert(Mask == 0b11'11'11'11);
 
 		constexpr int Frequent_Bound = Shift | Ctrl | Alt/* | Super | CapLock | NumLock */ + 1;
 
-		[[deprecated]] [[nodiscard]] constexpr bool isIgnored(const int val) noexcept{
-			return val == Disable;
+		[[nodiscard]] constexpr bool matched(const int mode, const int expectedMode) noexcept{
+			return (mode & Mask) == (expectedMode & Mask) || (expectedMode & Mask) == Ignore;
 		}
 
-		[[deprecated]] constexpr void setIgnored(int& val) noexcept{
-			val = Disable;
-		}
-
-		[[nodiscard]] constexpr bool isModeMatched(const int mode, const int expectedMode) noexcept{
-			return (mode & Mask) == (expectedMode & Mask) || expectedMode == Ignore;
-		}
-
-		[[nodiscard]] constexpr bool isContinuous(const int mode) noexcept{
-			return mode == Act::Continuous;
-		}
-
-		constexpr float multiPressMaxSpacing = 0.25f * 60;  //ticks!
-		constexpr float doublePressMaxSpacing = 0.25f * 60; //ticks!
 
 
 	}
@@ -100,6 +111,7 @@ export namespace Core::Ctrl{
 
 
 	namespace Key{
+		constexpr int Ignore = std::numeric_limits<int>::max();
 		constexpr auto Space = 32;
 		constexpr auto Apostrophe = 39; /* ' */
 		constexpr auto Comma = 44;      /* , */
@@ -230,6 +242,10 @@ export namespace Core::Ctrl{
 
 		constexpr auto LAST = GLFW_KEY_MENU;
 		constexpr auto Count = LAST + 1;
+
+		[[nodiscard]] constexpr bool matched(const int key, const int expectedKey) noexcept{
+			return key == expectedKey || expectedKey == Ignore;
+		}
 	}
 
 
@@ -242,8 +258,9 @@ export namespace Core::Ctrl{
 		constexpr auto _6 = 5;
 		constexpr auto _7 = 6;
 		constexpr auto _8 = 7;
-		constexpr auto LAST = 8;
-		constexpr auto Count = LAST + 1;
+
+		constexpr auto Count = 8;
+
 		constexpr auto LEFT = _1;
 		constexpr auto RIGHT = _2;
 		constexpr auto MIDDLE = _3;
@@ -403,7 +420,7 @@ export namespace Core::Ctrl{
 
 	constexpr std::array ModeNames{
 			[]() constexpr{
-				std::array<std::string_view, Mode::TotalBits + 1> names{};
+				std::array<std::string_view, Mode::Bits + 1> names{};
 
 				/*
 					constexpr int Shift = GLFW_MOD_SHIFT;
@@ -450,7 +467,7 @@ export namespace Core::Ctrl{
 	constexpr std::vector<std::string_view> getModesStr(const int mode, const bool emptyPatch = false){
 		std::vector<std::string_view> strs{};
 
-		for(int i = 0; i < Mode::TotalBits; ++i){
+		for(int i = 0; i < Mode::Bits; ++i){
 			int curMode = 1 << i;
 			if(mode & curMode){
 				strs.push_back(ModeNames[i + 1]);

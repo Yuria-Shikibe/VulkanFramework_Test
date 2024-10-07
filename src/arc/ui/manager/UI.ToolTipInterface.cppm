@@ -1,6 +1,6 @@
-//
-// Created by Matrix on 2024/10/1.
-//
+module;
+
+#include <cassert>
 
 export module Core.UI.ToolTipInterface;
 
@@ -12,9 +12,9 @@ import std;
 
 export namespace Core::UI{
 	enum struct TooltipFollow{
-		none,
+		initial,
 		cursor,
-		owner
+		depends
 	};
 
 	struct TooltipAlignPos{
@@ -48,8 +48,8 @@ export namespace Core::UI{
 		[[nodiscard]] virtual bool tooltipShouldBuild(Geom::Vec2 cursorPos) const = 0;
 
 		virtual void notifyDrop(){
-			std::println(std::cout, "dropped");
-			std::cout.flush();
+			// std::println(std::cout, "dropped");
+			// std::cout.flush();
 		}
 
 		[[nodiscard]] virtual ElementUniquePtr build(Scene& scene) = 0;
@@ -63,8 +63,12 @@ export namespace Core::UI{
 	protected:
 		~FuncToolTipOwner() = default;
 
+	private:
 		std::move_only_function<ElementUniquePtr(T&, Scene&)> toolTipBuilder{};
+
 	public:
+		[[nodiscard]] FuncToolTipOwner() = default;
+
 		template<ElemInitFunc InitFunc>
 			requires std::invocable<InitFunc, T&, typename ElemInitFuncTraits<InitFunc>::ElemType&>
 		decltype(auto) setTooltipBuilder(InitFunc&& initFunc){
@@ -87,7 +91,12 @@ export namespace Core::UI{
 		}
 
 		ElementUniquePtr build(Scene& scene) override{
+			assert(hasTooltip());
 			return std::invoke(toolTipBuilder, static_cast<T&>(*this), scene);
+		}
+
+		bool hasTooltip() const noexcept{
+			return bool(toolTipBuilder);
 		}
 	};
 
@@ -95,7 +104,7 @@ export namespace Core::UI{
 		static constexpr float DisableAutoTooltip = -1.0f;
 		static constexpr float DefTooltipHoverTime = 25.0f;
 
-		TooltipFollow followTarget{TooltipFollow::none};
+		TooltipFollow followTarget{TooltipFollow::initial};
 
 		Align::Pos followTargetAlign{Align::Pos::bottom_left};
 		Align::Pos tooltipSrcAlign{Align::Pos::top_left};

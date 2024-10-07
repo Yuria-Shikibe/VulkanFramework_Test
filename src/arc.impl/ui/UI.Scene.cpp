@@ -118,7 +118,7 @@ void Core::UI::Scene::onScroll(const Geom::Vec2 scroll) const{
 }
 
 void Core::UI::Scene::onCursorPosUpdate(const Geom::Vec2 newPos){
-	auto delta = newPos - cursorPos;
+	const auto delta = newPos - cursorPos;
 	cursorPos = newPos;
 
 	std::vector<Element*> inbounds{};
@@ -132,7 +132,6 @@ void Core::UI::Scene::onCursorPosUpdate(const Geom::Vec2 newPos){
 		inbounds = root->dfsFindDeepestElement(cursorPos);
 	}
 
-	trySwapFocus(inbounds.empty() ? nullptr : inbounds.back());
 	updateInbounds(std::move(inbounds));
 
 	if(!currentCursorFocus) return;
@@ -153,6 +152,7 @@ void Core::UI::Scene::resize(const Geom::Vec2 size){
 
 	this->size = size;
 	root->resize(size);
+	tooltipManager.clear();
 }
 
 void Core::UI::Scene::update(const float delta_in_ticks){
@@ -184,6 +184,8 @@ Core::UI::Scene& Core::UI::Scene::operator=(Scene&& other) noexcept{
 	if(this == &other) return *this;
 	SceneBase::operator =(std::move(other));
 	tooltipManager = std::move(other.tooltipManager);
+	tooltipManager.scene = this;
+
 	root->setScene(this);
 	return *this;
 }
@@ -200,4 +202,6 @@ void Core::UI::Scene::updateInbounds(std::vector<Element*>&& next){
 	}
 
 	lastInbounds = std::move(next);
+
+	trySwapFocus(lastInbounds.empty() ? nullptr : lastInbounds.back());
 }

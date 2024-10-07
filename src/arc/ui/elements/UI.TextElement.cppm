@@ -10,6 +10,7 @@ import Core.UI.Scene;
 
 import Font.TypeSettings;
 import std;
+import Math;
 
 export namespace Core::UI{
 	struct TextElement : Element {
@@ -24,7 +25,24 @@ export namespace Core::UI{
 		std::future<void> layoutTasks{};
 		bool textChanged{};
 
+		float textScale{1.f};
+
 	public:
+		[[nodiscard]] TextElement() : Element{"TextElement"}{
+			interactivity = Interactivity::disabled;
+		}
+
+		void setTextScale(const float scl){
+			if(!Math::equal(scl, textScale)){
+				textScale = scl;
+
+				if(!textChanged){
+					getScene()->registerIndependentLayout(this);
+					textChanged = true;
+				}
+
+			}
+		}
 		[[nodiscard]] std::string_view getText() const noexcept{
 			return glyphLayout->text;
 		}
@@ -89,14 +107,16 @@ export namespace Core::UI{
 
 	protected:
 		Geom::Vec2 layoutText(){
-			parser->parse(glyphLayout);
+			parser->parse(glyphLayout, [this](Font::TypeSettings::FormatContext& context){
+				context.setParseScale(textScale);
+			});
 			glyphLayout->align = Align::Pos::top_left;
 			textChanged = false;
 
-			auto layoutSize = glyphLayout->getDrawSize();
-			auto validSize = getValidSize();
+			const auto layoutSize = glyphLayout->getDrawSize();
+			const auto validSize = getValidSize();
 
-			Geom::Vec2 sz{
+			const Geom::Vec2 sz{
 				getRestriction().x ? layoutSize.x : validSize.x,
 				getRestriction().y ? layoutSize.y : validSize.y,
 			};

@@ -498,7 +498,7 @@ export namespace Math {
 		requires (std::is_integral_v<T>)
 	constexpr T round(const T0 value) noexcept {
 		if constexpr (std::is_floating_point_v<T0>){
-			return static_cast<T>(std::round(value) + std::numeric_limits<T0>::epsilon());
+			return std::lround(value);
 		}else{
 			return static_cast<T>(value);
 		}
@@ -518,7 +518,7 @@ export namespace Math {
 
 	template <ext::number T>
 	T round(const T num, const T step) {
-		return std::round(num / step) * step;
+		return static_cast<T>(std::lround(std::round(static_cast<float>(num) / static_cast<float>(step)) * static_cast<float>(step)));
 	}
 
 	/** Returns the closest integer to the specified float. This method will only properly round floats that are positive. */
@@ -679,7 +679,7 @@ export namespace Math {
 	}
 
 	inline float dst(const float x1, const float y1) noexcept {
-		return std::sqrt(x1 * x1 + y1 * y1);
+		return std::hypot(x1, y1);
 	}
 
 	inline float dst2(const float x1, const float y1) noexcept {
@@ -689,7 +689,7 @@ export namespace Math {
 	inline float dst(const float x1, const float y1, const float x2, const float y2) noexcept {
 		const float xd = x2 - x1;
 		const float yd = y2 - y1;
-		return std::sqrt(xd * xd + yd * yd);
+		return dst(xd, yd);
 	}
 
 	inline float dst2(const float x1, const float y1, const float x2, const float y2) noexcept {

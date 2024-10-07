@@ -55,8 +55,8 @@ export namespace Align{
 		[[nodiscard]] friend constexpr bool operator==(const Pad& lhs, const Pad& rhs) noexcept = default;
 
 		constexpr void expand(T x, T y) noexcept{
-			x *= 0.5f;
-			y *= 0.5f;
+			x = Align::floating_mul(x, 0.5f);
+			y = Align::floating_mul(y, 0.5f);
 
 			left += x;
 			right += x;
@@ -153,7 +153,7 @@ export namespace Align{
 		/**
 		 * Scales the source to fit the target if it is larger, otherwise does not scale.
 		 */
-		bounded,
+		clamped,
 
 		/**
 		 * Scales the source to fill the target while keeping the same aspect ratio. This may cause the source to be larger than the
@@ -196,7 +196,7 @@ export namespace Align{
 				const float targetRatio = Align::floating_div(toBound.y, toBound.x);
 				const float sourceRatio =
 					Align::floating_div(srcSize.y, srcSize.x);
-				float scale = targetRatio > sourceRatio ?
+				const float scale = targetRatio > sourceRatio ?
 					Align::floating_div(toBound.x, srcSize.x) :
 					Align::floating_div(toBound.y, srcSize.y);
 
@@ -207,24 +207,24 @@ export namespace Align{
 					Align::floating_div(toBound.y, toBound.x);
 				const float sourceRatio =
 					Align::floating_div(srcSize.y, srcSize.x);
-				float scale = targetRatio < sourceRatio ?
+				const float scale = targetRatio < sourceRatio ?
 					Align::floating_div(toBound.x, srcSize.x) :
 					Align::floating_div(toBound.y, srcSize.y);
 
 				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::fillX :{
-				float scale = Align::floating_div(toBound.x, srcSize.x);
+				const float scale = Align::floating_div(toBound.x, srcSize.x);
 				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::fillY :{
-				float scale = Align::floating_div(toBound.y, srcSize.y);
+				const float scale = Align::floating_div(toBound.y, srcSize.y);
 				return {Align::floating_mul<T>(srcSize.x, scale), Align::floating_mul<T>(srcSize.y, scale)};
 			}
 			case Scale::stretch : return toBound;
 			case Scale::stretchX : return {toBound.x, srcSize.y};
 			case Scale::stretchY : return {srcSize.x, toBound.y};
-			case Scale::bounded :
+			case Scale::clamped :
 				if(srcSize.y > toBound.y || srcSize.x > toBound.x){
 					return Align::embedTo<T>(Scale::fit, srcSize, toBound);
 				} else{

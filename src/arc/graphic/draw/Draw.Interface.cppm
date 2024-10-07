@@ -2,6 +2,8 @@ module;
 
 #include <vulkan/vulkan.h>
 
+#include "../src/ext/no_unique_address.hpp"
+
 export module Graphic.Draw.Interface;
 
 import std;
@@ -119,8 +121,9 @@ export namespace Graphic::Draw{
 	template <typename M = std::identity>
 	struct DrawParam{
 		void* dataPtr{};
-		M modifier{};
 		Core::Vulkan::TextureIndex index{};
+		ADAPTED_NO_UNIQUE_ADDRESS M modifier{};
+
 		const UVData* uv{}; //TODO using value instead of indirect value?
 	};
 

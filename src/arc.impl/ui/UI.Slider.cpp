@@ -16,10 +16,10 @@ void Core::UI::Slider::drawMain() const{
 	rect.setSize(getBarSize());
 
 	rect.src = contentSrcPos() + getBarCurPos();
-	Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Colors::GRAY);
+	Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Colors::GRAY.copy().mulA(graphicProp().getOpacity()));
 
 	rect.src = contentSrcPos() + getBarLastPos();
-	Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Colors::LIGHT_GRAY);
+	Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Colors::LIGHT_GRAY.copy().mulA(graphicProp().getOpacity()));
 	//
 	// Overlay::color(Colors::LIGHT_GRAY);
 	// Overlay::alpha(0.15f + (isPressed() ? 0.1f : 0.0f));

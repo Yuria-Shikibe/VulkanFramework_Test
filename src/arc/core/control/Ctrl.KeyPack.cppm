@@ -4,6 +4,7 @@
 
 export module Core.Ctrl.KeyPack;
 
+export import Core.Ctrl.Constants;
 import std;
 
 export namespace Core::Ctrl{
@@ -26,8 +27,8 @@ export namespace Core::Ctrl{
 	constexpr PackedKey packKey(const int keyCode, const int act, const int mode) noexcept{
 		return
 			(keyCode & KeyMask)
-			| act << 16
-			| mode << (16 + 8);
+			| (act & Act::Mask) << 16
+			| (mode & Mode::Mask) << (16 + Act::Bits);
 	}
 
 
@@ -38,21 +39,21 @@ export namespace Core::Ctrl{
 	constexpr decltype(auto) unpackKey(const PackedKey fullKey) noexcept{
 		return UnpackedKey{
 				.keyCode = static_cast<int>(fullKey & KeyMask),
-				.act = static_cast<int>(fullKey >> 16 & 0xff),
-				.mode = static_cast<int>(fullKey >> 24 & 0xff)
+				.act = static_cast<int>(fullKey >> 16 & Act::Mask),
+				.mode = static_cast<int>(fullKey >> 24 & Mode::Mask)
 			};
 	}
 
 	struct KeyPack{
 		PackedKey code{};
 
-		[[nodiscard]] constexpr KeyPack() = default;
+		[[nodiscard]] constexpr KeyPack() noexcept = default;
 
 		[[nodiscard]] constexpr explicit KeyPack(const PackedKey code)
-			: code{code}{}
+			noexcept : code{code}{}
 
-		[[nodiscard]] constexpr KeyPack(const int keyCode, const int act, const int mode)
-			: code{packKey(keyCode, act, mode)}{}
+		[[nodiscard]] constexpr KeyPack(const int keyCode, const int act = Act::Ignore, const int mode = Mode::Ignore)
+			noexcept : code{packKey(keyCode, act, mode)}{}
 
 		[[nodiscard]] constexpr decltype(auto) unpack() const noexcept{
 			return unpackKey(code);
@@ -65,11 +66,17 @@ export namespace Core::Ctrl{
 		}
 
 		[[nodiscard]] constexpr int action() const noexcept{
-			return static_cast<int>((code >> 16) & 0xff);
+			return static_cast<int>((code >> 16) & Act::Mask);
 		}
 
 		[[nodiscard]] constexpr int mode() const noexcept{
-			return static_cast<int>((code >> 24) & 0xff);
+			return static_cast<int>((code >> 24) & Mode::Mask);
+		}
+
+		[[nodiscard]] constexpr bool matched(const KeyPack state) const noexcept{
+			auto [tk, ta, tm] = unpack();
+			auto [ok, oa, om] = state.unpack();
+			return Key::matched(tk, ok) && Act::matched(ta, oa) && Mode::matched(tm, om);
 		}
 	};
 

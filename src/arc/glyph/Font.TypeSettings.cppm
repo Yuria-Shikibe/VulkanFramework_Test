@@ -5,7 +5,7 @@
 export module Font.TypeSettings;
 
 export import Font;
-export import Font.GlyphToRegion;
+export import Font.Manager;
 
 import Align;
 
@@ -186,7 +186,7 @@ namespace Font{
 			}
 		};
 
-		struct Context{
+		export struct FormatContext{
 			FormattableText text{};
 
 			OptionalStack<Graphic::Color> colorHistory{};
@@ -194,22 +194,42 @@ namespace Font{
 			OptionalStack<GlyphSizeType> sizeHistory{};
 			OptionalStack<IndexedFontFace*> fontHistory{};
 
-			Geom::Vec2 maxSize{};
-
+			Geom::Vec2 capturedSize{};
 			Geom::Vec2 penPos{};
-			Geom::Vec2 currentOffset{};
 
 			GlyphRect lineRect{};
 
 
 			float heightRemain{};
 
+		private:
+			float parseScale{1.f};
+			Geom::Vec2 currentOffset{};
 			float minimumLineHeight{48.f};
 			float lineSpacing{12.f};
-			float paragraphSpacing{};
+			// float paragraphSpacing{};
 
-			[[nodiscard]] GlyphSizeType getLastSize() const{
-				return sizeHistory.top(DefaultSize);
+
+		public:
+
+			Geom::Vec2 getCurrentOffset(){
+				return currentOffset.scl(parseScale);
+			}
+
+			void setParseScale(const float scl) noexcept{
+				parseScale = scl;
+			}
+
+			[[nodiscard]] float getMinLineHeight() const noexcept{
+				return minimumLineHeight * parseScale;
+			}
+
+			[[nodiscard]] float getLineSpacing() const noexcept{
+				return lineSpacing * parseScale;
+			}
+
+			[[nodiscard]] GlyphSizeType getLastSize() const noexcept{
+				return sizeHistory.top(DefaultSize).scl(parseScale);
 			}
 
 			void pushOffset(const Geom::Vec2 off){
@@ -338,10 +358,10 @@ namespace Font{
 		};
 
 		export struct TokenModifier{
-			using FuncType = void(const std::vector<std::string_view>&, Context&, const std::shared_ptr<GlyphLayout>&);
+			using FuncType = void(const std::vector<std::string_view>&, FormatContext&, const std::shared_ptr<GlyphLayout>&);
 			std::function<FuncType> modifier{};
 
-			void operator()(const std::vector<std::string_view>& tokens, Context& context,
+			void operator()(const std::vector<std::string_view>& tokens, FormatContext& context,
 			                const std::shared_ptr<GlyphLayout>& target) const{
 				modifier(tokens, context, target);
 			}
@@ -364,17 +384,24 @@ namespace Font{
 
 			ext::string_hash_map<TokenModifier> modifiers{};
 
-			void parse(Context& context, const std::shared_ptr<GlyphLayout>& target) const;
+			void parse(FormatContext& context, const std::shared_ptr<GlyphLayout>& target) const;
 
 			void parse(const std::shared_ptr<GlyphLayout>& target) const{
-				Context context{};
+				FormatContext context{};
+				parse(context, target);
+			}
+
+			template <std::invocable<FormatContext&> Modifier>
+			void parse(const std::shared_ptr<GlyphLayout>& target, Modifier modifier) const{
+				FormatContext context{};
+				std::invoke(modifier, context);
 				parse(context, target);
 			}
 
 			struct ParseInstance{
 				const Parser* parser{};
 				std::weak_ptr<GlyphLayout> layout{};
-				mutable Context context{};
+				mutable FormatContext context{};
 
 				void operator()() const{
 					const auto ptr = layout.lock();
@@ -427,9 +454,10 @@ namespace Font{
 				const std::shared_ptr<GlyphLayout>& target,
 				std::string&& text,
 				const Geom::Vec2 size = Geom::maxVec2<float>
-				) const{
+			) const{
 				target->reset(std::move(text), size);
-				ParseInstance{this, target}.operator()();
+				FormatContext context{};
+				parse(context, target);
 			}
 
 
@@ -478,41 +506,41 @@ namespace Font{
 				return result;
 			}
 
-			export void beginSubscript(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			export void beginSubscript(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				context.pushScaledOffset({-0.025f, -0.105f});
 				context.pushScaledSize(0.45f);
 			}
 
-			export void beginSuperscript(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			export void beginSuperscript(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				context.pushScaledOffset({-0.025f, 0.525f});
 				context.pushScaledSize(0.45f);
 			}
 
-			export void endScript(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			export void endScript(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				context.popOffset();
 				context.sizeHistory.pop();
 			}
 
-			bool endLine(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			bool endLine(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				float lastLineDescender;
 
 				if(target->elements.size() > 1){
 					auto& lastLine = std::next(target->elements.crbegin()).operator*();
 					lastLineDescender = lastLine.bound.descender;
 				} else{
-					lastLineDescender = -context.lineSpacing;
+					lastLineDescender = -context.getLineSpacing();
 				}
 
 				auto& line = target->elements.back();
-				const float height = Math::max(context.minimumLineHeight,
-				                               context.lineRect.ascender + lastLineDescender + context.lineSpacing);
+				const float height = Math::max(context.getMinLineHeight(),
+				                               context.lineRect.ascender + lastLineDescender + context.getLineSpacing());
 
 				line.src.y -= height;
-				context.maxSize.y += height;
-				if(context.maxSize.y > target->maximumSize.y){
+				context.capturedSize.y += height;
+				if(context.capturedSize.y > target->maximumSize.y){
 					//discard line
 					target->elements.pop_back();
-					context.maxSize.y = target->maximumSize.y;
+					context.capturedSize.y = target->maximumSize.y;
 					return false;
 				}
 
@@ -523,23 +551,23 @@ namespace Font{
 				context.heightRemain -= height;
 				context.lineRect = {};
 
-				context.maxSize.maxX(line.bound.width);
+				context.capturedSize.maxX(line.bound.width);
 
 				return true;
 			}
 
-			void beginParse(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			void beginParse(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				target->elements.emplace_back();
 				context.heightRemain = target->maximumSize.y;
 			}
 
-			void endParse(Context& context, const std::shared_ptr<GlyphLayout>& target){
+			void endParse(FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				if(target->elements.empty()) return;
 				// context.maxSize.y += target->elements.front().bound.ascender;
-				context.maxSize.y += target->elements.back().bound.descender;
-				if(target->isCompressed)context.maxSize.y = std::min(target->maximumSize.y, context.maxSize.y);
+				context.capturedSize.y += target->elements.back().bound.descender;
+				if(target->isCompressed)context.capturedSize.y = std::min(target->maximumSize.y, context.capturedSize.y);
 
-				target->size = context.maxSize;
+				target->size = context.capturedSize;
 				target->size.max(target->minimumSize);
 
 				if(!(target->align & Align::Pos::left)) target->updateAlign();
@@ -553,7 +581,7 @@ namespace Font{
 				FormattableText::TokenItr& lastTokenItr,
 				const FormattableText& formattableText,
 				const std::string_view::size_type index,
-				Context& context,
+				FormatContext& context,
 				const std::shared_ptr<GlyphLayout>& target){
 				auto&& tokens = formattableText.getTokenGroup(index, lastTokenItr);
 				lastTokenItr = tokens.end();
@@ -567,7 +595,7 @@ namespace Font{
 				}
 			}
 
-			GlyphLayout::Row& getCurrentRow(const std::size_t row, const Context& context, const std::shared_ptr<GlyphLayout>& target){
+			GlyphLayout::Row& getCurrentRow(const std::size_t row, const FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				if(row >= target->elements.size()){
 					auto& newLine = target->elements.emplace_back();
 					newLine.src = context.penPos;
@@ -591,7 +619,7 @@ module : private;
 Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 	{
 		Parser parser;
-		parser.modifiers["size"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["size"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.sizeHistory.pop();
@@ -611,7 +639,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 			}
 		};
 
-		parser.modifiers["scl"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["scl"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                             const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.sizeHistory.pop();
@@ -624,7 +652,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 
 		parser.modifiers["s"] = parser.modifiers["size"];
 
-		parser.modifiers["color"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["color"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                               const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.colorHistory.pop();
@@ -649,7 +677,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 
 		parser.modifiers["c"] = parser.modifiers["color"];
 
-		parser.modifiers["off"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["off"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                             const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.popOffset();
@@ -667,7 +695,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 			}
 		};
 
-		parser.modifiers["offs"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["offs"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.popOffset();
@@ -685,7 +713,7 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 			}
 		};
 
-		parser.modifiers["font"] = [](const std::vector<std::string_view>& args, Context& context,
+		parser.modifiers["font"] = [](const std::vector<std::string_view>& args, FormatContext& context,
 		                              const std::shared_ptr<GlyphLayout>& target){
 			if(args.empty()){
 				context.fontHistory.pop();
@@ -705,19 +733,19 @@ Font::TypeSettings::Parser Font::TypeSettings::Func::createDefParser(){
 		};
 
 		parser.modifiers["_"] = parser.modifiers["sub"] = [](const std::vector<std::string_view>& args,
-		                                                     Context& context,
+		                                                     FormatContext& context,
 		                                                     const std::shared_ptr<GlyphLayout>& target){
 			Func::beginSubscript(context, target);
 		};
 
 		parser.modifiers["^"] = parser.modifiers["sup"] = [](const std::vector<std::string_view>& args,
-		                                                     Context& context,
+		                                                     FormatContext& context,
 		                                                     const std::shared_ptr<GlyphLayout>& target){
 			Func::beginSuperscript(context, target);
 		};
 
 		parser.modifiers["\\"] = parser.modifiers["\\sup"] = parser.modifiers["\\sub"] = [](
-			const std::vector<std::string_view>& args, Context& context, const std::shared_ptr<GlyphLayout>& target){
+			const std::vector<std::string_view>& args, FormatContext& context, const std::shared_ptr<GlyphLayout>& target){
 				Func::endScript(context, target);
 			};
 
@@ -828,7 +856,7 @@ Font::TypeSettings::FormattableText::FormattableText(const std::string_view stri
 	codes.shrink_to_fit();
 }
 
-void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<GlyphLayout>& target) const{
+void Font::TypeSettings::Parser::parse(FormatContext& context, const std::shared_ptr<GlyphLayout>& target) const{
 	target->elements.clear();
 	target->size = {};
 
@@ -870,7 +898,7 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<G
 			break;
 		}
 
-		if(context.lineRect.width + glyph.metrics.advance.x > target->maximumSize.x){
+		if(context.lineRect.width + (glyph.metrics.advance.x) > target->maximumSize.x){
 			if(code != U'\n') --itr;
 			if(!endline()) break;
 			continue;
@@ -879,7 +907,7 @@ void Font::TypeSettings::Parser::parse(Context& context, const std::shared_ptr<G
 		auto& current = line.glyphs.emplace_back();
 		current.glyph = &glyph;
 
-		const Geom::Vec2 localPos = context.penPos - line.src + context.currentOffset;
+		const Geom::Vec2 localPos = context.penPos - line.src + context.getCurrentOffset();
 
 		auto [src, end] = glyph.metrics.placeTo(localPos);
 

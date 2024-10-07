@@ -4,6 +4,7 @@ import std;
 import Math;
 import ext.concepts;
 
+//OPTM static operator()
 //TODO wrap in a struct and expose friend apply operator |
 //TODO uses constexpr program to enhance the effiency
 export namespace Math::Interp::Func{
@@ -291,7 +292,13 @@ export namespace Math::Interp::Func{
 }
 
 export namespace Math::Interp{
+	// struct InterpFunc{
+	// 	using FuncPtr = float(*)(float);
+	//
+	// 	FuncPtr func;
+	// };
 	using InterpFunc = const std::function<float(float)>;
+	using InterpFunc_MoveOnly = const std::move_only_function<float(float)>;
 
 	constexpr auto linear = [](const float x){
 		return x;

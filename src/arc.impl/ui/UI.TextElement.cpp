@@ -7,6 +7,5 @@ import Graphic.Batch.Exclusive;
 void Core::UI::TextElement::drawMain() const{
 	Element::drawMain();
 
-	Font::TypeSettings::draw(getBatch(), glyphLayout, getTextOffset());
-
+	Font::TypeSettings::draw(getBatch(), glyphLayout, getTextOffset(), graphicProp().getOpacity());
 }

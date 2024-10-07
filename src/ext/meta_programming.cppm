@@ -51,7 +51,9 @@ namespace ext{
 
 	export
 	template <typename Ret, typename T, typename... Args>
-	struct function_traits<Ret(T::*)(Args...)> : function_traits<Ret(T*, Args...)>{};
+	struct function_traits<Ret(T::*)(Args...)> : function_traits<Ret(T*, Args...)>{
+		using mem_func_args_type = std::tuple<Args...>;
+	};
 
 	// export
 	// template <typename T>
@@ -95,6 +97,11 @@ namespace ext{
 	};
 
 	export
+	template <typename T>
+	using remove_mfptr_this_args = std::conditional_t<std::is_function_v<T>, typename function_traits<T>::args_type, typename function_traits<T>::mem_func_args_type>;
+
+
+	export
 	template <std::size_t N, typename FuncType>
 	struct function_arg_at{
 		using trait = function_traits<FuncType>;
@@ -127,31 +134,11 @@ namespace ext{
 	}
 
 	export
-	template <typename Src, typename Dst>
-		requires requires(Src&& src){
-			Dst{std::forward<Src>(src)};
-		}
-	struct Projection{
-		constexpr Dst operator()(Src&& src) const noexcept(noexcept(Dst{std::forward<Src>(src)})){
-			return Dst{std::forward<Src>(src)};
-		}
-	};
-
-	export
 	template <typename Dst>
-	struct strict_to{
+	struct convert_to{
 		template <typename T>
 		constexpr Dst operator()(T&& src) const noexcept(noexcept(Dst{std::forward<T>(src)})){
-			static_assert(std::convertible_to<Dst, std::decay_t<T>>);
-			return Dst{std::forward<T>(src)};
-		}
-	};
-
-	export
-	template <typename Dst>
-	struct to{
-		template <typename T>
-		constexpr Dst operator()(T&& src) const noexcept(noexcept(Dst{std::forward<T>(src)})){
+			static_assert(std::constructible_from<Dst, T>);
 			return Dst{std::forward<T>(src)};
 		}
 	};

@@ -155,7 +155,6 @@ export namespace Core::Vulkan{
 
 			const std::unordered_set uniqueQueueFamilies{indices.graphic, indices.compute, indices.present};
 
-			constexpr float queuePriority = 1.0f;
 			for(const auto [index, count] : uniqueQueueFamilies){
 				auto& info = queueCreateInfos.emplace_back();
 				auto& priority = queueCreatePriorityInfos.emplace_back();

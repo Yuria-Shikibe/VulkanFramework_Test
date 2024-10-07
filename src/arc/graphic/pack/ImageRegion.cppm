@@ -125,4 +125,14 @@ export namespace Graphic {
 
         friend constexpr bool operator==(const ImageViewRegion&, const ImageViewRegion&) = default;
     };
+
+    struct UnsizedImageViewRegion : UVData{
+        VkImageView view{};
+
+        [[nodiscard]] UnsizedImageViewRegion() = default;
+
+        [[nodiscard]] explicit(false) UnsizedImageViewRegion(const ImageViewRegion& region) :
+            UVData{static_cast<const UVData&>(region)}, view{region.view}{
+        }
+    };
 }

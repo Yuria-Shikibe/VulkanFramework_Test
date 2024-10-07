@@ -7,11 +7,11 @@ namespace Core::Global{
 
 	void loadEXT();
 
-    export void init();
+    export void init_context();
 
 	void initUI();
 
-	export void postInit();
+	export void init_assetsAndRenderers();
 
 	export void terminate();
 }

@@ -12,7 +12,6 @@ module;
 
 export module Font;
 
-
 import std;
 
 import Geom.Rect_Orthogonal;
@@ -307,11 +306,13 @@ namespace Font{
 				{U'\t', EmptyFontGlyphGenerator{U'\n', Geom::norBaseVec2<float>.copy().scl(4, 1)}},
 			};
 
-
 		[[nodiscard]] FontFaceStorage() = default;
 
 		[[nodiscard]] explicit FontFaceStorage(const char* fontPath)
 			: face{fontPath}{}
+
+		[[nodiscard]] explicit FontFaceStorage(const std::string_view fontPath)
+			: face{fontPath.data()}{}
 
 		auto& tryLoad(const CharCode code, const GlyphSizeType size){
 			if(size.x == 0 && size.y == 0){

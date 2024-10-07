@@ -3,8 +3,6 @@ export module Core.Global;
 export import Core.ApplicationTimer;
 
 export namespace Graphic {
-    struct RendererUI;
-    struct RendererWorld;
     class Camera2D;
 }
 
@@ -24,6 +22,7 @@ export namespace Core {
 
 
 export namespace Core::Global{
+    //TODO move this into main loop manager
     ApplicationTimer<float> timer{};
     Ctrl::Input* input{};
     Window* window{};

@@ -14,6 +14,8 @@ export namespace Math{
 		float lifetime{};
 		float time{};
 
+
+
 		void setLifetime(const float l){
 			this->lifetime = l;
 		}
