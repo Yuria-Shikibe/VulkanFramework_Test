@@ -16,7 +16,7 @@ import Core.Vulkan.Sampler;
 import Core.Vulkan.Comp;
 import Core.Vulkan.Util;
 import Core.Vulkan.Image;
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 import Core.Vulkan.Semaphore;
 import Core.Vulkan.Event;
 import Core.Vulkan.DynamicRendering;
@@ -140,7 +140,7 @@ export namespace Graphic{
 
 		[[nodiscard]] explicit RendererUI(const Core::Vulkan::Context& context) :
 		BasicRenderer{context},
-			batch{context, sizeof(Core::Vulkan::Vertex_UI), Assets::Sampler::textureDefaultSampler},
+			batch{context, sizeof(Vertex_UI), Assets::Sampler::textureDefaultSampler},
 			pipelineData{&context},
 			projUniformBuffer{
 				context.physicalDevice, context.device,
@@ -273,16 +273,10 @@ export namespace Graphic{
 		}
 
 		void resetScissors(){
-			const auto& current = scissors.back();
 			const Geom::OrthoRectFloat next{size.as<float>()};
 
-			if(current != next){
-				scissors.clear();
-				pushScissor(next, false);
-			} else{
-				scissors.clear();
-				scissors.push_back(next);
-			}
+			scissors.clear();
+			pushScissor(next, false);
 		}
 
 		void pushScissor(Geom::OrthoRectFloat scissor, const bool useIntersection = true){
@@ -372,7 +366,7 @@ export namespace Graphic{
 				Util::imageBarrier(scopedCommand, barriers);
 
 				for (auto& attachment : attachments){
-					attachment.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color, {1., 1., 1., 0.});
+					attachment.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color, {/*1., 1., 1., 0.*/});
 				}
 
 				Util::swapStage(barriers);

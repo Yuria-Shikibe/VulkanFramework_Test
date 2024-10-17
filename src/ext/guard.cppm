@@ -54,7 +54,7 @@ export namespace ext{
 		[[nodiscard]] constexpr explicit resumer(T& tgt) noexcept(is_nothrow) requires (passByMove) :
 			tgt{tgt}, original{std::move(tgt)}{}
 
-		constexpr ~resumer() noexcept(is_nothrow){
+		constexpr ~resumer() {
 			if constexpr(passByMove){
 				tgt = std::move(original);
 			} else{

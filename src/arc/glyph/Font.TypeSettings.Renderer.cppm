@@ -16,7 +16,7 @@ import std;
 //TEMP
 import Graphic.Renderer.UI;
 import Graphic.Draw.Func;
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 
 
 export namespace Font::TypeSettings{
@@ -32,7 +32,7 @@ export namespace Font::TypeSettings{
 		// context.color.a = 0.45f;
 
 
-		Graphic::Color tempColor{};
+		Color tempColor{};
 
 		for (const auto& row : layout->elements){
 			const auto lineOff = row.src + offset;
@@ -49,10 +49,10 @@ export namespace Font::TypeSettings{
 				}
 
 				new(dataPtr) std::array{
-					Core::Vulkan::Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v01},
-					Core::Vulkan::Vertex_UI{glyph.v10().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v11},
-					Core::Vulkan::Vertex_UI{glyph.v11().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v10},
-					Core::Vulkan::Vertex_UI{glyph.v01().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v00},
+					Vertex_UI{glyph.v00().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v01},
+					Vertex_UI{glyph.v10().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v11},
+					Vertex_UI{glyph.v11().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v10},
+					Vertex_UI{glyph.v01().add(lineOff), {imageIndex}, tempColor, glyph.glyph->v00},
 				};
 
 				// Draw::Drawer<Core::Vulkan::Vertex_UI>::Line::rectOrtho(param, context.stroke, Geom::OrthoRectFloat{glyph.src, glyph.end}.move(lineOff), context.color);

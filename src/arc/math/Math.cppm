@@ -29,7 +29,7 @@ export namespace Math {
 	constexpr double DOUBLE_RAD_DEG    = 57.29577951308232;
 
 	constexpr unsigned int SIN_BITS  = 16;
-	constexpr unsigned int SIN_MASK  = ~(-1 << SIN_BITS);
+	constexpr unsigned int SIN_MASK  = ~(~0u << SIN_BITS);
 	constexpr unsigned int SIN_COUNT = SIN_MASK + 1;
 
 	constexpr float RAD_FULL          = PI * 2;
@@ -70,17 +70,14 @@ export namespace Math {
 		return sin(radians / scl) * mag;
 	}
 
-	/** Returns the cosine in radians from a lookup table. */
 	constexpr float cos(const float radians) noexcept {
 		return sinTable[static_cast<unsigned>((radians + PI / 2) * RAD_TO_INDEX) & SIN_MASK];
 	}
 
-	/** Returns the sine in radians from a lookup table. */
 	constexpr float sinDeg(const float degrees) noexcept {
 		return sinTable[static_cast<unsigned>(degrees * DEG_TO_INDEX) & SIN_MASK];
 	}
 
-	/** Returns the cosine in radians from a lookup table. */
 	constexpr float cosDeg(const float degrees) noexcept {
 		return sinTable[static_cast<unsigned>((degrees + 90) * DEG_TO_INDEX) & SIN_MASK];
 	}
@@ -732,7 +729,7 @@ export namespace Math {
 		return Math::mod<decltype(cur)>(cur, cycle) < trigger;
 	}
 
-	namespace Angle{
+	namespace Angles{
 		/**
 		 * @return Angle in [0, 360] degree
 		 */

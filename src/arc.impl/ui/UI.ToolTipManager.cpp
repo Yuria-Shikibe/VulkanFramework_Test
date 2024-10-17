@@ -104,6 +104,7 @@ namespace Core::UI{
 
 	void ToolTipManager::draw() const{
 		auto bound = scene->getBound();
+
 		for (auto&& elem : dropped | std::views::reverse){
 			elem.element->tryDraw(bound);
 		}

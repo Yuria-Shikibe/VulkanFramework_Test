@@ -1,29 +1,36 @@
+module;
+
+#include "../src/ext/adapted_attributes.hpp"
+#include <cassert>
+
 export module ext.object_pool;
 
 import ext.array_stack;
+import ext.atomic_caller;
 import std;
 
 namespace ext{
+
 	template <typename T, std::size_t count>
 	struct object_pool_page{
-		T* data;
+		T* data_uninitialized;
 		mutable std::mutex mutex{};
 
 		array_stack<T*, count> valid_pointers{};
 
 		[[nodiscard]] object_pool_page() = default;
 
-		[[nodiscard]] constexpr explicit object_pool_page(T* data) : data{data}{
+		[[nodiscard]] constexpr explicit object_pool_page(T* data) : data_uninitialized{data}{
 			std::scoped_lock lk{mutex};
 
-			[this]<std::size_t ...I>(std::index_sequence<I...>){
-				(valid_pointers.push(this->data + I), ...);
-			}(std::make_index_sequence<count>{});
+			for(std::size_t i = 0; i < count; ++i){
+				valid_pointers.push(data_uninitialized + i);
+			}
 		}
 
 		/** @brief DEBUG USAGE */
 		[[nodiscard]] constexpr std::span<T> as_span() const noexcept{
-			return std::span{data, count};
+			return std::span{data_uninitialized, count};
 		}
 
 		template <std::invocable<object_pool_page&> Func>
@@ -42,11 +49,11 @@ namespace ext{
 			}
 #endif
 
-			std::allocator_traits<Alloc>::deallocate(alloc, data, count);
+			std::allocator_traits<Alloc>::deallocate(alloc, data_uninitialized, count);
 		}
 
-		constexpr void store(T* p) noexcept(!DEBUG_CHECK && noexcept(noexcept(p->~T()))){
-			p->~T();
+		constexpr void store(T* p) noexcept(!DEBUG_CHECK && std::is_nothrow_destructible_v<T>){
+			std::destroy_at(p);
 
 			std::scoped_lock lk{mutex};
 			valid_pointers.push(p);
@@ -72,11 +79,13 @@ namespace ext{
 			return p;
 		}
 
+		//warning : the resource manage is tackled by external call
+
 		object_pool_page(const object_pool_page& other) = delete;
 
 		constexpr object_pool_page(object_pool_page&& other) noexcept {
 			std::scoped_lock lk{mutex, other.mutex};
-			data = other.data;
+			data_uninitialized = other.data_uninitialized;
 			valid_pointers = std::move(other.valid_pointers);
 		}
 
@@ -85,7 +94,7 @@ namespace ext{
 		constexpr object_pool_page& operator=(object_pool_page&& other) noexcept{
 			if(this == &other) return *this;
 			std::scoped_lock lk{mutex, other.mutex};
-			data = other.data;
+			data_uninitialized = other.data_uninitialized;
 			valid_pointers = std::move(other.valid_pointers);
 			return *this;
 		}
@@ -112,19 +121,27 @@ namespace ext{
 	 * @tparam PageSize maximum objects a page can contain
 	 * @tparam Alloc allocator type ONLY SUPPORTS DEFAULT ALLOCATOR NOW
 	 */
-	template <typename T, std::size_t PageSize = 1000, typename Alloc = std::allocator<T>>
+	template <typename T, std::size_t PageSize = 1000, typename AllocDummy = void>
 	struct object_pool{
 		using value_type = T;
 
 		using page_type = object_pool_page<T, PageSize>;
 		using deleter_type = pool_deleter<T, PageSize>;
 		using unique_ptr = std::unique_ptr<T, deleter_type>;
-		using allocator_type = Alloc;
+		using allocator_type = std::allocator<T>;
+
+		struct obtain_return_type{
+			value_type* data;
+			page_type* page;
+		};
 
 	private:
-		allocator_type allocator{};
-		mutable std::shared_mutex mutex{};
+		// mutable std::mutex mutex{};
+		atomic_caller<page_type*> appendPageCaller{};
+		// std::condition_variable condition{};
+
 		std::list<page_type> pages{};
+		ADAPTED_NO_UNIQUE_ADDRESS allocator_type allocator{};
 
 	public:
 
@@ -141,33 +158,29 @@ namespace ext{
 		}
 
 		template <typename... Args>
-		[[nodiscard]] std::pair<T*, page_type*> obtain_raw(Args&&... args) noexcept(!DEBUG_CHECK && noexcept(T{std::forward<Args>(args)...})){
-			std::pair<T*, page_type*> rstPair{};
+		[[nodiscard]] obtain_return_type obtain_raw(Args&&... args) noexcept(!DEBUG_CHECK && noexcept(std::construct_at<T>(nullptr, std::forward<Args>(args)...))){
+			obtain_return_type rstPair{};
 
-			{
-				std::shared_lock lk{mutex};
-
-				for (page_type& page : pages){
-					rstPair.first = page.borrow(std::forward<Args>(args)...);
-					if(rstPair.first){
-						rstPair.second = &page;
-						goto ret;
-					}
+			for (page_type& page : pages){
+				rstPair.data = page.borrow();
+				if(rstPair.data){
+					rstPair.page = &page;
+					goto ret;
 				}
 			}
 
-			rstPair.second = std::addressof(add_page());
-			rstPair.first = rstPair.second->borrow();
-
-#if DEBUG_CHECK
-			if(!rstPair.first){
-				throw std::runtime_error("Failed To Obtain Object!");
+			while(rstPair.data == nullptr){
+				rstPair.page = appendPageCaller.exec([this]() noexcept{
+					T* ptr = std::allocator_traits<allocator_type>::allocate(allocator, PageSize);
+					page_type& page = pages.emplace_back(ptr);
+					return &page;
+				});
+				rstPair.data = rstPair.page->borrow();
 			}
-#endif
 
 			ret:
 
-			new (rstPair.first) T{std::forward<Args>(args)...};
+			std::construct_at(rstPair.data, std::forward<Args>(args)...);
 
 			return rstPair;
 		}
@@ -177,41 +190,9 @@ namespace ext{
 			return pages;
 		}
 
-		page_type& add_page(){
-			std::unique_lock lk{mutex};
-
-			T* ptr = std::allocator_traits<allocator_type>::allocate(allocator, PageSize);
-			page_type& page = pages.emplace_back(ptr);
-			return page;
-		}
-
-		void free_page(typename std::list<page_type>::const_iterator& itr){
-			std::unique_lock lk{mutex};
-
-			itr->free(allocator);
-			pages.erase(itr);
-		}
-
-		void shrink(){
-			std::unique_lock lk{mutex};
-
-			std::erase_if(pages, [this](page_type& page){
-				return page.lock_and([this](page_type& p){
-					if(p.valid_pointers.full()){
-						p.free(allocator);
-						return true;
-					}else{
-						return false;
-					}
-				});
-			});
-		}
-
 		[[nodiscard]] object_pool() = default;
 
 		~object_pool(){
-			std::unique_lock lk{mutex};
-
 			for (const auto & page : pages){
 				page.free(allocator);
 			}
@@ -220,14 +201,8 @@ namespace ext{
 		object_pool(const object_pool& other) = delete;
 
 		object_pool(object_pool&& other) noexcept{
-			std::scoped_lock lk{mutex, other.mutex};
-
-			for (const auto & page : pages){
-				page.free(allocator);
-			}
-
-			allocator = std::move(other.allocator);
-			pages = std::move(other.pages);
+			std::swap(allocator, other.allocator);
+			std::swap(pages, other.pages);
 		}
 
 		object_pool& operator=(const object_pool& other) = delete;
@@ -235,14 +210,8 @@ namespace ext{
 		//TODO correct move for allocators
 		object_pool& operator=(object_pool&& other) noexcept{
 			if(this == &other) return *this;
-			std::scoped_lock lk{mutex, other.mutex};
-
-			for (const auto & page : pages){
-				page.free(allocator);
-			}
-
-			allocator = std::move(other.allocator);
-			pages = std::move(other.pages);
+			std::swap(allocator, other.allocator);
+			std::swap(pages, other.pages);
 			return *this;
 		}
 	};

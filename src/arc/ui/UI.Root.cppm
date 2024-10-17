@@ -1,6 +1,6 @@
-//
-// Created by Matrix on 2024/9/14.
-//
+module;
+
+#include <cassert>
 
 export module Core.UI.Root;
 
@@ -20,7 +20,8 @@ export namespace Core::UI{
 		[[nodiscard]] Root() = default;
 
 		[[nodiscard]] explicit Root(Scene&& scene){
-			focus = &scenes.insert_or_assign(SceneName::Main, std::move(scene)).first->second;
+			auto name = std::string(scene.name);
+			focus = &scenes.insert_or_assign(std::move(name), std::move(scene)).first->second;
 		}
 
 		ext::string_hash_map<Scene> scenes{};
@@ -28,31 +29,38 @@ export namespace Core::UI{
 		Scene* focus{};
 
 		void draw() const{
-			if(focus)focus->draw();
+			assert(focus != nullptr);
+			focus->draw();
 		}
 
 		void update(const float delta_in_ticks) const{
-			if(focus)focus->update(delta_in_ticks);
+			assert(focus != nullptr);
+			focus->update(delta_in_ticks);
 		}
 
 		void layout() const{
-			if(focus)focus->layout();
+			assert(focus != nullptr);
+			focus->layout();
 		}
 
 		void inputKey(const int key, const int action, const int mode) const{
-			if(focus)focus->onKeyAction(key, action, mode);
+			assert(focus != nullptr);
+			focus->onKeyAction(key, action, mode);
 		}
 
 		void inputScroll(const float x, const float y) const{
-			if(focus)focus->onScroll({x, y});
+			assert(focus != nullptr);
+			focus->onScroll({x, y});
 		}
 
 		void inputMouse(const int key, const int action, const int mode) const{
-			if(focus)focus->onMouseAction(key, action, mode);
+			assert(focus != nullptr);
+			focus->onMouseAction(key, action, mode);
 		}
 
 		void cursorPosUpdate(const float x, const float y) const{
-			if(focus)focus->onCursorPosUpdate({x, y});
+			assert(focus != nullptr);
+			focus->onCursorPosUpdate({x, y});
 		}
 
 		template <std::derived_from<Group> T = Group>

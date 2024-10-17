@@ -11,12 +11,12 @@ namespace ext {
 	 */
 	export
 	template <bool Test, class T>
-	struct RefConditional {
+	struct conditional_reference {
 		using type = std::add_lvalue_reference_t<T>;
 	};
 
 	template <class T>
-	struct RefConditional<false, T> {
+	struct conditional_reference<false, T> {
 		using type = T;
 	};
 
@@ -25,7 +25,7 @@ namespace ext {
 	 * \tparam T Value Type
 	 */
 	export template <typename T, size_t size>
-	using ParamPassType = typename RefConditional<
+	using conditional_pass_type = typename conditional_reference<
 		(size > sizeof(void*) * 2),
 		T
 	>::type;
@@ -37,19 +37,19 @@ namespace ext {
     concept derived = std::derived_from<DerivedT, Base>;
 
     export template <class DerivedT, class... Bases>
-    concept DerivedMulti = (std::derived_from<Bases, DerivedT> && ...);
+    concept multi_derived = (std::derived_from<Bases, DerivedT> && ...);
 
 	export template <class T>
 	concept DefConstructable = std::is_default_constructible_v<T>;
 
 	export template <typename T, typename functype>
-	concept Invokable = function_traits<functype>::template is_invocable<T>;
+	concept invocable = function_traits<functype>::template is_invocable<T>;
 
 	export template <typename T, typename functype>
 	concept InvokableVoid = function_traits<functype>::template invocable_as_v<T>();
 
 	export template <typename T, typename functype>
-	concept InvokeNullable = std::same_as<std::nullptr_t, T> || Invokable<T, functype>;
+	concept InvokeNullable = std::same_as<std::nullptr_t, T> || invocable<T, functype>;
 
 	export template <typename T, typename functype>
 	concept InvokableFunc = std::is_convertible_v<T, std::function<functype>>;

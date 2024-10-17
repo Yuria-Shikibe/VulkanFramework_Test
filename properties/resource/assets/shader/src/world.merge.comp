@@ -12,19 +12,40 @@ layout (binding = 3) uniform sampler2D input_ssao;
 
 layout (binding = 4, rgba32f) writeonly uniform image2D outputImage;
 
-const float intensity_blo = 1.125f;
+const float intensity_blo = 1.05f;
 const float intensity_ori = 0.95f;
-const float lightScl = 1.5f;
+const float lightScl = 1.25f;
+
+const float proximateScl = 1.25f;
+const float sqrt2Inv = 1 / 1.514f * proximateScl;
+
+const vec2[8] proximate = {
+    vec2(proximateScl, 0),
+    vec2(sqrt2Inv, sqrt2Inv),
+    vec2(0, proximateScl),
+    vec2(-sqrt2Inv, sqrt2Inv),
+    vec2(-proximateScl, 0),
+    vec2(-sqrt2Inv, -sqrt2Inv),
+    vec2(0, -proximateScl),
+    vec2(sqrt2Inv, -sqrt2Inv),
+};
 
 void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.xy);
-    vec2 uv = (vec2(pos) + vec2(0.5f, 0.5f)) / vec2(imageSize(outputImage));
-
+    vec2 inv = vec2(1) / vec2(imageSize(outputImage));
+    vec2 uv = (vec2(pos) + vec2(0.5f, 0.5f)) * inv;
 
     vec4 baseColor = texelFetch(input_baseColor, pos, 0);
     vec4 original = texelFetch(input_lightColor, pos, 0) * intensity_ori;
-    vec4 bloom = texture(input_lightColor_blurred, uv) * intensity_blo;
-    vec4 ssao = texture(input_ssao, uv);
+    vec4 bloom = texelFetch(input_lightColor_blurred, pos, 0);
+    vec4 ssao = texelFetch(input_ssao, pos, 0);
+
+    for(uint i = 0; i < 8; ++i){
+        bloom += texture(input_lightColor_blurred, uv + proximate[i] * inv);
+    }
+
+    bloom *= intensity_blo / 9;
+
 
     original = original * (vec4(1.0) - bloom);
     vec4 combined = original + bloom;
@@ -33,8 +54,14 @@ void main() {
 
     vec4 lightColor = vec4(combined.rgb / max(mx, 0.0001), mx);
 
-    float lightness = lightColor.a * lightScl;
-    ssao.a -= lightness;
+    float lightness = lightColor.a/* * lightScl*/;
+//    ssao.a = max(0.f, ssao.a - lightness);
+    ssao.a = smoothstep(ssao.a, 0.f, lightness * .25f);
 
-    imageStore(outputImage, pos, alphaBlend(lightColor, vec4(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), baseColor.a)));
+    imageStore(outputImage, pos,
+        alphaBlend(
+            lightColor,
+            vec4(baseColor.rgb * mix(vec3(1.f), ssao.rgb, ssao.a), baseColor.a)
+        ));
+//    imageStore(outputImage, pos, vec4(ssao.a));
 }

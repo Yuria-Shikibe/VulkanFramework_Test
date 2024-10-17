@@ -8,7 +8,7 @@ import Core.Vulkan.Manager;
 
 void Core::UI::init(Vulkan::VulkanManager& manager){
 	renderer = new Graphic::RendererUI{manager.context};
-	root = new Core::UI::Root{Core::UI::Scene{new Core::UI::LooseGroup, renderer}};
+	root = new Root{Scene{SceneName::Main, new LooseGroup, renderer}};
 
 	
 	manager.registerResizeCallback(

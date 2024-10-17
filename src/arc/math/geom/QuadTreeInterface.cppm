@@ -9,14 +9,17 @@ export import Geom.Rect_Orthogonal;
 import ext.concepts;
 
 export namespace Geom{
+
 	template <typename T, ext::number N = float>
 	struct QuadTreeAdaptable{
-		Rect_Orthogonal<N> getBound() const noexcept = delete;
+		using coordinate_type = N;
 
-		bool roughIntersectWith(const T& other) const = delete;
+		[[nodiscard]] Rect_Orthogonal<N> getBound() const noexcept = delete;
 
-		bool exactIntersectWith(const T& other) const = delete;
+		[[nodiscard]] bool roughIntersectWith(const T& other) const = delete;
 
-		bool containsPoint(typename Vector2D<N>::PassType point) const = delete;
+		[[nodiscard]] bool exactIntersectWith(const T& other) const = delete;
+
+		[[nodiscard]] bool containsPoint(typename Vector2D<N>::PassType point) const = delete;
 	};
 }

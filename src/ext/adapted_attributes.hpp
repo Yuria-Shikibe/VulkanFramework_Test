@@ -1,5 +1,7 @@
 #pragma once
 
+#include "assume.hpp"
+
 #ifdef _MSC_VER
 #define ADAPTED_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #else

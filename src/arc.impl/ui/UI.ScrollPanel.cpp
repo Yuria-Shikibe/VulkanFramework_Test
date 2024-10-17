@@ -4,12 +4,12 @@ import Core.UI.Scene;
 import Graphic.Renderer.UI;
 import Graphic.Batch.AutoDrawParam;
 import Graphic.Draw.Func;
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 
 void Core::UI::ScrollPanel::drawMain() const{
 	Group::drawMain();
 
-	if(enableHoriScroll() || enableVertScroll())getRenderer().pushScissor({Geom::FromExtent, absPos().addY(getBarSize().y), getViewportSize()}, true);
+	if(enableHoriScroll() || enableVertScroll())getRenderer().pushScissor({Geom::FromExtent, absPos().addY(getBarSize().y).add(prop().boarder.bot_lft()), getViewportSize()}, true);
 }
 
 void Core::UI::ScrollPanel::drawPost() const{
@@ -27,10 +27,10 @@ void Core::UI::ScrollPanel::drawPost() const{
 	if(enableHori || enableVert)getRenderer().popScissor();
 
 	if(enableHori){
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getHoriBarRect(), color);
+		Draw::Drawer<Vertex_UI>::rectOrtho(++param, getHoriBarRect(), color);
 	}
 
 	if(enableVert){
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, getVertBarRect(), color);
+		Draw::Drawer<Vertex_UI>::rectOrtho(++param, getVertBarRect(), color);
 	}
 }

@@ -1,6 +1,6 @@
-//
-// Created by Matrix on 2024/8/26.
-//
+module;
+
+#include <cassert>
 
 export module Font.Manager;
 
@@ -87,6 +87,10 @@ export namespace Font{
 			return fontPageName;
 		}
 
+		[[nodiscard]] Graphic::ImageAtlas* getAtlas() const noexcept{ return atlas; }
+
+		[[nodiscard]] Graphic::ImagePage* getFontPage() const noexcept{ return fontPage; }
+
 		[[nodiscard]] IndexedFontFace* getFontFace(FontFaceID id) const;
 
 		[[nodiscard]] Glyph& getGlyph(FontFaceID faceId, GlyphKey key) const;
@@ -94,6 +98,11 @@ export namespace Font{
 		[[nodiscard]] Glyph& getGlyph(std::string_view fontName, GlyphKey key);
 
 		FontFaceID registerFace(std::string_view keyName, std::string_view fontName);
+
+		[[nodiscard]] auto& getPrimaryFontFace() noexcept{
+			assert(!fontFaces_fastAccess.empty());
+			return fontFaces_fastAccess.front();
+		}
 
 		//TODO allow erase registered face?
 

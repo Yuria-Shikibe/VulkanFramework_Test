@@ -14,7 +14,7 @@ export namespace Geom{
 
 		using value_type = T;
 
-		using PassType = ext::ParamPassType<Vector2D, sizeof(T) * 2>;
+		using PassType = ext::conditional_pass_type<Vector2D, sizeof(T) * 2>;
 
 		[[nodiscard]] constexpr Vector2D operator+(const PassType tgt) const noexcept {
 			return {x + tgt.x, y + tgt.y};
@@ -781,6 +781,23 @@ export namespace Geom{
 				T errY = Math::abs(y - other.y);
 				return errX < Math::FLOATING_ROUNDING_ERROR && errY < Math::FLOATING_ROUNDING_ERROR;
 			}
+		}
+
+		/**
+		 * @brief
+		 * @return y / x
+		 */
+		[[nodiscard]] constexpr T slope() const noexcept{
+			return y / x;
+		}
+
+
+		/**
+		 * @brief
+		 * @return x / y
+		 */
+		[[nodiscard]] constexpr T slopeInv() const noexcept{
+			return x / y;
 		}
 
 	};

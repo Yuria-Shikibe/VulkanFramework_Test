@@ -32,7 +32,7 @@ export namespace Core::Ctrl{
 		constexpr float doublePressMaxSpacing = 0.25f * 60; //ticks!
 
 		[[nodiscard]] constexpr bool matched(const int act, const int expectedAct) noexcept{
-			return act == expectedAct || expectedAct & Mask == Ignore;
+			return act == expectedAct || (expectedAct & Mask) == Ignore;
 		}
 
 		[[nodiscard]] constexpr bool isContinuous(const int mode) noexcept{

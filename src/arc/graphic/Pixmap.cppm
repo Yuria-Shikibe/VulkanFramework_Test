@@ -260,7 +260,7 @@ export namespace Graphic{
             return get(dataIndex(x, y));
         }
 
-        void each(ext::Invokable<void(Pixmap&, size_type, size_type)> auto&& func) {
+        void each(ext::invocable<void(Pixmap&, size_type, size_type)> auto&& func) {
             for(size_type x = 0; x < width; x++) {
                 for(size_type y = 0; y < height; ++y) {
                     func(*this, x, y);
@@ -268,7 +268,7 @@ export namespace Graphic{
             }
         }
 
-        void each(ext::Invokable<void(const Pixmap&, size_type, size_type)> auto&& func) const {
+        void each(ext::invocable<void(const Pixmap&, size_type, size_type)> auto&& func) const {
             for(size_type x = 0; x < width; x++) {
                 for(size_type y = 0; y < height; ++y) {
                     func(*this, x, y);

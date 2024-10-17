@@ -20,7 +20,7 @@ export namespace ext{
 		mutable std::mutex mtx{};
 
 	public:
-		template <ext::Invokable<FuncTy> Func>
+		template <ext::invocable<FuncTy> Func>
 		[[nodiscard]] Future push(Func&& task){
 			return this->push(std::packaged_task<FuncTy>(std::forward<Func>(task)));
 		}

@@ -45,7 +45,7 @@ export namespace Core::UI{
 
 			//apply size & position
 			const auto capturedSize_full = layoutInfo.arrange(cells);
-			const auto alignOffset = Align::getOffsetOf(align, capturedSize_full, Rect{property.getValidSize()});
+			const auto alignOffset = Align::getOffsetOf(align, capturedSize_full, Rect{Geom::FromExtent, property.boarder.bot_lft(), property.getValidSize()});
 
 			for (auto& cell : cells){
 				cell.cell.allocatedBound.src += alignOffset;
@@ -101,7 +101,7 @@ export namespace Core::UI{
 			}
 
 			if(resized){
-				this->resize_quiet(validSize);
+				this->resize_quiet(validSize + prop().boarder.getSize());
 			}
 
 			const auto remainArea = validSize - capturedSize_initial;
@@ -111,7 +111,7 @@ export namespace Core::UI{
 
 			//apply size & position
 			const auto capturedSize_full = layoutInfo.arrange(cells);
-			const auto alignOffset = Align::getOffsetOf(align, capturedSize_full, Rect{property.getValidSize()});
+			const auto alignOffset = Align::getOffsetOf(align, capturedSize_full, Rect{Geom::FromExtent, property.boarder.bot_lft(), property.getValidSize()});
 
 			for (auto& cell : cells){
 				cell.cell.allocatedBound.src += alignOffset;

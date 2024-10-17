@@ -81,41 +81,60 @@ namespace ext::algo{
 		bool replace,
 		std::permutable Itr,
 		std::permutable Sentinel,
-		typename Proj = std::identity,
+		std::indirectly_unary_invocable<Itr> Proj = std::identity,
 		std::indirect_unary_predicate<std::projected<Itr, Proj>> Pred
 	>
-	requires requires(Sentinel sentinel){--sentinel; requires std::sentinel_for<Sentinel, Itr>;}
+	requires requires(Sentinel sentinel){
+		requires std::bidirectional_iterator<Sentinel>;
+		requires std::sentinel_for<Sentinel, Itr>;
+	}
 	[[nodiscard]] constexpr Itr
-		remove_if_unstable_impl(Itr first, Sentinel sentinel, Pred pred, const Proj porj = {}){
+		remove_if_unstable_impl(Itr first, Sentinel sentinel, Pred pred, Proj porj = {}){
 		algo::itrRangeOrderCheck(first, sentinel);
 
 		Itr firstFound = std::ranges::find_if(first, sentinel, pred, porj);
-		Sentinel sl = sentinel;
 
-		if(firstFound != sentinel){
-			--sl;
-			while(pred(std::invoke(porj, *sl))) --sl;
-
-			if constexpr(itrSentinelCompariable<Itr, Sentinel>){
-				while(firstFound < sl){
-					algo::swapItr<replace>(sl, firstFound);
-
-					firstFound = std::ranges::find_if(firstFound, sl, pred, porj);
-					while(pred(std::invoke(porj, *sl))) --sl;
-				}
+		while(firstFound != sentinel){
+			if(std::invoke(pred, std::invoke(porj, *firstFound))){
+				algo::swapItr<replace>(--sentinel, firstFound);
 			} else{
-				while(firstFound != sentinel){
-					if(pred(std::invoke(porj, *firstFound))){
-						algo::swapItr<replace>(sentinel, firstFound);
-						if(!(--sentinel != firstFound)) break;
-					} else{
-						++firstFound;
-					}
-				}
+				++firstFound;
 			}
 		}
 
 		return firstFound;
+
+		// if(firstFound != sentinel){
+			// --sl;
+			// while(std::invoke(pred, std::invoke(porj, *sl))) --sl;
+			//
+			// while(firstFound != sentinel){
+			// 	if(std::invoke(pred, std::invoke(porj, *firstFound))){
+			// 		algo::swapItr<replace>(sentinel, firstFound);
+			// 		if(!(--sentinel != firstFound)) break;
+			// 	} else{
+			// 		++firstFound;
+			// 	}
+			// }
+
+			// if constexpr(itrSentinelCompariable<Itr, Sentinel>){
+			// 	while(firstFound < sl){
+			// 		algo::swapItr<replace>(sl, firstFound);
+			//
+			// 		firstFound = std::ranges::find_if(firstFound, sl, pred, porj);
+			// 		while(sl != firstFound && std::invoke(pred, std::invoke(porj, *sl))) --sl;
+			// 	}
+			// } else{
+			// 	while(firstFound != sentinel){
+			// 		if(std::invoke(pred, std::invoke(porj, *firstFound))){
+			// 			algo::swapItr<replace>(sentinel, firstFound);
+			// 			if(!(--sentinel != firstFound)) break;
+			// 		} else{
+			// 			++firstFound;
+			// 		}
+			// 	}
+			// }
+		// }
 	}
 
 	template <bool replace, std::permutable Itr, std::permutable Sentinel, typename Ty, typename Proj = std::identity>
@@ -233,14 +252,14 @@ namespace ext::algo{
 	          std::indirect_unary_predicate<std::projected<std::ranges::iterator_t<Rng>, Proj>> Pred>
 		requires requires(Rng rng){
 			requires std::ranges::sized_range<Rng>;
-			rng.erase(std::ranges::begin(rng), std::ranges::end(rng)); requires std::ranges::sized_range<Rng>;
+			rng.erase(std::ranges::begin(rng), std::ranges::end(rng));
 		}
-	constexpr decltype(auto) erase_if_unstable(Rng& range, Pred pred, const Proj porj = {}){
-		auto oldSize = range.size();
-		range.erase(
+	constexpr decltype(auto) erase_if_unstable(Rng& range, const Pred pred, const Proj porj = {}){
+		// auto oldSize = std::ranges::size(range);
+		return range.erase(
 			algo::remove_if_unstable_impl<replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj),
 			std::ranges::end(range));
-		return oldSize - range.size();
+		// return oldSize - std::ranges::size(range);
 	}
 
 	export
@@ -272,5 +291,9 @@ namespace ext::algo{
 				replace>(std::ranges::begin(range), std::ranges::end(range), pred, porj), std::ranges::end(range));
 		return oldSize - range.size();
 	}
+
+}
+
+namespace ext::algo{
 
 }

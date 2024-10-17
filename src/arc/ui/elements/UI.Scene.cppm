@@ -16,6 +16,11 @@ import ext.handle_wrapper;
 import std;
 
 export namespace Core{
+	namespace Ctrl{
+		class KeyMapping;
+	}
+
+
 	class Bundle;
 }
 
@@ -41,6 +46,8 @@ namespace Core::UI{
 			}
 		};
 
+		std::string_view name{};
+
 		Geom::Vec2 pos{};
 		Geom::Vec2 size{};
 
@@ -50,6 +57,7 @@ namespace Core::UI{
 
 		ext::dependency<ext::owner<Group*>> root{};
 
+		ext::dependency<Ctrl::KeyMapping*> keyMapping{};
 		//focus fields
 		// Element* currentInputFocused{nullptr};
 		Element* currentScrollFocus{nullptr};
@@ -64,8 +72,10 @@ namespace Core::UI{
 
 		[[nodiscard]] SceneBase() = default;
 
-		[[nodiscard]] SceneBase(const ext::owner<Group*> root, Graphic::RendererUI* renderer, Bundle* bundle)
-			: root{root},
+		[[nodiscard]] SceneBase(const std::string_view name, const ext::owner<Group*> root, Graphic::RendererUI* renderer,
+		                        Bundle* bundle)
+			: name{name},
+			  root{root},
 			  renderer{renderer},
 			  bundle{bundle}{}
 
@@ -81,10 +91,9 @@ namespace Core::UI{
 	export struct Scene : SceneBase{
 		ToolTipManager tooltipManager{};
 
-		[[nodiscard]] Scene() = default;
-
 		[[nodiscard]] explicit Scene(
-			ext::owner<Group*> root,
+			std::string_view name,
+			ext::owner<Group*> root = nullptr,
 			Graphic::RendererUI* renderer = nullptr,
 			Bundle* bundle = nullptr);
 
@@ -138,6 +147,8 @@ namespace Core::UI{
 
 	private:
 		void updateInbounds(std::vector<Element*>&& next);
+
+		// void moveOwnerShip();
 	};
 
 

@@ -169,7 +169,7 @@ namespace Graphic{
 			const ImageViewRegion& imageRegion,
 			const Align::Pad<std::uint32_t> margin,
 			const Geom::USize2 centerSize = {},
-			const Align::Scale centerScale = Align::Scale::fill,
+			const Align::Scale centerScale = DefaultScale,
 			const float edgeShrinkScale = 0.25f
 		) : ImageViewNineRegion{imageRegion, Geom::OrthoRectUInt{
 			Geom::FromExtent, margin.bot_lft(), imageRegion.getBound().getSize().sub(margin.getSize())
@@ -181,7 +181,7 @@ namespace Graphic{
 			const ImageViewRegion& external,
 			const Align::Pad<std::uint32_t> margin,
 			const ImageViewRegion& internal,
-			const Align::Scale centerScale = Align::Scale::fill,
+			const Align::Scale centerScale = DefaultScale,
 			const float edgeShrinkScale = 0.25f
 		) : ImageViewNineRegion{
 				external,
@@ -202,7 +202,7 @@ namespace Graphic{
 			const Align::Pad<std::uint32_t> margin,
 			const ImageViewRegion& internal,
 			const Geom::USize2 centerSize,
-			const Align::Scale centerScale = Align::Scale::fill,
+			const Align::Scale centerScale = DefaultScale,
 			const float edgeShrinkScale = 0.25f
 		) : ImageViewNineRegion{
 				external,

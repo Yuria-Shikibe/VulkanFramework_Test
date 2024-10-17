@@ -8,6 +8,7 @@ export import Core.UI.ElementUniquePtr;
 export import Core.UI.ToolTipInterface;
 
 export import Core.UI.Event;
+export import Core.UI.Drawer;
 export import Core.UI.Flags;
 export import Core.UI.Util;
 export import Core.UI.CellBase;
@@ -37,26 +38,48 @@ export namespace Graphic{
 
 
 namespace Core::UI{
-	export constexpr bool NoClipWhenDraw = true;
+	export constexpr bool NoClipWhenDraw = false;
 
 	export using Rect = Geom::Rect_Orthogonal<float>;
-	export struct ElementDrawer{
-		virtual ~ElementDrawer() = default;
 
-		virtual void draw(const Element& element) const = 0;
-	};
-
-	struct DefElementDrawer final : public ElementDrawer{
+	struct DefElementDrawer final : public StyleDrawer<Element>{
 		void draw(const Element& element) const override;
 	};
 
-	export constexpr DefElementDrawer DefaultDrawer;
+	struct EmptyElementDrawer final : public StyleDrawer<Element>{
+		void draw(const Element& element) const override{}
+	};
+
+	export constexpr Align::Spacing DefaultBoarder{8., 8., 8., 8.};
+
+	export constexpr DefElementDrawer DefaultStyleDrawer;
+	export constexpr EmptyElementDrawer EmptyStyleDrawer;
+
+	export const StyleDrawer<Element>* GlobalStyleDrawer;
+
+	export using ElemEventManager = ext::event_manager<std::move_only_function,
+	                                                   Event::Click,
+	                                                   Event::Drag,
+	                                                   Event::Exbound,
+	                                                   Event::Inbound,
+	                                                   Event::BeginFocus,
+	                                                   Event::EndFocus,
+	                                                   Event::Scroll,
+	                                                   Event::Moved>;
+
+	const StyleDrawer<Element>* getDefaultStyleDrawer(){
+		return GlobalStyleDrawer ? GlobalStyleDrawer : &DefaultStyleDrawer;
+	}
 
 	export struct ElemGraphicData{
 		Graphic::Color baseColor{};
 		float inherentOpacity{1.f};
 		float contextOpacity{1.f};
 
+
+		void setEmptyDrawer(){
+			drawer = &EmptyStyleDrawer;
+		}
 
 		[[nodiscard]] constexpr float getOpacity() const noexcept{
 			return inherentOpacity * contextOpacity;
@@ -69,7 +92,7 @@ namespace Core::UI{
 		// mutable Graphic::Color tmpColor{};
 		//TODO drawer
 
-		const ElementDrawer* drawer{&DefaultDrawer};
+		const StyleDrawer<Element>* drawer{getDefaultStyleDrawer()};
 	};
 
 	export
@@ -101,7 +124,7 @@ namespace Core::UI{
 			}
 		}
 
-		void registerFocusEvent(ext::event_manager& event_manager){
+		void registerFocusEvent(ElemEventManager& event_manager){
 			event_manager.on<Event::BeginFocus>([this](auto){
 				focused = true;
 			});
@@ -116,7 +139,7 @@ namespace Core::UI{
 			});
 		}
 
-		void registerDefEvent(ext::event_manager& event_manager){
+		void registerDefEvent(ElemEventManager& event_manager){
 			event_manager.on<Event::EndFocus>([this](auto){
 				pressed = false;
 			});
@@ -150,33 +173,16 @@ namespace Core::UI{
 		Geom::Vec2 absoluteSrc{};
 
 		Geom::Vector2D<bool> fillParent{};
+		bool maintainFocusUntilMouseDrop{};
+
 		ClampedSize clampedSize{};
-		Align::Spacing boarder{};
+		Align::Spacing boarder{DefaultBoarder};
 
 		float globalScale{};
 		float localScale{};
 
-
-		//state
-		bool activated{}; //TODO as graphic property?
-		bool visible{true};
-		bool sleep{};
-		bool maintainFocusUntilMouseDrop{};
-
-
 		//input events
-		ext::event_manager events{
-			{
-				ext::index_of<Event::Click>(),
-				ext::index_of<Event::Drag>(),
-				ext::index_of<Event::Exbound>(),
-				ext::index_of<Event::Inbound>(),
-				ext::index_of<Event::BeginFocus>(),
-				ext::index_of<Event::EndFocus>(),
-				ext::index_of<Event::Scroll>(),
-				ext::index_of<Event::Moved>(),
-			}
-		};
+		ElemEventManager events{};
 
 		ElemGraphicData graphicData{};
 
@@ -238,6 +244,11 @@ namespace Core::UI{
 		std::queue<std::unique_ptr<Action<Element>>> actions{};
 
 	public:
+		//state
+		bool activated{}; //TODO as graphic property?
+		bool visible{true};
+		bool sleep{};
+
 		//Layout Spec
 		LayoutState layoutState{};
 		Interactivity interactivity{Interactivity::enabled};
@@ -281,11 +292,11 @@ namespace Core::UI{
 			return property.maintainFocusUntilMouseDrop;
 		}
 
-		[[nodiscard]] constexpr bool isActivated() const noexcept{ return property.activated; }
+		[[nodiscard]] constexpr bool isActivated() const noexcept{ return activated; }
 
-		[[nodiscard]] constexpr bool isVisible() const noexcept{ return property.visible; }
+		[[nodiscard]] constexpr bool isVisible() const noexcept{ return visible; }
 
-		[[nodiscard]] constexpr bool isSleep() const noexcept{ return property.sleep; }
+		[[nodiscard]] constexpr bool isSleep() const noexcept{ return sleep; }
 
 		[[nodiscard]] Group* getParent() const noexcept{
 			return parent;
@@ -318,7 +329,7 @@ namespace Core::UI{
 			return property.graphicData;
 		}
 
-		ext::event_manager& events() noexcept{
+		ElemEventManager& events() noexcept{
 			return property.events;
 		}
 
@@ -483,7 +494,7 @@ namespace Core::UI{
 
 	protected:
 		[[nodiscard]] bool inboundOf(const Rect& clipSpace_abs) const noexcept{
-			return clipSpace_abs.overlap_Exclusive(property.getValidBound_absolute());
+			return clipSpace_abs.overlap_Exclusive(property.getBound_absolute());
 		}
 
 		void dropToolTipIfMoved() const;

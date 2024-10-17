@@ -3,8 +3,7 @@ export module Graphic.Effect.Manager;
 export import Graphic.Effect;
 
 import ext.object_pool;
-import ext.Container.ObjectPool;
-import ext.heterogeneous;
+import ext.algo;
 import Geom.Rect_Orthogonal;
 
 import std;
@@ -30,61 +29,74 @@ namespace Graphic{
 		pool_type effectPool{};
 
 		std::vector<pool_type::unique_ptr> actives{};
-		std::stack<pool_type::unique_ptr, std::vector<pool_type::unique_ptr>> pendings{};
+		// std::stack<pool_type::unique_ptr, std::vector<pool_type::unique_ptr>> pendings{};
 
-		std::mutex acquire_ActivesMutex{};
+		std::vector<pool_type::unique_ptr> buffer{};
+
+		std::mutex acquire_BufferMutex{};
 		std::mutex acquire_PendingsMutex{};
 
 	public:
 
-		/**
-		 * @param delta_in_ticks advanced time
-		 */
-		void update(const float delta_in_ticks){
+		void update(const float delta_in_ticks) noexcept{
 			auto end = actives.end();
-			for(auto itr = actives.begin(); itr < end; ++ itr){
-				if(!itr->get()->update(delta_in_ticks))continue;
+			auto cur = actives.begin();
 
-				pendings.push(std::move(*itr));
+			ext::algo::erase_if_unstable(actives, [delta_in_ticks](const pool_type::unique_ptr& e){
+				return e->update(delta_in_ticks);
+			});
 
-				end = std::prev(end);
-				*itr = std::move(*end);
-				actives.pop_back();
-			}
+			// while(cur != end){
+			// 	if(!cur->get()->update(delta_in_ticks))goto next;
+			//
+			// 	// pendings.push(std::ranges::iter_move(cur));
+			// 	--end;
+			//
+			// 	if(cur == end)break;
+			// 	*cur = std::ranges::iter_move(end);
+			//
+			// 	next:
+			// 	++cur;
+			// }
+			//
+			// actives.erase(end, actives.end());
 		}
 
 		/**
-		 * @brief acquire an activated effect handle
-		 * @return pointer to an activated effect, Guarantees NOT NULL
+		 * @brief acquire a TO BE activated effect handle
+		 * @return ref to an activated effect
 		 */
-		[[nodiscard]] Effect* acquire(){
+		[[nodiscard]] Effect& acquire() noexcept{
 			Effect* out;
 
+			pool_type::unique_ptr ptr{effectPool.obtain_unique()};
+
 			{
-				pool_type::unique_ptr ptr{};
-
-				if(std::lock_guard lk{acquire_PendingsMutex}; !pendings.empty()){
-					ptr = std::move(pendings.top());
-					pendings.pop();
-					goto active;
-				}
-
-				ptr = effectPool.obtain_unique();
-
-				active:
-
-				{
-					std::lock_guard guard{acquire_ActivesMutex};
-					out = ptr.get();
-					actives.push_back(std::move(ptr));
-				}
+				std::lock_guard guard{acquire_BufferMutex};
+				out = ptr.get();
+				buffer.push_back(std::move(ptr));
 			}
 
-			out->additionalData.reset();
-			out->data.progress.time = 0;
 			out->resignHandle(allocateHandle());
 
-			return out;
+			return *out;
+		}
+
+		void dumpBuffer() noexcept{
+			std::vector<pool_type::unique_ptr> dump{};
+			{
+				std::lock_guard guard{acquire_BufferMutex};
+				dump = std::move(buffer);
+			}
+
+			actives.reserve(dump.size() + actives.size());
+			std::ranges::move(dump, std::back_inserter(actives));
+		}
+
+		void dumpBuffer_unchecked() noexcept{
+			actives.reserve(buffer.size() + actives.size());
+			std::ranges::move(buffer, std::back_inserter(actives));
+			buffer.clear();
 		}
 
 		void render(const Geom::OrthoRectFloat viewport) const{

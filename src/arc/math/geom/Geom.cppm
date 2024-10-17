@@ -1,5 +1,7 @@
 module ;
 
+#include <cassert>
+
 export module Geom;
 
 import std;
@@ -88,7 +90,7 @@ export namespace Geom {
 		}
 	}
 
-	Vec2 arrive(const Vec2 position, const Vec2 dest, const Vec2 curVel, const float smooth, const float radius, const float tolerance) {
+	[[deprecated]] Vec2 arrive(const Vec2 position, const Vec2 dest, const Vec2 curVel, const float smooth, const float radius, const float tolerance) {
 		auto toTarget = Vec2{ dest - position };
 
 		const float distance = toTarget.length();
@@ -123,7 +125,7 @@ export namespace Geom {
 		return Vec2{x, y};
 	}
 
-	 std::optional<Vec2> intersectSegments(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4){
+	 [[deprecated]] std::optional<Vec2> intersectSegments(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4){
 		const float x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, x3 = p3.x, y3 = p3.y, x4 = p4.x, y4 = p4.y;
 
 		const float dx1 = x2 - x1;
@@ -193,8 +195,6 @@ export namespace Geom {
 
 	template <ext::derived<QuadBox> T>
 	[[nodiscard]] constexpr Vec2 avgEdgeNormal(const Vec2 p, const T& rectangle) {
-		Vec2 closestEdgeNormal{};
-
 		std::array<std::pair<float, Vec2>, 4> normals{};
 
 		for (int i = 0; i < 4; i++) {
@@ -207,22 +207,60 @@ export namespace Geom {
 
 		const float total = (normals[0].first + normals[1].first + normals[2].first + normals[3].first);
 
-		for(auto& [weight, normal] : normals) {
+		Vec2 closestEdgeNormal{};
+		for(const auto& [weight, normal] : normals) {
 			closestEdgeNormal.add(normal * Math::powIntegral<15>(weight / total));
 		}
-
-		// Yes this is cool
-		// closestEdgeNormal /= std::accumulate(normals | std::ranges::views::elements<0> | std::ranges::common_range);
-
 		return closestEdgeNormal;
 	}
 
-	Vec2 rectAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) {
-		Vec2 intersections{};
-		float count = 0;
+	struct IntersectionResult{
+		std::array<Vec2, 8> intersections;
+		unsigned count;
+
+		constexpr void push(const Vec2 v) noexcept{
+			if(count == intersections.size())return;
+			intersections[count++] = v;
+		}
+
+		explicit operator bool() const noexcept{
+			return count != 0;
+		}
+
+		[[nodiscard]] constexpr Vec2 avg() const noexcept{
+			if(count > 0) {
+				Vec2 rst{};
+				for(unsigned i = 0; i < count; ++i){
+					rst += intersections[i];
+				}
+				return rst / static_cast<float>(count);
+			}
+
+			//OPTM abort?
+			return {};
+		}
+	};
+
+	auto rectExactAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) {
+		IntersectionResult result{};
 
 		Vec2 rst{};
+		for(int i = 0; i < 4; ++i) {
+			for(int j = 0; j < 4; ++j) {
+				if(intersectSegments(quad1[i], quad1[(i + 1) % 4], quad2[j], quad2[(j + 1) % 4], rst)) {
+					result.push(rst);
+				}
+			}
+		}
 
+		return result;
+	}
+
+	Vec2 rectRoughAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) {
+		Vec2 intersections{};
+		unsigned count = 0;
+
+		Vec2 rst{};
 		for(int i = 0; i < 4; ++i) {
 			for(int j = 0; j < 4; ++j) {
 				if(intersectSegments(quad1[i], quad1[(i + 1) % 4], quad2[j], quad2[(j + 1) % 4], rst)) {
@@ -233,8 +271,9 @@ export namespace Geom {
 		}
 
 		if(count > 0) {
-			return intersections.div(count);
+			return intersections.div(static_cast<float>(count));
 		}else {
+			assert(false);
 			return intersections.set(quad1.v0).add(quad1.v2).add(quad2.v0).add(quad2.v2).scl(0.25f);
 		}
 
@@ -242,8 +281,8 @@ export namespace Geom {
 
 
 	OrthoRectFloat maxContinousBoundOf(const std::vector<QuadBox>& traces) {
-		const auto& front = traces.front().maxOrthoBound;
-		const auto& back  = traces.back().maxOrthoBound;
+		const auto& front = traces.front().getMaxOrthoBound();
+		const auto& back  = traces.back().getMaxOrthoBound();
 		auto [minX, maxX] = std::minmax({ front.getSrcX(), front.getEndX(), back.getSrcX(), back.getEndX() });
 		auto [minY, maxY] = std::minmax({ front.getSrcY(), front.getEndY(), back.getSrcY(), back.getEndY() });
 

@@ -1,6 +1,15 @@
-//
-// Created by Matrix on 2024/8/28.
-//
+module;
+
+#include <cassert>
+
+// #define OnDefine
+
+#ifdef OnDefine
+#define Spec namespace
+
+#else
+#define Spec struct
+#endif
 
 export module Graphic.Draw.Func;
 
@@ -24,15 +33,23 @@ export namespace Graphic::Draw{
 		return Math::max(Math::ceil(radius * Math::PI / CircleVertPrecision), 12);
 	}
 
-	// using Vertex = Core::Vulkan::Vertex_World;
+#ifdef OnDefine
+	using Vertex = Graphic::Vertex_World;
+#else
 	template <typename Vertex>
-	struct Drawer{
+#endif
+
+	Spec Drawer{
 		template <VertexModifier<Vertex&> M>
 		static void fill(
 			const DrawParam<M>& param,
 			const Geom::Vec2& v00, const Geom::Vec2& v10, const Geom::Vec2& v11, const Geom::Vec2& v01,
 			const Color& c00, const Color& c10, const Color& c11, const Color& c01){
+
+			assert(param.uv != nullptr);
+
 			SeqGenerator<Vertex> generator{param.dataPtr};
+
 			generator(DefGenerator<Vertex>::value, param.modifier, v00, param.index, c00, param.uv->v01);
 			generator(DefGenerator<Vertex>::value, param.modifier, v10, param.index, c10, param.uv->v11);
 			generator(DefGenerator<Vertex>::value, param.modifier, v11, param.index, c11, param.uv->v10);
@@ -79,7 +96,7 @@ export namespace Graphic::Draw{
 			);
 		}
 
-		struct Line{
+		Spec Line{
 			//TODO ortho lines
 			template <VertexModifier<Vertex&> M>
 			static void line(
@@ -142,6 +159,22 @@ export namespace Graphic::Draw{
 				Line::line(param, stroke, trans.vec, trans.vec + vec, c, c, cap);
 			}
 
+			template <AutoAcquirableParam M, typename T>
+				requires requires(const T& t){
+					{ t[0u] } -> std::convertible_to<Geom::Vec2>;
+				}
+			static void circularPoly(
+				M& auto_param,
+				const float stroke,
+				const T& poly, const unsigned size, const Color& color, const bool cap = true){
+				assert(size > 0);
+				Geom::Vec2 last{poly[size - 1]};
+				for(unsigned i = 0; i < size; ++i){
+					const auto cur = poly[i];
+					Line::line(++auto_param, stroke, last, cur, color, color, cap);
+					last = cur;
+				}
+			}
 
 			template <AutoAcquirableParam M>
 			static void rectOrtho(

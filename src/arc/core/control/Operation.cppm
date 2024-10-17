@@ -9,7 +9,7 @@ export import Core.Ctrl.Bind;
 export import Core.Ctrl.Constants;
 export import Core.Ctrl.KeyPack;
 import ext.heterogeneous;
-import Assets.Bundle;
+import Core.Bundle;
 
 import ext.json.io;
 
@@ -332,14 +332,14 @@ struct std::equal_to<Core::Ctrl::OperationGroup>{
 
 export
 template <>
-	struct ext::json::JsonSerializator<Core::Ctrl::Operation>{
-	static void write(JsonValue& jsonValue, const Core::Ctrl::Operation& data){
-		jsonValue.asObject();
+	struct ext::json::json_serializer<Core::Ctrl::Operation>{
+	static void write(json_value& jsonValue, const Core::Ctrl::Operation& data){
+		jsonValue.as_obj();
 		jsonValue.append("full", static_cast<Integer>(data.customeBind.pack()));
 	}
 
-	static void read(const JsonValue& jsonValue, Core::Ctrl::Operation& data){
-		auto& map = jsonValue.asObject();
+	static void read(const json_value& jsonValue, Core::Ctrl::Operation& data){
+		auto& map = jsonValue.as_obj();
 		if(const auto val = map.try_find("full")){
 			auto [k, a, m] = Core::Ctrl::unpackKey(val->as<int>());
 			data.setCustom(k, m);
@@ -349,20 +349,20 @@ template <>
 
 export
 template <>
-	struct ext::json::JsonSerializator<Core::Ctrl::OperationGroup>{
+	struct ext::json::json_serializer<Core::Ctrl::OperationGroup>{
 	using UmapIO = JsonSrlContBase_string_map<Core::Ctrl::Operation, true>;
 
-	static void write(JsonValue& jsonValue, const Core::Ctrl::OperationGroup& data){
-		JsonValue bindsData{};
+	static void write(json_value& jsonValue, const Core::Ctrl::OperationGroup& data){
+		json_value bindsData{};
 
 		UmapIO::write(bindsData, data.getBinds());
 
-		jsonValue.asObject();
+		jsonValue.as_obj();
 		jsonValue.append("binds", bindsData);
 	}
 
-	static void read(const JsonValue& jsonValue, Core::Ctrl::OperationGroup& data){
-		const JsonValue* bindsData = jsonValue.asObject().try_find("binds");
+	static void read(const json_value& jsonValue, Core::Ctrl::OperationGroup& data){
+		const json_value* bindsData = jsonValue.as_obj().try_find("binds");
 
 		if(bindsData)UmapIO::read(*bindsData, data.getBinds());
 	}

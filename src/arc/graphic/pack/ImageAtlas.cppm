@@ -56,6 +56,7 @@ namespace Graphic{
 
 			void shrink(const std::uint32_t size){
 				region.shrink(size);
+
 				setUV_fromInternal(region);
 			}
 

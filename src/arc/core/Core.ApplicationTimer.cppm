@@ -86,7 +86,7 @@ export namespace Core{
 		[[nodiscard]] constexpr Sec getUpdateTime() const noexcept{return {updateTime};}
 
 		[[nodiscard]] constexpr Tick globalDeltaTick() const noexcept{return getGlobalDelta();}
-		[[nodiscard]] constexpr Tick updateDeltaTick() const noexcept{return getGlobalDelta();}
+		[[nodiscard]] constexpr Tick updateDeltaTick() const noexcept{return getUpdateDelta();}
 
 	};
 	

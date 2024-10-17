@@ -3,6 +3,8 @@ export module ext.array_stack;
 import std;
 
 export namespace ext{
+	//OPTM replace with inplace array
+
 	/**
 	 * @brief stack in fixed size, provide bound check ONLY in debug mode
 	 * @warning do not destruct element after pop
@@ -59,6 +61,19 @@ export namespace ext{
 			checkUnderFlow();
 
 			--sz;
+		}
+
+		[[nodiscard]] constexpr std::optional<T> try_pop_and_get() noexcept(std::is_move_constructible_v<T>){
+			if(empty())return std::nullopt;
+
+			std::optional<T> t{std::move(items[--sz])};
+			return t;
+		}
+
+		void clear() noexcept{
+			std::ranges::destroy_n(items.begin(), sz);
+			std::ranges::uninitialized_default_construct_n(items.begin(), sz);
+			sz = 0;
 		}
 
 	private:

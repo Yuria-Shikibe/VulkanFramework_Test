@@ -9,28 +9,56 @@ export import Core.UI.RegionDrawable;
 
 import std;
 
-export namespace Core::UI{
-	struct ImageDisplay : public Element{
-		std::unique_ptr<RegionDrawable> drawable{};
-		std::move_only_function<decltype(drawable)(ImageDisplay&)> drawableProv{};
+namespace Core::UI{
+	//TODO ImageDisplay with static type
 
+	struct ImageDisplayBase : public Element{
 		Align::Scale scaling{Align::Scale::fit};
 		Align::Pos imageAlign{Align::Pos::center};
 
-		[[nodiscard]] ImageDisplay() : Element{"ImageDisplay"}{}
+		[[nodiscard]] explicit ImageDisplayBase(
+			const Align::Scale scaling,
+			const Align::Pos imageAlign = Align::Pos::center)
+			: scaling{scaling},
+			  imageAlign{imageAlign}{}
+
+		[[nodiscard]] explicit ImageDisplayBase(
+			const std::string_view tyName,
+			const Align::Scale scaling = Align::Scale::fit,
+			const Align::Pos imageAlign = Align::Pos::center)
+			: Element{tyName},
+			  scaling{scaling},
+			  imageAlign{imageAlign}{}
+
+		[[nodiscard]] ImageDisplayBase() = default;
+	};
+
+	export
+	struct ImageDisplay : public ImageDisplayBase{
+	private:
+		std::unique_ptr<RegionDrawable> drawable{};
+		std::move_only_function<decltype(drawable)(ImageDisplay&)> drawableProv{};
+
+	public:
+		[[nodiscard]] ImageDisplay() : ImageDisplayBase{"ImageDisplay"}{}
 
 		template <typename Drawable>
 			requires std::derived_from<std::decay_t<Drawable>, RegionDrawable>
 		[[nodiscard]] explicit ImageDisplay(
 			Drawable&& drawable,
-			const Align::Scale scale = Align::Scale::fit/*, const bool useEmptyDrawer = true*/)
+			const Align::Scale scaling = Align::Scale::fit,
+			const Align::Pos imageAlign = Align::Pos::center/*, const bool useEmptyDrawer = true*/)
 			:
-			Element{"ImageDisplay"},
-			drawable{std::make_unique<std::decay_t<Drawable>>(std::forward<Drawable>(drawable))},
-			scaling{scale}{}
+			ImageDisplayBase{"ImageDisplay", scaling, imageAlign},
+			drawable{std::make_unique<std::decay_t<Drawable>>(std::forward<Drawable>(drawable))}{}
 
 		[[nodiscard]] bool isDynamic() const noexcept{
 			return drawableProv != nullptr;
+		}
+
+		template <typename Fn>
+		void setProvider(Fn&& fn){
+			Util::setFunction(drawableProv, std::forward<Fn>(fn));
 		}
 
 		void setDrawable(std::unique_ptr<RegionDrawable>&& drawable){
@@ -52,5 +80,59 @@ export namespace Core::UI{
 		}
 
 		void drawMain() const override;
+	};
+
+	export
+	template <std::derived_from<RegionDrawable> Drawable>
+	struct FixedImageDisplay : public ImageDisplayBase{
+	private:
+		Drawable drawable;
+		std::move_only_function<decltype(drawable)(FixedImageDisplay&)> drawableProv{};
+
+	public:
+		[[nodiscard]] FixedImageDisplay() requires(std::is_default_constructible_v<Drawable>)
+			: ImageDisplayBase{"ImageDisplay"}, drawable{}{}
+
+		template <std::convertible_to<Drawable> Region>
+		[[nodiscard]] explicit FixedImageDisplay(
+			Region&& drawable,
+			const Align::Scale scaling = Align::Scale::fit,
+			const Align::Pos imageAlign = Align::Pos::center/*, const bool useEmptyDrawer = true*/)
+			:
+			ImageDisplayBase{"ImageDisplay", scaling, imageAlign},
+			drawable{std::forward<Region>(drawable)}{
+
+		}
+
+		[[nodiscard]] bool isDynamic() const noexcept{
+			return drawableProv != nullptr;
+		}
+
+		template <typename Fn>
+		void setProvider(Fn&& fn){
+			Util::setFunction(drawableProv, std::forward<Fn>(fn));
+		}
+
+		template <std::convertible_to<Drawable> Region>
+		void setDrawable(Region&& drawable){
+			this->drawable = std::forward<Region>(drawable);
+		}
+
+		void update(const float delta_in_tick) override{
+			Element::update(delta_in_tick);
+
+			if(isDynamic()){
+				drawable = drawableProv(*this);
+			}
+		}
+
+		void drawMain() const override{
+			ImageDisplayBase::drawMain();
+			// auto& region = drawable;//static_cast<const RegionDrawable&>(drawable);
+
+			const auto size = Align::embedTo(scaling, drawable.getDefSize(), getValidSize());
+			const auto offset = Align::getOffsetOf(imageAlign, size, property.getValidBound_absolute());
+			drawable.draw(getRenderer(), Rect{Geom::FromExtent, offset, size}, graphicProp().getScaledColor());
+		}
 	};
 }

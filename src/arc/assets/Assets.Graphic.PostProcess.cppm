@@ -10,17 +10,17 @@ import std;
 
 namespace Assets{
 	namespace PostProcess{
-		export struct BlurConstants{
-			static constexpr float UnitFar = 3.2307692308f;
-			static constexpr float UnitNear = 1.3846153846f;
-
-			Geom::Vec2 stepNear{};
-			Geom::Vec2 stepFar{};
-
-			float center = 0.25170270270f;
-			float close = 0.32362162162f;
-			float far = 0.0822702703f;
-		};
+		// export struct BlurConstants{
+		// 	static constexpr float UnitFar = 3.2307692308f;
+		// 	static constexpr float UnitNear = 1.3846153846f;
+		//
+		// 	Geom::Vec2 stepNear{};
+		// 	Geom::Vec2 stepFar{};
+		//
+		// 	float center = 0.25170270270f;
+		// 	float close = 0.32362162162f;
+		// 	float far = 0.0822702703f;
+		// };
 
 	    export struct UniformBlock_kernalSSAO {
 	    	struct T{
@@ -95,15 +95,16 @@ namespace Assets{
 			float srcWeight{};
 		};
 
-		constexpr float Scl = 0.9f;
+		constexpr float WeightScl = 1.f;
+		constexpr float DstScl = .8f;
 
 		export constexpr UniformBlock_kernalGaussian GaussianKernalVert{
 			.offs = {
-				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 1.5846153846f}, 0.29362162162f * Scl},
-				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 3.3307692308f}, 0.11227027030f * Scl},
-				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 5.2307692308f}, 0.06227027030f * Scl}
+				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 1.5846153846f} * DstScl, 0.29362162162f * WeightScl},
+				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 3.3307692308f} * DstScl, 0.11227027030f * WeightScl},
+				UniformBlock_kernalGaussian::Off{Geom::Vec2{0.f, 5.2307692308f} * DstScl, 0.06227027030f * WeightScl}
 			},
-			.srcWeight = 0.24170270270f * Scl
+			.srcWeight = 0.24170270270f * WeightScl
 		};
 
 		export constexpr UniformBlock_kernalGaussian GaussianKernalHori{

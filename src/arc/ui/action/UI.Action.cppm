@@ -1,6 +1,6 @@
 module;
 
-#include "../src/ext/no_unique_address.hpp"
+#include "../src/ext/adapted_attributes.hpp"
 
 export module Core.UI.Action;
 

@@ -47,7 +47,7 @@ export namespace Math::Interp::Func{
 
 
 	template <auto Func, float powBegin = 0.5f, float minVal = 0.02f>
-		requires ext::Invokable<decltype(Func), float(float)>
+		requires ext::invocable<decltype(Func), float(float)>
 	struct LinePow{
 		float operator()(const float a) const{
 			auto t = a < powBegin ? minVal * a / powBegin : (1 - minVal) * Func((a - powBegin) / (1 - powBegin));
@@ -411,7 +411,7 @@ export namespace Math::Interp{
 	constexpr auto bounceIn = Func::BounceIn<4>();
 	constexpr auto bounceOut = Func::BounceOut<4>();
 
-	float operator |(const float val, ext::Invokable<float(float)> auto&& interp){
+	float operator |(const float val, ext::invocable<float(float)> auto&& interp){
 		return interp(val);
 	}
 }

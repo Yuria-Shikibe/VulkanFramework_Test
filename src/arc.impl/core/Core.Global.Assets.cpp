@@ -5,13 +5,14 @@ import Font.Manager;
 import Font.TypeSettings;
 
 import Font;
-import Graphic.ImageAtlas;
 import Graphic.Pixmap;
 import Core.File;
 
 import Assets.Directories;
-import std;
 import Graphic.Draw.Func;
+import Graphic.ImageAtlas;
+
+import std;
 
 void Core::Global::Asset::init(const Vulkan::VulkanManager& manager){
 	atlas = new Graphic::ImageAtlas{manager.context};
@@ -28,8 +29,9 @@ void Core::Global::Asset::init(const Vulkan::VulkanManager& manager){
 
 		page.texture.cmdClearColor(imageAtlas.obtainTransientCommand(), {1., 1., 1., 0.});
 
-		auto region = imageAtlas.allocate(mainPage, Graphic::Pixmap{::Assets::Dir::texture.find("white.png")});
-		region.shrink(15);
+		auto pixmap = Graphic::Pixmap{::Assets::Dir::texture.find("white.png")};
+		auto region = imageAtlas.allocate(mainPage, pixmap);
+		region.shrink(pixmap.getWidth() / 2);
 		Graphic::Draw::WhiteRegion = &mainPage.registerNamedRegion("white", std::move(region)).first;
 
 		imageAtlas.registerNamedImageViewRegionGuaranteed("ui.base", Graphic::Pixmap{::Assets::Dir::texture.find("ui/elem-s1-back.png")});

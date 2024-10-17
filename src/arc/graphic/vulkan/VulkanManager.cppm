@@ -45,7 +45,7 @@ export namespace Core::Vulkan{
 	public:
 		[[nodiscard]] VulkanManager() = default;
 
-		ext::event_manager eventManager{
+		ext::legacy_event_manager eventManager{
 			{ext::index_of<ResizeEvent>()}
 		};
 

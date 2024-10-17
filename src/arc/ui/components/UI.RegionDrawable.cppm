@@ -49,6 +49,8 @@ export namespace Core::UI{
 	struct TextureNineRegionDrawable_Ref : RegionDrawable{
 		Graphic::ImageViewNineRegion* region{nullptr};
 
+		[[nodiscard]] TextureNineRegionDrawable_Ref() = default;
+
 		[[nodiscard]] explicit TextureNineRegionDrawable_Ref(Graphic::ImageViewNineRegion* const rect)
 			: region(rect) {
 		}

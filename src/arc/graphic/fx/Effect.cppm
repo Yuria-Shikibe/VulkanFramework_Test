@@ -1,9 +1,13 @@
+module;
+
+#include <cassert>
+
 export module Graphic.Effect;
 
 export import Math.Timed;
 
-import Geom.Transform;
-import Geom.Rect_Orthogonal;
+export import Geom.Transform;
+export import Geom.Rect_Orthogonal;
 import Graphic.Color;
 import ext.concepts;
 import std;
@@ -14,13 +18,23 @@ namespace Core{
 
 export namespace Graphic{
 	struct Effect;
+	struct Batch_Exclusive;
 	class EffectManager;
 
-	extern EffectManager& getDefManager();
+
+	struct EffectBasicData{
+		Math::Timed progress{};
+		float zLayer{/*TODO default layer*/};
+
+		Geom::Transform trans{};
+		Color color{};
+	};
+
+	EffectManager& getDefManager();
 
 	struct EffectDrawer{
 		float defLifetime{60.0f};
-		float defClipSize{100.0};
+		float defClipRadius{100.0};
 
 		constexpr virtual ~EffectDrawer() = default;
 
@@ -29,17 +43,21 @@ export namespace Graphic{
 		[[nodiscard]] constexpr explicit EffectDrawer(const float defaultLifetime)
 			: defLifetime(defaultLifetime){}
 
-		[[nodiscard]] constexpr EffectDrawer(const float defLifetime, const float defClipSize)
+		[[nodiscard]] constexpr EffectDrawer(const float defLifetime, const float defClipRadius)
 			: defLifetime{defLifetime},
-			  defClipSize{defClipSize}{}
+			  defClipRadius{defClipRadius}{}
 
-		[[nodiscard]] Effect& suspendOn(Graphic::EffectManager& manager) const;
+		[[jetbrains::has_side_effects]]
+		Effect& launch(const EffectBasicData& data, Graphic::EffectManager& manager) const;
 
-		[[nodiscard]] Effect& suspendOn() const;
+		[[jetbrains::has_side_effects]]
+		Effect& launch(const EffectBasicData& data) const;
 
 		virtual void operator()(Effect& effect) const = 0;
 
-		[[nodiscard]] virtual Geom::OrthoRectFloat getClipBound(const Effect& effect) const noexcept;
+		[[nodiscard]] Geom::OrthoRectFloat getClipBound(const Effect& effect) const noexcept;
+
+		[[nodiscard]] virtual Geom::OrthoRectFloat getClipBoundVirtual(const Effect& effect) const noexcept;
 	};
 
 	/*template<Concepts::Invokable<void(Effect&)> Draw>
@@ -138,27 +156,19 @@ export namespace Graphic{
 		}
 	};*/
 
-	struct EffectBasicData{
-		Math::Timed progress{};
-		float zLayer{/*TODO default layer*/};
-
-		Geom::Transform trans{};
-		Color color{};
-	};
 
 	struct Effect{
 		using HandleType = size_t;
-		static constexpr float DefLifetime = -1.0f;
+		static constexpr float DefLifetimeTag = -1.0f;
 
 		EffectBasicData data{};
 		HandleType handle{};
+
 		std::any additionalData{};
 		const EffectDrawer* drawer{nullptr};
 
-
 		Effect& setData(const EffectBasicData& data){
 			this->data = data;
-			setLifetime(data.progress.lifetime);
 
 			return *this;
 		}
@@ -169,8 +179,8 @@ export namespace Graphic{
 			return *this;
 		}
 
-		Effect& setLifetime(const float lifetime = DefLifetime){
-			if(lifetime > 0.0f){
+		Effect& setLifetime(const float lifetime = DefLifetimeTag){
+			if(lifetime >= 0.0f){
 				data.progress.lifetime = lifetime;
 			}else{
 				if(drawer)data.progress.lifetime = drawer->defLifetime;
@@ -190,6 +200,10 @@ export namespace Graphic{
 			data.progress.set(0.0f, drawer->defLifetime);
 
 			return *this;
+		}
+
+		Effect& setDrawer(const EffectDrawer& drawer){
+			return setDrawer(std::addressof(drawer));
 		}
 
 		void resignHandle(const std::size_t handle){
@@ -244,7 +258,10 @@ export namespace Graphic{
 		}
 
 		void render(){
-			drawer->operator()(*this);
+			assert(drawer != nullptr);
+			(*drawer)(*this);
 		}
+
+		static Graphic::Batch_Exclusive& getBatch() noexcept;
 	};
 }

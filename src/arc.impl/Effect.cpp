@@ -5,19 +5,31 @@ import Graphic.Camera2D;
 import Core.Global.Graphic;
 
 Geom::OrthoRectFloat Graphic::EffectDrawer::getClipBound(const Effect& effect) const noexcept{
-	return {effect.data.trans.vec, defClipSize};
+	if(std::isnan(defClipRadius)){
+		return getClipBoundVirtual(effect);
+	}else{
+		return Geom::OrthoRectFloat{effect.pos(), defClipRadius, defClipRadius};
+	}
 }
 
-Graphic::Effect& Graphic::EffectDrawer::suspendOn(Graphic::EffectManager& manager) const{
-	return manager.acquire()->setDrawer(this);
+Geom::OrthoRectFloat Graphic::EffectDrawer::getClipBoundVirtual(const Effect& effect) const noexcept{
+	return {effect.data.trans.vec, defClipRadius};
 }
 
-Graphic::Effect& Graphic::EffectDrawer::suspendOn() const{
-	return suspendOn(getDefManager());
+Graphic::Effect& Graphic::EffectDrawer::launch(const EffectBasicData& data, EffectManager& manager) const{
+	return manager.acquire().setData(data).setDrawer(this);
+}
+
+Graphic::Effect& Graphic::EffectDrawer::launch(const EffectBasicData& data) const{
+	return launch(data, getDefManager());
 }
 
 extern Graphic::EffectManager& Graphic::getDefManager(){
 	return Core::Global::mainEffectManager;
+}
+
+Graphic::Batch_Exclusive& Graphic::Effect::getBatch() noexcept{
+	return Core::Global::rendererWorld->batch;
 }
 
 //

@@ -263,7 +263,7 @@ namespace Core{
 			return files;
 		}
 
-		template <ext::Invokable<bool(const File&)> Pred>
+		template <ext::invocable<bool(const File&)> Pred>
 		[[nodiscard]] std::vector<File> subs(Pred&& pred) const{
 			std::vector<File> files;
 			for(const auto& item : fs::directory_iterator(getPath())){

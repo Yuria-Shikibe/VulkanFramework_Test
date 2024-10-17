@@ -69,7 +69,7 @@ export namespace Core::Vulkan{
 					.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
 					.mipLodBias = 0,
 					.minLod = 0,
-					.maxLod = VK_LOD_CLAMP_NONE,
+					.maxLod = 5,
 				},
 				&VkSamplerCreateInfo::mipmapMode, &VkSamplerCreateInfo::minLod,
 				&VkSamplerCreateInfo::maxLod, &VkSamplerCreateInfo::mipLodBias

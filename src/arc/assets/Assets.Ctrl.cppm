@@ -64,10 +64,11 @@ namespace Assets::Ctrl{
 		cameraMoveSpeed = fastCameraMoveSpeed;
 	}), {boostCamera_Release.name}};
 	//
-	// CC::Operation pause{"pause", CC::KeyBind(CC::Key::P, CC::Act::Press, +[] {
-	// 	Core::loopManager->Global::timer.setPause(!Core::loopManager->Global::timer.isPaused());
-	// })};
-	//
+	CC::Operation pause{"pause", CC::KeyBind(CC::Key::P, CC::Act::Press, +[] {
+		// std::cout << "pressed" << std::endl;
+		Core::Global::timer.setPause(!Core::Global::timer.isPaused());
+	})};
+
 	// CC::Operation hideUI{"ui-hide", CC::KeyBind(CC::Key::H, CC::Act::Press, +[] {
 	// 	if(Core::ui->isHidden){
 	// 		Core::ui->show();
@@ -76,12 +77,12 @@ namespace Assets::Ctrl{
 	// 	}
 	// })};
 
-	CC::Operation shoot{"shoot", CC::KeyBind(CC::Key::F, CC::Act::Continuous, +[] {
+	// CC::Operation shoot{"shoot", CC::KeyBind(CC::Key::F, CC::Act::Continuous, +[] {
 
-	})};
+	// })};
 
 	export{
-		CC::KeyMapping mainControlGroup{};
+		CC::KeyMapping* mainControlGroup{};
 
 		CC::OperationGroup basicGroup{
 				"basic-group", {
@@ -95,7 +96,7 @@ namespace Assets::Ctrl{
 					CC::Operation{cameraLock},
 					// CC::Operation{cameraTeleport},
 
-					// CC::Operation{pause},
+					CC::Operation{pause},
 					// CC::Operation{hideUI},
 				}
 			};
@@ -110,18 +111,18 @@ namespace Assets::Ctrl{
 		ext::string_hash_map<CC::KeyMapping*> relatives{};
 
 		void apply(){
-			mainControlGroup.clear();
+			mainControlGroup->clear();
 
 			for (auto group : allGroups | std::ranges::views::values){
 				for (const auto & bind : group->getBinds() | std::ranges::views::values){
-					mainControlGroup.registerBind(CC::InputBind{bind.customeBind});
+					mainControlGroup->registerBind(CC::InputBind{bind.customeBind});
 				}
 			}
 		}
 
         void load() {
-            Core::Global::input->registerSubInput(&mainControlGroup);
-            basicGroup.targetGroup = &mainControlGroup;
+            mainControlGroup = &Core::Global::input->registerSubInput("game");
+            basicGroup.targetGroup = mainControlGroup;
             apply();
 
 			using namespace Core::Global;

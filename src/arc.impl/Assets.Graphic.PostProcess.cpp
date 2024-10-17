@@ -21,6 +21,8 @@ import Math;
 
 import Core.Vulkan.EXT;
 
+static constexpr Geom::USize2 UnitSize{16, 16};
+
 void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 	using namespace Core::Vulkan;
 
@@ -126,7 +128,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				std::array barriers = {
@@ -185,6 +186,7 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 				layout.flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT;
 
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
+				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT);
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT);
 				layout.builder.push_seq(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT);
 			});
@@ -213,9 +215,15 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 			processor.descriptorSetUpdator = [](Graphic::ComputePostProcessor& postProcessor){
 				const auto& ubo = postProcessor.uniformBuffers[0];
 
-				const VkDescriptorImageInfo imageInfo_input{
+				const VkDescriptorImageInfo imageInfo_input_depth{
 						.sampler = Sampler::blitSampler,
 						.imageView = postProcessor.port.views.at(0),
+						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+					};
+
+				const VkDescriptorImageInfo imageInfo_input_light{
+						.sampler = Sampler::blitSampler,
+						.imageView = postProcessor.port.views.at(1),
 						.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
 					};
 
@@ -223,9 +231,10 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					postProcessor.images.back().getDescriptorInfo(nullptr, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 
 				postProcessor.descriptorBuffers.front().load([&](const DescriptorBuffer& buffer){
-					buffer.loadImage(0, imageInfo_input, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-					buffer.loadImage(1, imageInfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
-					buffer.loadUniform(2, ubo.getBufferAddress(), ubo.requestedSize());
+					buffer.loadImage(0, imageInfo_input_depth, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+					buffer.loadImage(1, imageInfo_input_light, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+					buffer.loadImage(2, imageInfo_output, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+					buffer.loadUniform(3, ubo.getBufferAddress(), ubo.requestedSize());
 				});
 			};
 
@@ -236,7 +245,8 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-				VkImageMemoryBarrier2 barrier_resultImage{
+				std::array barrier_resultImage{
+					VkImageMemoryBarrier2{
 						.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 						.srcStageMask = VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
 						.srcAccessMask = VK_ACCESS_2_SHADER_READ_BIT,
@@ -248,9 +258,9 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 						.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
 						.image = postProcessor.images.back().getImage(),
 						.subresourceRange = ImageSubRange::Color
-					};
+					}};
 
-				Util::imageBarrier(scopedCommand, std::array{barrier_resultImage});
+				Util::imageBarrier(scopedCommand, barrier_resultImage);
 
 				postProcessor.descriptorBuffers.front().bindTo(
 					scopedCommand,
@@ -263,12 +273,11 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					0, 1, Seq::Indices<0>, Seq::Offset<0>);
 				postProcessor.bindAppendedDescriptors(scopedCommand);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 				vkCmdDispatch(scopedCommand, ux, uy, 1);
 
 				Util::swapStage(barrier_resultImage);
-				Util::imageBarrier(scopedCommand, std::array{barrier_resultImage});
+				Util::imageBarrier(scopedCommand, barrier_resultImage);
 			};
 
 			return processor;
@@ -339,7 +348,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				std::array barriers{
@@ -435,7 +443,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 
 				postProcessor.pipelineData.bind(scopedCommand, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				std::array barrier_resultImage{VkImageMemoryBarrier2{
@@ -564,7 +571,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					postProcessor.pipelineData.layout,
 					0, 1, Seq::Indices<0>, Seq::Offset<0>);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				vkCmdDispatch(scopedCommand, ux, uy, 1);
@@ -697,7 +703,6 @@ void Assets::PostProcess::load(const Core::Vulkan::Context& context){
 					postProcessor.pipelineData.layout,
 					0, 1, Seq::Indices<0>, Seq::Offset<0>);
 
-				static constexpr Geom::USize2 UnitSize{16, 16};
 				const auto [ux, uy] = postProcessor.size().add(UnitSize.copy().sub(1, 1)).div(UnitSize);
 
 				vkCmdDispatch(scopedCommand, ux, uy, 1);

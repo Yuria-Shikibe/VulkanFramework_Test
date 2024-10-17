@@ -11,7 +11,7 @@ import Core.UI.UniversalGroup;
 import Graphic.Batch.AutoDrawParam;
 import Graphic.Batch.Exclusive;
 import Graphic.Draw.Func;
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 
 import Graphic.Renderer.UI;
 
@@ -21,9 +21,8 @@ export namespace Core::UI::Test{
 	template <std::derived_from<CellBase> T, std::derived_from<CellAdaptor<T>> Adaptor = CellAdaptor<T>>
 	void drawCells(const UniversalGroup<T, Adaptor>& element){
 		using namespace Graphic;
-
-		// auto t = static_cast<RendererUI*>(element.getScene()->renderer);
-		// InstantBatchAutoParam param{static_cast<RendererUI*>(element.getScene()->renderer)->batch, Draw::WhiteRegion};
+		//
+		// InstantBatchAutoParam param{element.getBatch(), Draw::WhiteRegion};
 		//
 		// for (const auto& cell : element.getCells()){
 		// 	Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(

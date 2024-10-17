@@ -127,7 +127,7 @@ namespace ext{
 
 	template <typename TargetTuple, typename... Args, std::size_t... I>
 	constexpr decltype(auto) makeTuple_withDef_impl(std::tuple<Args...>&& args, TargetTuple&& defaults,
-	                                                std::index_sequence<I...>){
+													std::index_sequence<I...>){
 		return std::make_tuple(std::tuple_element_t<I, std::decay_t<TargetTuple>>{
 				ext::getWithDef<I, sizeof...(Args)>(std::move(args), std::forward<TargetTuple>(defaults))
 			}...);
@@ -165,18 +165,18 @@ namespace ext{
 		return (std::same_as<T, std::tuple_element_t<I, TargetTuple>> || ...);
 	}
 
-	template <typename T, typename... Ts>
-	struct UniqueTypeIndex;
-
-	template <typename T, typename... Ts>
-	struct UniqueTypeIndex<T, T, Ts...> : std::integral_constant<std::size_t, 0>{};
-
-	template <typename T, typename U, typename... Ts>
-	struct UniqueTypeIndex<T, U, Ts...> : std::integral_constant<std::size_t, 1 + UniqueTypeIndex<T, Ts...>::value>{};
-
-	export
-	template <typename T, typename... Ts>
-	constexpr std::size_t uniqueTypeIndex_v = UniqueTypeIndex<T, Ts...>::value;
+	// template <typename T, typename... Ts>
+	// struct UniqueTypeIndex;
+	//
+	// template <typename T, typename... Ts>
+	// struct UniqueTypeIndex<T, T, Ts...> : std::integral_constant<std::size_t, 0>{};
+	//
+	// template <typename T, typename U, typename... Ts>
+	// struct UniqueTypeIndex<T, U, Ts...> : std::integral_constant<std::size_t, 1 + UniqueTypeIndex<T, Ts...>::value>{};
+	//
+	// export
+	// template <typename T, typename... Ts>
+	// constexpr std::size_t uniqueTypeIndex_v = UniqueTypeIndex<T, Ts...>::value;
 
 
 	template <bool Test, auto val1, decltype(val1) val2>
@@ -203,6 +203,17 @@ namespace ext{
 	export
 	template <typename T>
 	constexpr bool is_complete = is_complete_type<T>::value;
+
+	template <typename Tuple>
+	constexpr decltype(auto) createVariantFromTuple_Impl() noexcept{
+		return [] <std::size_t ... I>(std::index_sequence<I...>) {
+			return std::variant<std::tuple_element_t<I, Tuple> ...>{};
+		}(std::make_index_sequence<std::tuple_size_v<Tuple>>{});
+	}
+
+	export
+	template <typename T>
+	using tuple_to_variant_t = decltype(createVariantFromTuple_Impl<T>());
 }
 
 
@@ -247,9 +258,7 @@ export namespace ext{
 	};
 
 	template <typename T, typename... Args>
-	constexpr bool contained_within = requires{
-		requires ext::tupleContains<std::tuple<Args...>, T>(std::make_index_sequence<std::tuple_size_v<std::tuple<Args...>>>());
-	};
+	constexpr bool contained_within = is_any_of<T, Args...>;
 
 	template <typename SuperTuple, typename FromTuple>
 	constexpr bool is_tuple_sub_of(){
@@ -552,13 +561,52 @@ namespace ext{
 		}
 	};
 
-	void foo(){
-		using Tuple = const std::tuple<std::tuple<long long, std::string&>, std::ranges::subrange<std::vector<std::string>::const_iterator>>;
 
-		using T = decltype(flat_tuple<false>(std::declval<Tuple>()));
+	export
+	template <typename Tuple>
+	struct type_to_index{
+		static_assert(is_tuple_v<Tuple>, "accept tuple only");
 
-		// auto v = flatten_tuple<0, Tuple>::at<1>(tuple);
+		static constexpr std::size_t arg_size = std::tuple_size_v<Tuple>;
+		using args_type = Tuple;
 
-		// auto f = flatten<true>(tuple);
-	}
+		template <std::size_t N>
+			requires (N < arg_size)
+		using arg_at = std::tuple_element_t<N, Tuple>;
+
+	private:
+		template <typename V, std::size_t I>
+		static consteval void modify(std::size_t& val) noexcept{
+			if constexpr(std::same_as<arg_at<I>, V>){
+				val = I;
+			}
+		}
+
+		template <typename V, std::size_t... I>
+		static consteval void indexOfImpl(std::size_t& rst, std::index_sequence<I...>){
+			(modify<V, I>(rst), ...);
+		}
+
+		template <typename V>
+		static consteval auto retIndexOfImpl(){
+			std::size_t result{arg_size};
+
+			type_to_index::indexOfImpl<V>(result, std::make_index_sequence<arg_size>{});
+
+			return result;
+		}
+
+	public:
+		template <typename V>
+		static constexpr std::size_t index_of = retIndexOfImpl<V>();
+
+		template <typename V>
+		static constexpr bool is_type_valid = index_of<V> < arg_size;
+
+		friend bool operator==(const type_to_index&, const type_to_index&) noexcept = default;
+		auto operator<=>(const type_to_index&) const noexcept = default;
+	};
+
+	constexpr auto t = type_to_index<std::tuple<int, float, double>>::index_of<float>;
+	static_assert(t == 1);
 }

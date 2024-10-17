@@ -9,15 +9,18 @@ import ext.heterogeneous;
 import ext.meta_programming;
 
 namespace ext::json{
-	export class JsonValue;
+	export struct parse_string_t{};
+	export constexpr parse_string_t parse_string{};
+
+	export class json_value;
 
 	export using Integer = std::int64_t;
 	export using Float = std::double_t;
-	export using Object = string_hash_map<JsonValue>;
-	export using Array = std::vector<JsonValue>;
+	export using Object = string_hash_map<json_value>;
+	export using Array = std::vector<json_value>;
 
 	export template <typename T>
-	using JsonScalarType =
+	using json_scalar_t =
 		std::conditional_t<std::same_as<T, bool>, bool,
 		std::conditional_t<std::same_as<T, std::nullptr_t>, std::nullptr_t,
 		std::conditional_t<std::is_floating_point_v<T>, Float, Integer>>>;
@@ -49,8 +52,7 @@ namespace ext::json{
 		constexpr std::string_view Count = "$cnt"; //second
 	}
 
-
-	export struct IllegalJsonSegment final : std::exception{
+	struct [[deprecated]] IllegalJsonSegment final : std::exception{
 		IllegalJsonSegment() = default;
 
 		explicit IllegalJsonSegment(char const* Message)
@@ -63,19 +65,19 @@ namespace ext::json{
 			: exception{Other}{}
 	};
 
-	inline Integer parseInt(const std::string_view str, const int base = 10){
+	Integer parseInt(const std::string_view str, const int base = 10){
 		Integer val{};
 		std::from_chars(str.data(), str.data() + str.size(), val, base);
 		return val;
 	}
 
-	inline Float parseFloat(const std::string_view str){
+	Float parseFloat(const std::string_view str){
 		Float val{};
 		std::from_chars(str.data(), str.data() + str.size(), val);
 		return val;
 	}
 
-	export enum struct JsonValueTag : std::size_t{
+	export enum struct jval_tag : std::size_t{
 		null,
 		arithmetic_int,
 		arithmetic_float,
@@ -87,299 +89,267 @@ namespace ext::json{
 
 
 
-	static_assert(std::same_as<std::underlying_type_t<JsonValueTag>, std::size_t>);
+	static_assert(std::same_as<std::underlying_type_t<jval_tag>, std::size_t>);
 
-
-#pragma region JsonTypeToIndex
-#define TypeToIndex(targetTag)\
-	static constexpr auto tag = targetTag;\
-	static constexpr std::size_t index = static_cast<std::size_t>(std::to_underlying(tag));
-
-	template <typename T>
-	struct JsonTypeToIndex{
-		TypeToIndex(JsonValueTag::null);
+	template <jval_tag Tag>
+	struct TagBase : std::integral_constant<std::underlying_type_t<jval_tag>, std::to_underlying(Tag)>{
+		static constexpr auto tag = Tag;
+		static constexpr auto index = std::to_underlying(tag);
 	};
+
+	export
+	template <typename T>
+	struct json_type_to_index : TagBase<jval_tag::null>{};
 
 	template <std::integral T>
-	struct JsonTypeToIndex<T>{
-		TypeToIndex(JsonValueTag::arithmetic_int);
-	};
+	struct json_type_to_index<T> : TagBase<jval_tag::arithmetic_int>{};
 
 	template <std::floating_point T>
-	struct JsonTypeToIndex<T>{
-		TypeToIndex(JsonValueTag::arithmetic_float);
-	};
+	struct json_type_to_index<T> : TagBase<jval_tag::arithmetic_float>{};
 
 	template <>
-	struct JsonTypeToIndex<bool>{
-		TypeToIndex(JsonValueTag::boolean);
-	};
+	struct json_type_to_index<bool> : TagBase<jval_tag::boolean>{};
 
 	template <>
-	struct JsonTypeToIndex<Array>{
-		TypeToIndex(JsonValueTag::array);
-	};
+	struct json_type_to_index<Array> : TagBase<jval_tag::array>{};
 
 	template <>
-	struct JsonTypeToIndex<Object>{
-		TypeToIndex(JsonValueTag::array);
-	};
+	struct json_type_to_index<Object> : TagBase<jval_tag::object>{};;
 
 	template <>
-	struct JsonTypeToIndex<std::string>{
-		TypeToIndex(JsonValueTag::string);
-	};
+	struct json_type_to_index<std::string> : TagBase<jval_tag::string>{};
 
 	template <>
-	struct JsonTypeToIndex<std::string_view>{
-		TypeToIndex(JsonValueTag::string);
-	};
-
-#undef TypeToIndex
-#pragma endregion
+	struct json_type_to_index<std::string_view> : TagBase<jval_tag::string>{};
 
 	export template <typename T>
-	constexpr JsonValueTag tagOf = JsonTypeToIndex<T>::tag;
+	constexpr jval_tag jval_tag_of = json_type_to_index<T>::tag;
 
 	export template <typename T>
-	constexpr std::size_t indexOf = JsonTypeToIndex<T>::index;
+	constexpr std::size_t jval_index_of = json_type_to_index<T>::index;
 
-	export using enum JsonValueTag;
+	export using enum jval_tag;
 
-	export class JsonValue{
-#define TypeGroup std::nullptr_t, Integer, Float, bool, std::string, Array, Object
-
-	public:
-		template <typename T>
-		static constexpr std::size_t typeIndex = uniqueTypeIndex_v<T, TypeGroup>;
-
-		template <typename T>
-		static constexpr bool validType = requires{
-			requires ext::contained_within<std::decay_t<T>, TypeGroup>;
-		};
-
+	export
+	class json_value : type_to_index<std::tuple<std::nullptr_t, Integer, Float, bool, std::string, Array, Object>>{
 	private:
-		using VariantTypeTuple = std::tuple<TypeGroup>;
-		std::variant<TypeGroup> data{};
-
-#undef TypeGroup
+		using VariantTypeTuple = args_type;
+		using VariantType = tuple_to_variant_t<VariantTypeTuple>;
+		VariantType data{};
 
 	public:
-		template <std::size_t index>
-		using TypeAt = std::tuple_element_t<index, VariantTypeTuple>;
-
-		static constexpr auto VariantSize = std::variant_size_v<decltype(data)>;
-
-		constexpr JsonValue() = default;
+		constexpr json_value() = default;
 
 		template <typename T>
-			requires validType<T> && !std::is_arithmetic_v<T>
-		explicit JsonValue(T&& val){
-			this->setData(std::forward<T>(val));
-		}
+			requires is_type_valid<T> && !std::is_arithmetic_v<T>
+		explicit json_value(T&& val) : data{std::forward<T>(val)}{}
 
 		template <typename T>
 			requires std::is_arithmetic_v<T> || std::same_as<T, bool>
-		explicit JsonValue(const T val){
-			this->setData<JsonScalarType<T>>(val);
-		}
+		explicit json_value(const T val) : data{static_cast<json_scalar_t<T>>(val)}{}
 
-		explicit JsonValue(const std::string_view val){
-			this->setData(val);
-		}
+		explicit json_value(const std::string_view val) : data{std::string{val}}{}
+		json_value(parse_string_t, std::string_view json_str);
 
-		void setData(const std::string_view str){
+		void set(const std::string_view str){
 			data = static_cast<std::string>(str);
 		}
 
 		template <typename T>
-			requires validType<T> && !std::is_arithmetic_v<T>
-		void setData(T&& val){
+			requires is_type_valid<std::decay_t<T>> && !std::is_arithmetic_v<T>
+		void set(T&& val){
 			data = std::forward<T>(val);
 		}
 
 		template <typename T>
-			requires validType<JsonScalarType<T>> && std::is_arithmetic_v<T>
-		void setData(const T val){
-			data = static_cast<JsonScalarType<T>>(val);
+			requires is_type_valid<json_scalar_t<T>> && std::is_arithmetic_v<T>
+		void set(const T val){
+			data = static_cast<json_scalar_t<T>>(val);
 		}
 
-		template <JsonValueTag tag>
+		template <jval_tag tag>
 		[[nodiscard]] constexpr bool is() const noexcept{
-			return getTagIndex() == std::to_underlying(tag);
+			return get_tag() == tag;
 		}
 
 		template <typename T>
-			requires validType<T>
+			requires is_type_valid<T>
 		[[nodiscard]] constexpr bool is() const noexcept{
-			return getTagIndex() == typeIndex<T>;
+			return get_tag() == index_of<T>;
 		}
 
-		void setData(const bool val){
+		void set(const bool val){
 			data = val;
 		}
 
-		[[nodiscard]] constexpr std::size_t getTagIndex() const noexcept{
+		void set(const std::nullptr_t){
+			data = nullptr;
+		}
+
+		[[nodiscard]] constexpr auto get_tag() const noexcept{
+			return jval_tag{data.index()};
+		}
+
+		[[nodiscard]] constexpr auto get_index() const noexcept{
 			return data.index();
 		}
 
-		JsonValue& operator[](const std::string_view key){
+		json_value& operator[](const std::string_view key){
 			if(!is<object>()){
-				throw IllegalJsonSegment{"Illegal access on a non-object jval!"};
+				throw std::bad_variant_access{};
 			}
 
-			return asObject().at(key);
+			return as_obj().at(key);
 		}
 
-		const JsonValue& operator[](const std::string_view key) const{
+		const json_value& operator[](const std::string_view key) const{
 			if(!is<object>()){
-				throw IllegalJsonSegment{"Illegal access on a non-object jval!"};
+				throw std::bad_variant_access{};
 			}
 
-			return asObject().at(key);
+			return as_obj().at(key);
 		}
 
 		template <typename T>
-			requires std::is_arithmetic_v<T> && JsonValue::validType<JsonScalarType<T>>
-		[[nodiscard]] constexpr JsonScalarType<T> getOr(const T def) const noexcept{
-			auto* val = tryGetValue<JsonScalarType<T>>();
+			requires (std::is_arithmetic_v<T> && is_type_valid<json_scalar_t<T>>)
+		[[nodiscard]] constexpr json_scalar_t<T> get_or(const T def) const noexcept{
+			auto* val = try_get<json_scalar_t<T>>();
 			if(val)return *val;
 			return def;
 		}
 
 		template <typename T>
-			requires JsonValue::validType<T> || (std::is_arithmetic_v<T> && JsonValue::validType<JsonScalarType<T>>)
+			requires is_type_valid<T> || (std::is_arithmetic_v<T> && is_type_valid<json_scalar_t<T>>)
 		[[nodiscard]] constexpr decltype(auto) as(){
 			if constexpr(std::is_arithmetic_v<T>){
-				return static_cast<T>(std::get<JsonScalarType<T>>(data));
+				return static_cast<T>(std::get<json_scalar_t<T>>(data));
 			} else{
 				return std::get<T>(data);
 			}
 		}
 
 		template <typename T>
-			requires JsonValue::validType<T> || (std::is_arithmetic_v<T> && JsonValue::validType<JsonScalarType<T>>)
+			requires is_type_valid<T> || (std::is_arithmetic_v<T> && is_type_valid<json_scalar_t<T>>)
 		[[nodiscard]] constexpr decltype(auto) as() const{
 			if constexpr(std::is_arithmetic_v<T>){
-				return static_cast<T>(std::get<JsonScalarType<T>>(data));
+				return static_cast<T>(std::get<json_scalar_t<T>>(data));
 			} else{
 				return std::get<T>(data);
 			}
 		}
 
-		template <JsonValueTag tag>
+		template <jval_tag tag>
 		[[nodiscard]] constexpr decltype(auto) as(){
 			return std::get<std::to_underlying(tag)>(data);
 		}
 
-		template <JsonValueTag tag>
+		template <jval_tag tag>
 		[[nodiscard]] constexpr decltype(auto) as() const{
 			return std::get<std::to_underlying(tag)>(data);
 		}
 
-		string_hash_map<JsonValue>& asObject(){
-			if(getTag() != object){
-				setData(Object{});
+		Object& as_obj(){
+			if(get_tag() != object){
+				set(Object{});
 			}
 
 			return std::get<Object>(data);
 		}
 
-		[[nodiscard]] const string_hash_map<JsonValue>& asObject() const{
+		[[nodiscard]] const Object& as_obj() const{
 			return std::get<Object>(data);
 		}
 
-		decltype(auto) asArray(){
-			if(getTag() != array){
-				setData(Array{});
+		decltype(auto) as_arr(){
+			if(get_tag() != array){
+				set(Array{});
 			}
 
 			return std::get<Array>(data);
 		}
 
-		[[nodiscard]] decltype(auto) asArray() const{
+		[[nodiscard]] decltype(auto) as_arr() const{
 			return std::get<Array>(data);
 		}
 
 		//TODO move these to something adapter like
 		template <typename T>
-			requires (std::same_as<std::decay_t<T>, JsonValue> || validType<T>)
+			requires (std::same_as<std::decay_t<T>, json_value> || is_type_valid<T>)
 		void append(const char* name, T&& val){
 			this->append(std::string{name}, std::forward<T>(val));
 		}
 
 		template <typename T>
-			requires (std::same_as<std::decay_t<T>, JsonValue> || validType<T>)
+			requires (std::same_as<std::decay_t<T>, json_value> || is_type_valid<T>)
 		void append(const std::string_view name, T&& val){
-			if(getTag() != object) return; //OPTM throw maybe?
+			if(get_tag() != object){
+				throw std::bad_variant_access{};
+			}
 
-			if constexpr(std::same_as<T, JsonValue>){
+			if constexpr(std::same_as<T, json_value>){
 				as<object>().insert_or_assign(name, std::forward<T>(val));
 			} else{
-				as<object>().insert_or_assign(name, JsonValue{std::forward<T>(val)});
+				as<object>().insert_or_assign(name, json_value{std::forward<T>(val)});
 			}
 		}
 
 		template <typename T>
-			requires (std::same_as<std::decay_t<T>, JsonValue> || validType<T>)
+			requires (std::same_as<std::decay_t<T>, json_value> || is_type_valid<T>)
 		void append(std::string&& name, T&& val){
-			if(getTag() != object) return; //OPTM throw maybe?
+			if(get_tag() != object){
+				throw std::bad_variant_access{};
+			}
 
-			if constexpr(std::same_as<T, JsonValue>){
+			if constexpr(std::same_as<T, json_value>){
 				as<object>().insert_or_assign(std::move(name), std::forward<T>(val));
 			} else{
-				as<object>().insert_or_assign(std::move(name), JsonValue{std::forward<T>(val)});
+				as<object>().insert_or_assign(std::move(name), json_value{std::forward<T>(val)});
 			}
 		}
 
 		template <typename T>
-			requires (std::same_as<T, JsonValue> || validType<T>)
+			requires (std::same_as<T, json_value> || is_type_valid<T>)
 		void push_back(T&& val){
-			if(getTag() != array) return; //OPTM throw maybe?
-			if constexpr(std::same_as<T, JsonValue>){
+			if(get_tag() != array){
+				throw std::bad_variant_access{};
+			}
+
+			if constexpr(std::same_as<T, json_value>){
 				as<array>().push_back(std::forward<T>(val));
 			} else{
 				as<array>().emplace_back(std::forward<T>(val));
 			}
 		}
 
-
-		[[nodiscard]] constexpr  JsonValueTag getTag() const noexcept{ return JsonValueTag{getTagIndex()}; }
-
-		friend bool operator==(const JsonValue& lhs, const JsonValue& rhs){
-			return lhs.getTagIndex() == rhs.getTagIndex()
-			       && lhs.data == rhs.data;
-		}
-
-		friend bool operator!=(const JsonValue& lhs, const JsonValue& rhs){ return !(lhs == rhs); }
+		friend bool operator==(const json_value& lhs, const json_value& rhs) = default;
 
 		template <typename T>
-			requires validType<T>
-		JsonValue& operator=(T&& val){
-			this->setData<T>(std::forward<T>(val));
+			requires is_type_valid<T>
+		json_value& operator=(T&& val){
+			this->set(std::forward<T>(val));
 			return *this;
 		}
 
 
 		template <typename T>
-			requires validType<T>
-		[[nodiscard]] constexpr std::add_pointer_t<T> tryGetValue() noexcept{
+			requires is_type_valid<T>
+		[[nodiscard]] constexpr std::add_pointer_t<T> try_get() noexcept{
 			return std::get_if<T>(&data);
 		}
 
 		template <typename T>
-			requires validType<T>
-		[[nodiscard]] constexpr std::add_pointer_t<const T> tryGetValue() const noexcept{
+			requires is_type_valid<T>
+		[[nodiscard]] constexpr std::add_pointer_t<const T> try_get() const noexcept{
 			return std::get_if<T>(&data);
 		}
 
-		template <JsonValueTag tag>
-		[[nodiscard]] constexpr std::add_pointer_t<TypeAt<std::to_underlying(tag)>> tryGetValue() noexcept{
+		template <jval_tag tag>
+		[[nodiscard]] constexpr std::add_pointer_t<arg_at<std::to_underlying(tag)>> try_get() noexcept{
 			return std::get_if<std::to_underlying(tag)>(&data);
 		}
 
-		template <JsonValueTag tag>
-		[[nodiscard]] constexpr std::add_pointer_t<const TypeAt<std::to_underlying(tag)>> tryGetValue() const noexcept{
+		template <jval_tag tag>
+		[[nodiscard]] constexpr std::add_pointer_t<const arg_at<std::to_underlying(tag)>> try_get() const noexcept{
 			return std::get_if<std::to_underlying(tag)>(&data);
 		}
 
@@ -394,7 +364,7 @@ namespace ext::json{
 						  : " "
 					: "\n";
 
-			switch(getTag()){
+			switch(get_tag()){
 				case arithmetic_int :{
 					os << std::to_string(as<arithmetic_int>());
 					break;
@@ -459,28 +429,28 @@ namespace ext::json{
 			}
 		}
 
-		friend std::ostream& operator<<(std::ostream& os, const JsonValue& obj){
+		friend std::ostream& operator<<(std::ostream& os, const json_value& obj){
 			obj.print(os);
 
 			return os;
 		}
 
-		[[nodiscard]] constexpr bool isArithmetic() const noexcept{
+		[[nodiscard]] constexpr bool is_arithmetic() const noexcept{
 			return
-				is<JsonValueTag::arithmetic_int>() ||
-				is<JsonValueTag::arithmetic_float>();
+				is<arithmetic_int>() ||
+				is<arithmetic_float>();
 		}
 
-		[[nodiscard]] constexpr bool isScalar() const noexcept{
+		[[nodiscard]] constexpr bool is_scalar() const noexcept{
 			return
-				isArithmetic() ||
-				is<JsonValueTag::boolean>() ||
-				is<JsonValueTag::null>();
+				is_arithmetic() ||
+				is<boolean>() ||
+				is<null>();
 		}
 
 		template <typename T>
 			requires (std::is_arithmetic_v<T>)
-		[[nodiscard]] constexpr T asArithmetic(const T def) const noexcept{
+		[[nodiscard]] constexpr T as_arithmetic(const T def = T{}) const noexcept{
 			if(is<Integer>()){
 				return static_cast<T>(as<Integer>());
 			}
@@ -494,13 +464,13 @@ namespace ext::json{
 
 		template <typename T>
 			requires (std::is_arithmetic_v<T> || std::same_as<T, bool> || std::same_as<T, std::nullptr_t>)
-		[[nodiscard]] constexpr T asScalar(const T def) const noexcept{
+		[[nodiscard]] constexpr T as_scalar(const T def = T{}) const noexcept{
 			if constexpr (std::is_arithmetic_v<T>){
 				if(is<bool>()){
 					return static_cast<T>(as<bool>());
 				}
 
-				return this->asArithmetic<T>(def);
+				return this->as_arithmetic<T>(def);
 			}
 
 			if constexpr (std::same_as<T, bool>){
@@ -512,7 +482,7 @@ namespace ext::json{
 					return as<bool>();
 				}
 
-				return static_cast<bool>(this->asArithmetic<Integer>(static_cast<Integer>(def)));
+				return static_cast<bool>(this->as_arithmetic<Integer>(static_cast<Integer>(def)));
 			}
 
 			if constexpr (std::same_as<T, std::nullptr_t>){
@@ -523,12 +493,11 @@ namespace ext::json{
 		}
 	};
 
-	export constexpr JsonValue NullJval{};
+	export
+	constexpr json_value null_jval{};
 }
 
 namespace ext::json{
-	constexpr std::string_view ArraySignature = std::string_view{"$arr"};
-
 	constexpr std::string_view trim(const std::string_view view){
 		constexpr std::string_view Empty = " \t\n\r\f\v";
 		const auto first = view.find_first_not_of(Empty);
@@ -541,32 +510,9 @@ namespace ext::json{
 		return view.substr(first, last - first + 1);
 	}
 
-	/*struct Scope{
-		// std::vector<std::pair<std::size_t, std::size_t>> jumpPoints{};
-		std::string_view code{};
-
-		std::vector<std::pair<std::string_view, Scope>> args{};
-
-		[[nodiscard]] bool isLeaf() const{
-			return args.empty();
-		}
-
-		[[nodiscard]] bool isArray_OnGenerate() const{
-			return code == ArraySignature;
-		}
-
-		[[nodiscard]] bool isArray() const{
-			return !code.empty() && code.front() == '[';
-		}
-
-		[[nodiscard]] bool isObject() const{
-			return !code.empty() && code.front() == '{';
-		}
-	};*/
-
-	static JsonValue parseBasicValue(const std::string_view view){
+	json_value parseBasicValue(const std::string_view view){
 		if(view.empty()){
-			return JsonValue(nullptr);
+			return json_value(nullptr);
 		}
 
 		const auto frontChar = view.front();
@@ -578,35 +524,35 @@ namespace ext::json{
 						"Losing '\"' At Json String Back"
 					};
 
-				return JsonValue{view.substr(1, view.size() - 2)};
+				return json_value{view.substr(1, view.size() - 2)};
 			}
 
-			case 't' : return JsonValue(true);
-			case 'f' : return JsonValue(false);
-			case 'n' : return JsonValue(nullptr);
+			case 't' : return json_value(true);
+			case 'f' : return json_value(false);
+			case 'n' : return json_value(nullptr);
 			default : break;
 		}
 
-		if(view.find_first_of(".fFeE") != std::string_view::npos){
-			return JsonValue(parseFloat(view));
+		if(view.find_first_of(".fFeEiInN") != std::string_view::npos){
+			return json_value(parseFloat(view));
 		}
 
 		if(frontChar == '0'){
 			if(view.size() >= 2){
 				switch(view[1]){
-					case 'x' : return JsonValue(parseInt(view.substr(2), 16));
-					case 'b' : return JsonValue(parseInt(view.substr(2), 2));
-					default : return JsonValue(parseInt(view.substr(1), 8));
+					case 'x' : return json_value(parseInt(view.substr(2), 16));
+					case 'b' : return json_value(parseInt(view.substr(2), 2));
+					default : return json_value(parseInt(view.substr(1), 8));
 				}
 			} else{
-				return JsonValue(static_cast<Integer>(0));
+				return json_value(static_cast<Integer>(0));
 			}
 		} else{
-			return JsonValue(parseInt(view));
+			return json_value(parseInt(view));
 		}
 	}
 
-	JsonValue parseJsonFromString(std::string_view text){
+	json_value parseJsonFromString(std::string_view text){
 		if(text.empty())return {};
 		static constexpr auto Invalid = std::string_view::npos;
 
@@ -615,10 +561,10 @@ namespace ext::json{
 
 		struct LayerData{
 			std::size_t layerBegin{};
-			JsonValue value{};
+			json_value value{};
 
 			std::size_t layerLastSplit{};
-			JsonValue* last{};
+			json_value* last{};
 
 			void processData(const std::size_t index, const std::string_view text){
 				if(layerLastSplit != Invalid){
@@ -629,7 +575,7 @@ namespace ext::json{
 					if(value.is<object>()){
 						last->operator=(parseBasicValue(lastCode));
 					}else{
-						value.asArray().push_back(parseBasicValue(lastCode));
+						value.as_arr().push_back(parseBasicValue(lastCode));
 					}
 
 				}
@@ -665,7 +611,7 @@ namespace ext::json{
 				case ':' :{
 					auto& [begin, layer, split, last] = layers.top();
 					auto lastKey = trim(text.substr(split + 1, index - split - 1));
-					last = &layer.asObject().insert_or_assign(lastKey.substr(1, lastKey.size() - 2), JsonValue{nullptr}).first->second;
+					last = &layer.as_obj().insert_or_assign(lastKey.substr(1, lastKey.size() - 2), json_value{nullptr}).first->second;
 
 					split = index;
 
@@ -673,12 +619,12 @@ namespace ext::json{
 				}
 
 				case '[' :{
-					layers.emplace(index, JsonValue{Array{}}, index);
+					layers.emplace(index, json_value{Array{}}, index);
 					break;
 				}
 
 				case '{' :{
-					layers.emplace(index, JsonValue{Object{}}, index);
+					layers.emplace(index, json_value{Object{}}, index);
 					break;
 				}
 
@@ -698,7 +644,7 @@ namespace ext::json{
 					}
 
 					if(ly.is<array>()){
-						ly.asArray().push_back(std::move(lastLayer.value));
+						ly.as_arr().push_back(std::move(lastLayer.value));
 					}
 
 					split = Invalid;
@@ -717,14 +663,14 @@ namespace ext::json{
 	}
 
 	export
-	[[nodiscard]] JsonValue parse(const std::string_view view){
+	[[nodiscard]] json_value parse(const std::string_view view){
 		return parseJsonFromString(view);
 	}
 }
 
 export
 template <>
-struct ::std::formatter<ext::json::JsonValue>{
+struct ::std::formatter<ext::json::json_value>{
 	constexpr auto parse(std::format_parse_context& context) const{
 		return context.begin();
 	}
@@ -757,10 +703,16 @@ struct ::std::formatter<ext::json::JsonValue>{
 		return it;
 	}
 
-	auto format(const ext::json::JsonValue& json, auto& context) const{
+	auto format(const ext::json::json_value& json, auto& context) const{
 		std::ostringstream ss{};
 		json.print(ss, flat, noSpace);
 
 		return std::format_to(context.out(), "{}", ss.str());
 	}
 };
+
+module : private;
+
+ext::json::json_value::json_value(parse_string_t, const std::string_view json_str){
+	this->operator=(parse(json_str));
+}

@@ -5,6 +5,7 @@ import std;
 
 import Geom.Vector2D;
 import ext.concepts;
+import ext.heterogeneous;
 import Core.Ctrl.Constants;
 import Core.Ctrl.Bind;
 import Core.InputListener;
@@ -31,44 +32,23 @@ export namespace Core::Ctrl{
 		Geom::Vec2 mouseVelocity{};
 		Geom::Vec2 scrollOffset{};
 
-		std::vector<KeyMapping*> subInputs{};
+		ext::string_hash_map<KeyMapping> subInputs{};
 
 	public:
-		/**
-		 * @return false if Notfound
-		 */
-		bool activeBinds(const KeyMapping* binds){
-			if(const auto itr = std::ranges::find(subInputs, binds); itr != subInputs.end()){
-				itr.operator*()->activate();
-				return true;
-			}
-			return false;
+
+		KeyMapping& registerSubInput(const std::string_view mappingName){
+			return subInputs.try_emplace(std::string(mappingName), KeyMapping{}).first->second;
 		}
 
-		/**
-		* @return false if Notfound
-		*/
-		bool deactiveBinds(const KeyMapping* binds){
-			if(const auto itr = std::ranges::find(subInputs, binds); itr != subInputs.end()){
-				itr.operator*()->deactivate();
-				return true;
-			}
-			return false;
-		}
-
-		void registerSubInput(KeyMapping* input){
-			subInputs.push_back(input);
-		}
-
-		void eraseSubInput(KeyMapping* input){
-			std::erase(subInputs, input);
+		bool eraseSubInput(const std::string_view mappingName){
+			return subInputs.erase(mappingName);
 		}
 
 		void inform(const int button, const int action, const int mods){
 			binds.mapping.inform(button, action, mods);
 
-			for(auto* subInput : subInputs){
-				subInput->mapping.inform(button, action, mods);
+			for(auto& subInput : subInputs | std::views::values){
+				subInput.mapping.inform(button, action, mods);
 			}
 		}
 
@@ -137,8 +117,8 @@ export namespace Core::Ctrl{
 				listener(mouseVelocity.x, mouseVelocity.y);
 			}
 
-			for(auto* subInput : subInputs){
-				subInput->update(delta);
+			for(auto& subInput : subInputs | std::views::values){
+				subInput.update(delta);
 			}
 		}
 	};

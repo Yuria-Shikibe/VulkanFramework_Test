@@ -12,12 +12,12 @@ import ext.guard;
 
 export namespace Graphic::Draw{
 
-	template <bool guardOriginalImage = true, AutoAcquirableParam Param = EmptyParam>
+	template </*bool guardOriginalImage = false, */AutoAcquirableParam Param = EmptyParam>
 		requires (ImageMutableParam<Param>)
 	void drawNinePatch(Param& param, const ImageViewNineRegion& nineRegion, const Geom::OrthoRectFloat bound, const Color color){
 		const auto rects = nineRegion.getPatches(bound);
 
-		if constexpr (guardOriginalImage){
+		if constexpr (false){
 			ext::resumer guard1{param.uv};
 			ext::resumer guard2{param.index};
 

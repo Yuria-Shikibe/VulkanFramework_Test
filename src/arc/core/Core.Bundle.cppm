@@ -1,4 +1,4 @@
-export module Assets.Bundle;
+export module Core.Bundle;
 
 export import ext.json;
 export import Core.File;
@@ -17,7 +17,7 @@ namespace Core{
 
 	template <std::ranges::bidirectional_range Rng>
 		requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-	void printNotFound(Rng&& rng, std::string_view current, const ext::json::JsonValueTag tag){
+	void printNotFound(Rng&& rng, std::string_view current, const ext::json::jval_tag tag){
 		std::print(std::cerr, "Bundle: ");
 
 		auto last = std::ranges::prev(std::ranges::end(rng));
@@ -31,7 +31,7 @@ namespace Core{
 
 	template <std::ranges::forward_range Rng>
 		requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-	void printNotFound(Rng&& rng, std::string_view current, const ext::json::JsonValueTag tag){
+	void printNotFound(Rng&& rng, std::string_view current, const ext::json::jval_tag tag){
 		std::print(std::cerr, "Bundle: ");
 
 		for(const std::string_view& strs : std::ranges::subrange{std::ranges::begin(rng), std::ranges::end(rng)}){
@@ -44,7 +44,7 @@ namespace Core{
 
 	template <std::ranges::input_range Rng>
 		requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-	void printNotFound(Rng&& rng, std::string_view current, const ext::json::JsonValueTag tag){
+	void printNotFound(Rng&& rng, std::string_view current, const ext::json::jval_tag tag){
 		std::println(std::cerr, "Bundle Not Found\nAt: {}, which is {}", current, std::to_underlying(tag));
 	}
 
@@ -64,11 +64,11 @@ namespace Core{
 	private:
 		std::vector<BundleLoadable*> bundleRequesters{};
 
-		ext::json::JsonValue currentBundle{};
-		ext::json::JsonValue fallbackBundle{};
+		ext::json::json_value currentBundle{};
+		ext::json::json_value fallbackBundle{};
 		std::locale currentLocale{};
 
-		static ext::json::JsonValue loadFile(const File& file){
+		static ext::json::json_value loadFile(const File& file){
 			return ext::json::parse(file.readString());
 		}
 
@@ -77,9 +77,9 @@ namespace Core{
 		static std::optional<std::string_view> find(Rng&& dir, const ext::json::Object* current) noexcept{
 			for(const std::string_view& cur : dir){
 				if(const auto itr = current->try_find(cur)){
-					switch(auto tag = itr->getTag()){
+					switch(auto tag = itr->get_tag()){
 						case ext::json::object :{
-							current = &itr->asObject();
+							current = &itr->as_obj();
 							break;
 						}
 
@@ -106,7 +106,7 @@ namespace Core{
 
 	public:
 		[[nodiscard]] Bundle(){
-			currentBundle.asObject();
+			currentBundle.as_obj();
 		}
 
 		[[nodiscard]] explicit Bundle(const File& file){
@@ -121,22 +121,22 @@ namespace Core{
 			return currentLocale;
 		}
 
-		ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle){
-			return (this->*ptr).asObject();
+		ext::json::Object& getBundles(ext::json::json_value Bundle::* ptr = &Bundle::currentBundle){
+			return (this->*ptr).as_obj();
 		}
 
-		[[nodiscard]] const ext::json::Object& getBundles(ext::json::JsonValue Bundle::* ptr = &Bundle::currentBundle) const{
-			return (this->*ptr).asObject();
+		[[nodiscard]] const ext::json::Object& getBundles(ext::json::json_value Bundle::* ptr = &Bundle::currentBundle) const{
+			return (this->*ptr).as_obj();
 		}
 
-		void loadFallback(ext::json::JsonValue&& jsonValue){
+		void loadFallback(ext::json::json_value&& jsonValue){
 			fallbackBundle = std::move(jsonValue);
-			fallbackBundle.asObject();
+			fallbackBundle.as_obj();
 		}
 
-		void load(ext::json::JsonValue&& jsonValue){
+		void load(ext::json::json_value&& jsonValue){
 			currentBundle = std::move(jsonValue);
-			currentBundle.asObject();
+			currentBundle.as_obj();
 			for(const auto bundleRequester : bundleRequesters){
 				bundleRequester->loadBundle(this);
 			}
@@ -157,28 +157,35 @@ namespace Core{
 
 		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
 			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
-		[[nodiscard]] std::string_view find(Rng&& keyWithConstrains, const std::string_view def = NotFound) const noexcept{
+		[[nodiscard]] std::optional<std::string_view> find(Rng&& keyWithConstrains) const noexcept{
 			auto rng = keyWithConstrains | std::views::transform(spilt) | std::views::join;
-			auto* last = &currentBundle.asObject();
+			auto* last = &currentBundle.as_obj();
 
 			std::optional<std::string_view> rst = Bundle::find(rng, last);
 
 			if(!rst){
-				last = fallbackBundle.tryGetValue<ext::json::object>();
-				if(last)rst = Bundle::find(rng, last);
+				last = fallbackBundle.try_get<ext::json::object>();
+				if(last) rst = Bundle::find(rng, last);
 			}
 
+			return rst;
+		}
+
+		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
+			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
+		[[nodiscard]] std::string_view find(Rng&& keyWithConstrains, const std::string_view def) const noexcept{
+			const std::optional<std::string_view> rst = this->find(std::forward<Rng>(keyWithConstrains));
 			return rst.value_or(def);
 		}
 
 		[[nodiscard]] std::string_view find(const std::string_view key, const std::string_view def) const noexcept{
 			auto dir = spilt(key);
-			auto* last = &currentBundle.asObject();
+			auto* last = &currentBundle.as_obj();
 
 			auto rst = Bundle::find(dir, last);
 
 			if(!rst){
-				last = &fallbackBundle.asObject();
+				last = &fallbackBundle.as_obj();
 				rst = find(dir, last);
 			}
 
@@ -201,7 +208,15 @@ namespace Core{
 		template <std::ranges::range Rng = std::initializer_list<std::string_view>>
 			requires (std::convertible_to<std::ranges::range_value_t<Rng>, std::string_view>)
 		[[nodiscard]] std::string_view operator[](Rng&& keys) const noexcept{
-			return this->find(std::forward<Rng>(keys), NotFound);
+			if constexpr (std::ranges::bidirectional_range<Rng>){
+				if(std::ranges::empty(keys)){
+					return NotFound;
+				}else{
+					return this->find(std::forward<Rng>(keys), *std::ranges::rbegin(keys));
+				}
+			}else{
+				return this->find(std::forward<Rng>(keys), NotFound);
+			}
 		}
 	};
 }

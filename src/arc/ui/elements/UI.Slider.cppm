@@ -94,6 +94,11 @@ export namespace Core::UI{
 			events().on<Event::Scroll>([this](const Event::Scroll& event){
 				Geom::Vec2 move = event.pos;
 
+				if(event.mode & Ctrl::Mode::Shift){
+					move.swapXY();
+					move.x *= -1;
+				}
+
 				if(isClamped()){
 					moveBar(scrollSensitivity * sensitivity.normalizeToBase() * move.y * Geom::Vec2{-1, 1});
 				} else{
@@ -123,13 +128,23 @@ export namespace Core::UI{
 			property.maintainFocusUntilMouseDrop = true;
 		}
 
-		template <std::invocable<Slider&> Func>
+		template <typename Func>
 		decltype(auto) setCallback(Func&& func){
-			return std::exchange(callback, std::forward<Func>(func));
+			if constexpr (std::invocable<Func, Slider&>){
+				return std::exchange(callback, std::forward<Func>(func));
+			}else if constexpr (std::invocable<Func>){
+				return std::exchange(callback, [func = std::forward<Func>(func)](Slider&){
+					std::invoke(func);
+				});
+			}else{
+				static_assert(false, "callback function type not support");
+			}
+
 		}
 
 		void setInitialProgress(const Geom::Vec2 progress) noexcept{
 			this->barProgress.base = progress;
+			this->barProgress.base.clampXY(Geom::zeroVec2<float>, Geom::norBaseVec2<float>);
 		}
 
 		[[nodiscard]] bool isSegmentMoveActivated() const noexcept{
@@ -170,17 +185,5 @@ export namespace Core::UI{
 			};
 		}
 
-		// CursorType getCursorType() const noexcept override{
-		// 	if(pressed) return CursorType::drag;
-		//
-		// 	if(isClampedOnHori()) return CursorType::scrollHori;
-		// 	if(isClampedOnVert()) return CursorType::scrollVert;
-		//
-		// 	return CursorType::scroll;
-		// }
-
-		// void applyDefDrawer() override;
-		//
-		// void drawContent() const override;
 	};
 }

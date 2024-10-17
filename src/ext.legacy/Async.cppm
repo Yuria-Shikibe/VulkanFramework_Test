@@ -11,7 +11,7 @@ export namespace ext {
 	 * \brief Uses this handler to post tasks to other threads, usually main thread, useful for GL functions which is main thread only
 	 */
 	struct TaskHandler {
-		std::future<void> operator()(ext::Invokable<void()> auto&& func) const {
+		std::future<void> operator()(ext::invocable<void()> auto&& func) const {
 			std::packaged_task<void()> t{std::forward<decltype(func)>(func)};
 			auto f = t.get_future();
 			t();
@@ -54,7 +54,7 @@ export namespace ext {
 			this->handler = handler;
 		}
 
-		[[nodiscard]] std::future<void> postToHandler(ext::Invokable<void()> auto&& func) {
+		[[nodiscard]] std::future<void> postToHandler(ext::invocable<void()> auto&& func) {
 			if(!deferred){
 				return handler->operator()(std::forward<decltype(func)>(func));
 			}else{

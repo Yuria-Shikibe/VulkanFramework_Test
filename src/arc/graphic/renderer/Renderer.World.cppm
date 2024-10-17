@@ -5,11 +5,11 @@ module;
 export module Graphic.Renderer.World;
 
 export import Graphic.Renderer;
-export import Graphic.Batch.MultiThread;
+export import Graphic.Batch.Exclusive;
 
 import Core.Vulkan.RenderProcedure;
 import Core.Vulkan.DynamicRendering;
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 import Core.Vulkan.Preinstall;
 import Core.Vulkan.Util;
 import Core.Vulkan.Comp;
@@ -32,7 +32,9 @@ export namespace Graphic{
 	};
 
 	struct RendererWorld : BasicRenderer{
-		Batch_MultiThread batch{};
+		Batch_Exclusive batch{};
+
+		using Batch = decltype(batch);
 
 		//Pipeline Data
 		Core::Vulkan::DynamicRendering dynamicRendering{};
@@ -40,7 +42,7 @@ export namespace Graphic{
 
 
 		//Commands Region
-		Batch_MultiThread::DrawCommandSeq<void> drawCommands{};
+		Batch::DrawCommandSeq<void> drawCommands{};
 		Core::Vulkan::CommandBuffer cleanCommand{};
 		Core::Vulkan::CommandBuffer endBatchCommand{};
 
@@ -55,7 +57,7 @@ export namespace Graphic{
 
 		//Attachments
 		Core::Vulkan::ColorAttachment baseColor{};
-		Core::Vulkan::ColorAttachment lightColor{};
+		Core::Vulkan::ColorAttachment lightAttachment{};
 		Core::Vulkan::DepthStencilAttachment depthStencilAttachment{};
 
 		Core::Vulkan::ImageView depthAttachmentView{};
@@ -65,14 +67,15 @@ export namespace Graphic{
 		ComputePostProcessor gaussian{};
 		ComputePostProcessor ssao{};
 		ComputePostProcessor merge{};
-		ComputePostProcessor nfaa{};
+		ComputePostProcessor nfaa_merge{};
+		ComputePostProcessor nfaa_light{};
 
 
 		[[nodiscard]] RendererWorld() = default;
 
 		[[nodiscard]] explicit RendererWorld(const Core::Vulkan::Context& context)
 			: BasicRenderer(context),
-			  batch(context, sizeof(Core::Vulkan::Vertex_World), Assets::Sampler::textureNearestSampler),
+			  batch(context, sizeof(Vertex_World), Assets::Sampler::textureNearestSampler),
 			  pipelineData{&context},
 			  cleanCommand{context.device, commandPool},
 			  endBatchCommand{context.device, commandPool},
@@ -91,7 +94,7 @@ export namespace Graphic{
 				vkCommandBuffer = {context.device, commandPool};
 			}
 
-			batch.externalDrawCall = [this](const Batch_MultiThread::CommandUnit& unit, const std::size_t idx){
+			batch.externalDrawCall = [this](const Batch::CommandUnit& unit, const std::size_t idx){
 				Core::Vulkan::Util::submitCommand(
 					this->context().device.getPrimaryGraphicsQueue(),
 					std::array{unit.transferCommand.get(), drawCommands[idx].get()}, unit.fence);
@@ -120,7 +123,7 @@ export namespace Graphic{
 			this->size = size2;
 
 			baseColor = {context().physicalDevice, context().device};
-			lightColor = {context().physicalDevice, context().device};
+			lightAttachment = {context().physicalDevice, context().device};
 			depthStencilAttachment = {context().physicalDevice, context().device};
 
 			{
@@ -133,7 +136,7 @@ export namespace Graphic{
 					VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT |
 					VK_IMAGE_USAGE_SAMPLED_BIT);
 
-				lightColor.create(
+				lightAttachment.create(
 					size, cmd,
 					VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
 					VK_IMAGE_USAGE_TRANSFER_DST_BIT |
@@ -177,15 +180,16 @@ export namespace Graphic{
 				const auto cmd = batch.obtainTransientCommand();
 
 				baseColor.resize(size2, cmd);
-				lightColor.resize(size2, cmd);
+				lightAttachment.resize(size2, cmd);
 				depthStencilAttachment.resize(size2, cmd);
 			}
 			createDepthView();
 
-			gaussian.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
-			ssao.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
-			merge.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
-			nfaa.resize(size, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()), commandPool_Compute.obtain());
+			nfaa_light.resize(size, getComputeTransient(), commandPool_Compute.obtain());
+			gaussian.resize(size, getComputeTransient(), commandPool_Compute.obtain());
+			ssao.resize(size, getComputeTransient(), commandPool_Compute.obtain());
+			merge.resize(size, getComputeTransient(), commandPool_Compute.obtain());
+			nfaa_merge.resize(size, getComputeTransient(), commandPool_Compute.obtain());
 
 			createPipeline();
 			createDrawCommands();
@@ -198,7 +202,11 @@ export namespace Graphic{
 		}
 
 		Core::Vulkan::Attachment& getResult_NFAA(){
-			return nfaa.images.back();
+			return nfaa_merge.images.back();
+		}
+
+		Core::Vulkan::Attachment& getResult_NFAA_light(){
+			return nfaa_light.images.back();
 		}
 
 		Core::Vulkan::Attachment& getResult_SSAO(){
@@ -216,10 +224,11 @@ export namespace Graphic{
 
 			Util::submitCommand(context().device.getPrimaryComputeQueue(), std::array{
 									// endBatchCommand.get(),
+									nfaa_light.mainCommandBuffer.get(),
 				                    gaussian.mainCommandBuffer.get(),
 				                    ssao.mainCommandBuffer.get(),
 				                    merge.mainCommandBuffer.get(),
-				                    nfaa.mainCommandBuffer.get()
+				                    nfaa_merge.mainCommandBuffer.get()
 			                    });
 
 
@@ -227,17 +236,32 @@ export namespace Graphic{
 		}
 
 	private:
+		decltype(auto) getComputeTransient() const{
+			return commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue());
+		}
+
 		void createPostProcessors(){
+
+			{
+				nfaa_light = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
+					AttachmentPort port{};
+
+					port.addAttachment(0, lightAttachment);
+					return port;
+				}, {},
+					getComputeTransient(),
+					commandPool_Compute.obtain()});
+			}
+			
 			{
 				gaussian = Assets::PostProcess::Factory::gaussianFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.views.insert_or_assign(0, lightColor.getView());
-					port.images.insert_or_assign(0, lightColor.getImage());
+					port.addAttachment(0, getResult_NFAA_light());
 					return port;
 				}, [this]{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
-				}, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue())});
+				}, getComputeTransient()});
 
 				gaussian.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
 					cameraPropertiesDescriptor.bindTo(scopedCommand,
@@ -258,10 +282,13 @@ export namespace Graphic{
 
 					port.views.insert_or_assign(0, depthAttachmentView);
 					port.images.insert_or_assign(0, depthStencilAttachment.getImage());
+
+					port.addAttachment(1, lightAttachment);
+
 					return port;
 				}, [this]{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
-				}, commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue())});
+				}, getComputeTransient()});
 
 				ssao.commandRecorderAdditional = [this](VkCommandBuffer scopedCommand){
 					cameraPropertiesDescriptor.bindTo(scopedCommand,
@@ -283,24 +310,24 @@ export namespace Graphic{
 					AttachmentPort port{};
 
 					port.addAttachment(0, baseColor);
-					port.addAttachment(1, lightColor);
+					port.addAttachment(1, lightAttachment);
 					port.views.insert_or_assign(2, getResult_gaussian().getView());
 					port.views.insert_or_assign(3, getResult_SSAO().getView());
 
 					return port;
 				}, {},
-					commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()),
+					getComputeTransient(),
 					commandPool_Compute.obtain()});
 			}
 
 			{
-				nfaa = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
+				nfaa_merge = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
 					AttachmentPort port{};
 
 					port.addAttachment(0, getResult_merge());
 					return port;
 				}, {},
-					commandPool_Compute.getTransient(context().device.getPrimaryComputeQueue()),
+					getComputeTransient(),
 					commandPool_Compute.obtain()});
 			}
 		}
@@ -328,7 +355,7 @@ export namespace Graphic{
 			dynamicRendering.clearColorAttachments();
 			dynamicRendering.setDepthAttachment(depthStencilAttachment.getView(), VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 			dynamicRendering.pushColorAttachment(baseColor.getView(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-			dynamicRendering.pushColorAttachment(lightColor.getView(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+			dynamicRendering.pushColorAttachment(lightAttachment.getView(), VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 			for(auto&& [i, unit] : drawCommands | std::views::enumerate){
 				using namespace Core::Vulkan;
 				auto& commandUnit = batch.units[i];
@@ -391,7 +418,7 @@ export namespace Graphic{
 							.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
 							.srcQueueFamilyIndex = context().graphicFamily(),
 							.dstQueueFamilyIndex = context().computeFamily(),
-							.image = lightColor.getImage(),
+							.image = lightAttachment.getImage(),
 							.subresourceRange = ImageSubRange::Color
 						} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Dst_ComputeRead,
 						VkImageMemoryBarrier2{
@@ -426,7 +453,7 @@ export namespace Graphic{
 					VkImageMemoryBarrier2{
 						.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
 						.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-						.image = lightColor.getImage(),
+						.image = lightAttachment.getImage(),
 						.subresourceRange = ImageSubRange::Color
 					} | MemoryBarrier2::Image::Default | MemoryBarrier2::Image::Src_ComputeRead | MemoryBarrier2::Image::Dst_TransferWrite,
 
@@ -441,7 +468,7 @@ export namespace Graphic{
 				Util::imageBarrier(cleanCommand, barriers);
 
 				baseColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
-				lightColor.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
+				lightAttachment.getImage().cmdClearColor(scopedCommand, ImageSubRange::Color);
 				depthStencilAttachment.getImage().cmdClearDepthStencil(scopedCommand, ImageSubRange::DepthStencil);
 
 				std::ranges::for_each(barriers, Util::swapStage<VkImageMemoryBarrier2>);

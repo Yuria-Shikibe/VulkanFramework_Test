@@ -33,7 +33,7 @@ export namespace Core{
 				: size{size}{}
 		};
 
-		ext::NamedEventManager eventManager{
+		ext::LegacyNamedEventManager eventManager{
 			{ext::index_of<ResizeEvent>()}
 		};
 

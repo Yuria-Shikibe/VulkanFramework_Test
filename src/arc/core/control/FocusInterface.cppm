@@ -21,7 +21,7 @@ export namespace Core::Ctrl {
     struct FocusInterface {
         static constexpr bool scalar = std::is_scalar_v<T>;
 
-        using PassType = typename ext::ConstConditional<!scalar, typename ext::RefConditional<!scalar, T>::type>::type;
+        using PassType = typename ext::ConstConditional<!scalar, typename ext::conditional_reference<!scalar, T>::type>::type;
 
         static bool defValidCheck(PassType t) {
             return static_cast<bool>(t);

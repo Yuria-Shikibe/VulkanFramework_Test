@@ -77,27 +77,28 @@ export namespace Core::Ctrl{
 		static constexpr Signal Repeat = 0b0100'0000'0000;
 		static constexpr Signal Release = 0b0010'0000'0000;
 		static constexpr Signal Press = 0b0001'0000'0000;
-		static constexpr Signal RP_Eraser = ~(Release | Press | DoubleClick);
+		// static constexpr Signal RP_Eraser = ~(Release | Press | DoubleClick | Repeat);
 
 		std::array<std::vector<InputBind>, AllKeyCount> binds{};
-		std::array<std::vector<InputBind>, AllKeyCount> continuous{};
-		std::array<Signal, AllKeyCount> pressed{};
+		std::array<std::vector<InputBind>, AllKeyCount> binds_continuous{};
+		std::array<Signal, AllKeyCount> signals{};
 
 		//OPTM using array instead of vector
-		std::vector<Signal> markedSignal{};
+		std::vector<Signal> pressed{};
 		std::vector<DoubleClickTimer> doubleClickTimers{};
 
 		void updateSignal(const int key, const int act){
 			switch(act){
 				case Act::Press :{
-					if(!std::ranges::contains(markedSignal | std::views::reverse, key)){
-						markedSignal.push_back(key);
+					if(!std::ranges::contains(pressed.crbegin(), pressed.crend(), key)){
+						pressed.push_back(key);
 					}
 					break;
 				}
 
 				case Act::Release :{
-					ext::algo::erase_unique_unstable(markedSignal, key);
+					signals[key] = 0;
+					ext::algo::erase_unique_unstable(pressed, key);
 					break;
 				}
 
@@ -109,7 +110,7 @@ export namespace Core::Ctrl{
 		 * @return isDoubleClick
 		 */
 		bool insert(const int code, const int action, const int mode){
-			Signal pushIn = pressed[code] & ~Mode::Mask;
+			Signal pushIn = signals[code] & ~Mode::Mask;
 
 			bool isDoubleClick = false;
 
@@ -128,22 +129,26 @@ export namespace Core::Ctrl{
 					break;
 				}
 
-				case Act::Release : pushIn = Release;
+				case Act::Release :{
+					pushIn = Release;
+					// pressed[code] &= ~Continuous;
 					break;
+				}
+
 				case Act::Repeat : pushIn = Repeat | Continuous;
 					break;
 
 				default : break;
 			}
 
-			pressed[code] = pushIn | (mode & Mode::Mask);
+			signals[code] = pushIn | (mode & Mode::Mask);
 
 			return isDoubleClick;
 		}
 
 	public:
 		[[nodiscard]] bool triggered(const int code, const int action, const int mode) const noexcept{
-			const Signal target = pressed[code];
+			const Signal target = signals[code];
 
 			if(!Mode::matched(target, mode)) return false;
 
@@ -167,34 +172,39 @@ export namespace Core::Ctrl{
 			return target & actionTgt;
 		}
 
+		[[nodiscard]] int getMode() const noexcept{
+			const auto shift = triggered(Key::Left_Shift) || triggered(Key::Right_Shift) ? Mode::Shift : Mode::None;
+			const auto ctrl = triggered(Key::Left_Control) || triggered(Key::Right_Control) ? Mode::Ctrl : Mode::None;
+			const auto alt = triggered(Key::Left_Alt) || triggered(Key::Right_Alt) ? Mode::Alt : Mode::None;
+			const auto caps = triggered(Key::CapsLock) ? Mode::CapLock : Mode::None;
+			const auto nums = triggered(Key::NumLock) ? Mode::NumLock : Mode::None;
+			const auto super = triggered(Key::Left_Super) || triggered(Key::Right_Super) ? Mode::Super : Mode::None;
+
+			return shift | ctrl | alt | caps | nums | super;
+		}
+
 		[[nodiscard]] bool triggered(const int code) const noexcept{
-			return static_cast<bool>(pressed[code]);
+			return static_cast<bool>(signals[code]);
 		}
 
 		void inform(const int code, const int action, const int mods){
-			updateSignal(code, action);
 			const bool doubleClick = insert(code, action, mods);
 
-			const auto& targets = binds[code];
-
-			if(!targets.empty()){
-				for(const auto& bind : targets){
-					bind.tryExec(action, mods);
-					if(doubleClick){
-						//TODO better double click event
-						bind.tryExec(Act::DoubleClick, mods);
-					}
+			for(const auto& bind : binds[code]){
+				bind.tryExec(action, mods);
+				if(doubleClick){
+					//TODO better double click event
+					bind.tryExec(Act::DoubleClick, mods);
 				}
 			}
+
+			updateSignal(code, action);
 		}
 
 		void update(const float delta){
-			for(const int key : markedSignal){
-				pressed[key] &= RP_Eraser;
-				if(pressed[key] & Continuous){
-					for(const auto& bind : continuous[key]){
-						bind.tryExec(Act::Continuous, pressed[key] & Mode::Mask);
-					}
+			for(const int key : pressed){
+				for(const auto& bind : binds_continuous[key]){
+					bind.tryExec(Act::Continuous, signals[key] & Mode::Mask);
 				}
 			}
 
@@ -205,9 +215,9 @@ export namespace Core::Ctrl{
 		}
 
 		void registerBind(InputBind&& bind){
-			assert(bind.key < AllKeyCount && bind.key > 0);
+			assert(bind.key < AllKeyCount && bind.key >= 0);
 			
-			auto& container = Act::isContinuous(bind.act) ? continuous : binds;
+			auto& container = Act::isContinuous(bind.act) ? binds_continuous : binds;
 
 			container[bind.key].emplace_back(std::move(bind));
 		}
@@ -216,11 +226,11 @@ export namespace Core::Ctrl{
 			registerBind(InputBind{bind});
 		}
 
-		void clear(){
+		void clear() noexcept{
 			std::ranges::for_each(binds, &std::vector<InputBind>::clear);
-			std::ranges::for_each(continuous, &std::vector<InputBind>::clear);
-			pressed.fill(0);
-			markedSignal.clear();
+			std::ranges::for_each(binds_continuous, &std::vector<InputBind>::clear);
+			signals.fill(0);
+			pressed.clear();
 			doubleClickTimers.clear();
 		}
 	};

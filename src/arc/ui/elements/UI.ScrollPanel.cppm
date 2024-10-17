@@ -57,12 +57,16 @@ export namespace Core::UI{
 			events().on<Event::Scroll>([this](const Event::Scroll& e){
 				auto cmp = e.pos;
 
-				if(e.mode == Ctrl::Mode::Shift){
+				if(e.mode & Ctrl::Mode::Shift){
 					cmp.swapXY();
+					cmp.x *= -1;
 				}
 
+				auto clamp = getVelClamp();
+
 				scrollTargetVelocity = cmp * getVelClamp();
-				scrollVelocity = scrollTargetVelocity.scl(VelocityScale, VelocityScale);
+
+				scrollVelocity = scrollTargetVelocity.scl(VelocityScale);
 			});
 
 			events().on<Event::Inbound>([this](const auto& e){
@@ -173,7 +177,7 @@ export namespace Core::UI{
 		void updateChildrenAbsSrc() const{
 			auto offset = -scroll.temp;
 			offset.y -= (getItemSize().y - prop().getValidHeight());
-			item->prop().relativeSrc = offset;
+			item->prop().relativeSrc = offset + prop().boarder.bot_lft();
 			item->updateAbsSrc(absPos());
 		}
 

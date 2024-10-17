@@ -7,6 +7,7 @@ export module Math.Timed;
 export import Math;
 export import Math.Interpolation;
 import ext.concepts;
+import std;
 
 //TODO is this namespace appropriate?
 export namespace Math{
@@ -78,9 +79,9 @@ export namespace Math{
 			return time / otherLifetime;
 		}
 
-		template <ext::Invokable<float(float)> Func>
-		[[nodiscard]] float get(Func&& interp) const{
-			return interp(get());
+		template <ext::invocable<float(float)> Func>
+		[[nodiscard]] float get(Func interp) const{
+			return std::invoke(interp, get());
 		}
 
 		/**

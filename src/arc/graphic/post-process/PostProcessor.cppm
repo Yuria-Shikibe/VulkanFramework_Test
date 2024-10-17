@@ -144,7 +144,7 @@ export namespace Graphic{
 			if(commandRecorder)commandRecorder(*this);
 		}
 
-		void resize(Geom::USize2 size, VkCommandBuffer commandBuffer, Core::Vulkan::CommandBuffer&& mainCommandBuffer){
+		void resize(Geom::USize2 size, VkCommandBuffer resizeTransientCommandBuffer, Core::Vulkan::CommandBuffer&& mainCommandBuffer){
 			if(size == this->size())return;
 			pipelineData.size = size;
 			if(resizeCallback)resizeCallback(*this);
@@ -153,10 +153,10 @@ export namespace Graphic{
 				port = portProv();
 			}
 
-			if(!commandBuffer)return;
+			if(!resizeTransientCommandBuffer)return;
 
 			for (auto && localAttachment : images){
-				localAttachment.resize(size, commandBuffer);
+				localAttachment.resize(size, resizeTransientCommandBuffer);
 			}
 
 			updateDescriptors();

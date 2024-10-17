@@ -1,6 +1,6 @@
 module;
 
-// #include "../src/ext/assume.hpp"
+#include <cassert>
 
 export module Geom.Rect_Orthogonal;
 
@@ -10,10 +10,13 @@ import ext.concepts;
 import Math;
 import Geom.Vector2D;
 
-export namespace Geom{
+namespace Geom{
 
-	struct FromExtentTag{};
-	constexpr FromExtentTag FromExtent{};
+	export struct FromExtentTag{};
+	export constexpr FromExtentTag FromExtent{};
+
+	export struct FromUncheckedTag{};
+	export constexpr FromUncheckedTag FromUnchecked{};
 
 	//TODO make size as a vector?
 
@@ -21,6 +24,7 @@ export namespace Geom{
 	 * \brief width, height should be always non-negative.
 	 * \tparam T Arithmetic Type
 	 */
+	export
 	template <ext::number T>
 	class Rect_Orthogonal/* : public Shape<Rect_Orthogonal<T>, T>*/{
 		static constexpr T TWO{2};
@@ -32,6 +36,11 @@ export namespace Geom{
 		Vector2D<T> size_{};
 
 	public:
+		constexpr Rect_Orthogonal(FromUncheckedTag, const T srcX, const T srcY, const T width, const T height) noexcept
+			: src(srcX, srcY), size_{width, height}{
+			assert(width > 0 && height > 0);
+		}
+
 		constexpr Rect_Orthogonal(const T srcX, const T srcY, const T width, const T height) noexcept
 			: src(srcX, srcY){
 			this->setSize(width, height);
@@ -529,6 +538,16 @@ export namespace Geom{
 			return { src.x + size_.x, src.y + size_.y };
 		}
 
+		[[nodiscard]] constexpr Vector2D<T> operator[](const unsigned i) const noexcept{
+			switch(i){
+			case 0u : return vert_00();
+			case 1u : return vert_10();
+			case 2u : return vert_11();
+			case 3u : return vert_01();
+			default : std::unreachable();
+			}
+		}
+
 		[[nodiscard]] constexpr T area() const noexcept{
 			return size_.x * size_.y;
 		}
@@ -638,6 +657,21 @@ export namespace Geom{
 			}
 		}
 
+
+		[[nodiscard]] constexpr std::array<Rect_Orthogonal, 4> split() const noexcept{
+			const T x = src.x;
+			const T y = src.y;
+			const T w = size_.x / static_cast<T>(2);
+			const T h = size_.y / static_cast<T>(2);
+
+			return std::array<Rect_Orthogonal, 4>{
+				Rect_Orthogonal{FromUnchecked, x, y, w, h			},
+				Rect_Orthogonal{FromUnchecked, x + w, y, w, h		},
+				Rect_Orthogonal{FromUnchecked, x, y + h, w, h		},
+				Rect_Orthogonal{FromUnchecked, x + w, y + h, w, h	},
+			};
+		}
+
 		[[deprecated("Unsafe Design")]] struct iterator{
 			Vector2D<T> cur{};
 			T srcX{};
@@ -680,7 +714,7 @@ export namespace Geom{
 		}
 	};
 
-	using OrthoRectFloat = Rect_Orthogonal<float>;
-	using OrthoRectInt = Rect_Orthogonal<int>;
-	using OrthoRectUInt = Rect_Orthogonal<unsigned int>;
+	export using OrthoRectFloat = Rect_Orthogonal<float>;
+	export using OrthoRectInt = Rect_Orthogonal<int>;
+	export using OrthoRectUInt = Rect_Orthogonal<unsigned int>;
 }

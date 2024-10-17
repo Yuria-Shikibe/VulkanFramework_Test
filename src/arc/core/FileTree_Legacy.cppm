@@ -86,7 +86,7 @@ export namespace Core{
 
 
 		template <bool ignoreDir = true, typename Func>
-			requires (ext::Invokable<std::string(const File&), Func>)
+			requires (ext::invocable<std::string(const File&), Func>)
 		void mapSubFiles(Func&& func) {
 			for(auto& element : files | std::ranges::views::values) {
 				for(auto& file : element) {

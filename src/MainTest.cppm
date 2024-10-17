@@ -11,8 +11,6 @@ import ext.meta_programming;
 
 import std;
 
-import Core.Global;
-
 export import Core.UI.Root;
 export import Core.UI.BedFace;
 export import Core.UI.ScrollPanel;
@@ -24,11 +22,17 @@ export import Core.UI.Slider;
 export import Core.UI.RegionDrawable;
 export import Core.UI.Button;
 
+export import Core.UI.Styles;
+
+import Core.Input;
+import Core.Window;
+
 export import Core.Global.UI;
 export import Core.Global;
 export import Core.Global.Graphic;
 export import Core.Global.Assets;
 import Core.InitAndTerminate;
+import Core.Ctrl;
 
 export import Graphic.Renderer.UI;
 export import Graphic.Renderer.World;
@@ -39,19 +43,66 @@ export import Graphic.Batch.Exclusive;
 export import Graphic.Draw.Func;
 export import Graphic.Draw.NinePatch;
 export import Graphic.Batch.AutoDrawParam;
-export import Graphic.Pixmap;
 export import Graphic.ImageAtlas;
+export import Graphic.Pixmap;
 
 import Core.Vulkan.Texture;
+
+import Game.Delay;
+
+export import Assets.Fx;
 
 export namespace Test{
 	static_assert(Core::UI::ElemInitFunc<decltype([](int, Core::UI::BedFace&){})>);
 
-	Core::Vulkan::Texture texturePester{};
-	Core::Vulkan::Texture texturePesterLight{};
+	Graphic::ImageViewRegion* texturePester{};
+	Graphic::ImageViewRegion* texturePesterLight{};
 
 	Graphic::ImageViewNineRegion nineRegion_edge{};
 	Graphic::ImageViewNineRegion nineRegion_base{};
+
+	constexpr Core::UI::Style::Palette PaletteFront{
+		.general = Graphic::Colors::AQUA,
+		.onFocus = Graphic::Colors::AQUA.copy().lerp(Graphic::Colors::WHITE, 0.4f),
+		.onPress = Graphic::Colors::WHITE,
+		.disabled = {},
+		.activated = {}
+	};
+
+	constexpr Core::UI::Style::Palette PaletteBack{
+		.general = Graphic::Colors::BLACK,
+		.onFocus = Graphic::Colors::DARK_GRAY,
+		.onPress = Graphic::Colors::GRAY,
+		.disabled = {},
+		.activated = {}
+	};
+
+	Core::UI::Style::RoundStyle defaultStyle{};
+
+	[[nodiscard]] Geom::Vec2 getMouseToWorld(){
+		return Core::Global::mainCamera->getScreenToWorld() * (Core::Global::input->getCursorPos() / Core::Global::window->getSize().as<float>()).sub(.5f, .5f).mul(2, -2);
+	}
+
+	Game::DelayActionManager delayManager{};
+
+	void update(float delta){
+		delayManager.update(delta);
+	}
+
+	void initFx(){
+		using namespace Core;
+		Global::input->binds.registerBind(Ctrl::InputBind{
+				Ctrl::Mouse::_1, Ctrl::Act::Press, []{
+					delayManager.launch(Game::ActionPriority::unignorable, 30, 5, [pos = getMouseToWorld()]{
+						Assets::Fx::CircleOut.launch({
+							.zLayer = 0.2f,
+							.trans = {pos},
+							.color = Graphic::Colors::AQUA_SKY,
+						});
+					});
+				}
+			});
+	}
 
 	void loadTex(){
 		using namespace Core::Global::Asset;
@@ -59,14 +110,23 @@ export namespace Test{
 		atlas->registerNamedImageViewRegionGuaranteed("ui.edge", Graphic::Pixmap{Assets::Dir::texture.find("ui/elem-s1-edge.png")});
 		atlas->registerNamedImageViewRegionGuaranteed("ui.cent", Graphic::Pixmap{Assets::Dir::texture.find("test-1.png")});
 
+		texturePester = &atlas->registerNamedImageViewRegionGuaranteed("main.pester", Graphic::Pixmap{Assets::Dir::texture / R"(pester.png)"}).first;
+		texturePesterLight = &atlas->registerNamedImageViewRegionGuaranteed("main.pester.light", Graphic::Pixmap{Assets::Dir::texture / R"(pester.light.png)"}).first;
+
 		nineRegion_base = {atlas->at("ui.base"), Align::Pad<std::uint32_t>{8, 8, 8, 8}};
 		nineRegion_edge = {
 			atlas->at("ui.edge"),
 			Align::Pad<std::uint32_t>{8, 8, 8, 8},
-			atlas->at("ui.cent"),
-			// {200, 200},
-			Align::Scale::clamped
+			// atlas->at("ui.cent"),
+			{0, 0},
+			Align::Scale::none
 		};
+
+		defaultStyle.edge = Core::UI::Style::PaletteWith{nineRegion_edge, PaletteFront};
+		defaultStyle.base = Core::UI::Style::PaletteWith{nineRegion_base, Core::UI::Style::Palette{PaletteBack}.mulAlpha(0.6f)};
+
+		Core::UI::GlobalStyleDrawer = &defaultStyle;
+
 	}
 
 	void initDefUI(){
@@ -76,6 +136,7 @@ export namespace Test{
 
 		auto& Bed = group.emplaceInitChildren([](Core::UI::BedFace& v){
 			v.prop().fillParent = {true, true};
+			v.prop().graphicData.setEmptyDrawer();
 		});
 
 		// bed.emplaceInit<Core::UI::TextElement>([](Core::UI::TextElement& v){
@@ -92,6 +153,7 @@ export namespace Test{
 			embryo.emplaceInit([](Core::UI::ScrollPanel& pane){
 				pane.setItem([](Core::UI::FlexTable_Dynamic& v){
 					v.align = Align::Pos::top_left;
+					v.defaultCell.setMargin({.right = 5.f});
 					v.emplaceInit([](Core::UI::Slider& slider){
 						slider.prop().boarder.set(5);
 						slider.setCallback([](Core::UI::Slider& s){
@@ -104,7 +166,8 @@ export namespace Test{
 							.followTargetAlign = Align::Pos::bottom_left,
 							.tooltipSrcAlign = Align::Pos::top_left,
 						}, [](Core::UI::FlexTable_Dynamic& table){
-							table.defaultCell.setSize(220.f, 80.f).setMargin(5.f);
+							table.defaultCell.setSize(220.f, 80.f).setMargin(2.f);
+
 							table.emplaceInit([](Core::UI::Slider& slider){
 								slider.setHoriOnly();
 							});
@@ -129,16 +192,16 @@ export namespace Test{
 								text.setTextScale(.8f);
 							});
 
-							table.emplaceInit([](Core::UI::ImageDisplay& display){
+							table.emplaceInit([](Core::UI::FixedImageDisplay<Core::UI::TextureNineRegionDrawable_Ref>& display){
 								display.setDrawable(Core::UI::TextureNineRegionDrawable_Ref{&nineRegion_edge});
 								display.scaling = Align::Scale::stretch;
 							});
 
-							table.emplace<Core::UI::ImageDisplay>(
+							table.emplace<Core::UI::FixedImageDisplay<Core::UI::TextureNineRegionDrawable_Ref>>(
 								Core::UI::TextureNineRegionDrawable_Ref{&nineRegion_edge},
 								Align::Scale::stretch);
 						});
-					}).setWidth(500).setMargin(5);
+					}).setWidth(500);
 
 					v.emplaceInit([](Core::UI::TextElement& e){
 						e.glyphSizeDependency = {true, true};
@@ -147,7 +210,7 @@ export namespace Test{
 						e.prop().boarder.set(5);
 						e.setText("ajsdhash\n叮咚鸡大狗叫djahjsdhasdh;hjgfhajshgj123123123");
 						e.textAlignMode = Align::Pos::top_left;
-					}).setExternal({true, true}).setMargin(5);
+					}).setExternal({true, true});
 				});
 			});
 		}).setScale({Geom::FromExtent, {0.f, 0.0f}, {0.56f, 1.f}}).setMargin(10).setAlign(Align::Pos::top_left);

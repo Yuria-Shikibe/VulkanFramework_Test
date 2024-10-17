@@ -5,81 +5,91 @@
 export module Geom.Transform;
 
 export import Geom.Vector2D;
+export import Math.Angle;
 
 import ext.concepts;
 import std;
 
 export namespace Geom{
-	struct Transform {
-		Vec2 vec{};
-		float rot{};
+	template <typename AngTy>
+	struct TransformState {
+		using AngleType = AngTy;
+
+		Vec2 vec;
+		AngleType rot;
 
 		constexpr void setZero(){
 			vec.setZero();
 			rot = 0.0f;
 		}
 
-		template <float NaN = std::numeric_limits<float>::signaling_NaN()>
-		constexpr void setNan(){
+		template <float NaN = std::numeric_limits<AngleType>::signaling_NaN()>
+		constexpr void setNan() noexcept requires std::is_floating_point_v<AngleType>{
 			vec.set(NaN, NaN);
 			rot = NaN;
 		}
 
-		constexpr Transform& applyInv(const Transform& transform) noexcept{
-			vec.sub(transform.vec).rotate(-transform.rot);
-			rot -= transform.rot;
+		constexpr TransformState& applyInv(const TransformState debaseTarget) noexcept{
+			vec.sub(debaseTarget.vec).rotate(-debaseTarget.rot);
+			rot -= debaseTarget.rot;
 
 			return *this;
 		}
 
-		constexpr Transform& apply(const Transform& transform) noexcept{
-			vec.rotate(transform.rot).add(transform.vec);
-			rot += transform.rot;
+		constexpr TransformState& apply(const TransformState rebaseTarget) noexcept{
+			vec.rotate(static_cast<float>(rebaseTarget.rot)).add(rebaseTarget.vec);
+			rot += rebaseTarget.rot;
 
 			return *this;
 		}
 
-		constexpr Transform& operator|=(const Transform& parentRef) noexcept{
-			return apply(parentRef);
+		constexpr TransformState& operator|=(const TransformState parentRef) noexcept{
+			return TransformState::apply(parentRef);
 		}
 
-		constexpr Transform& operator+=(const Transform& other) noexcept{
+		constexpr TransformState& operator+=(const TransformState other) noexcept{
 			vec += other.vec;
 			rot += other.rot;
 
 			return *this;
 		}
 
-		constexpr Transform& operator-=(const Transform& other) noexcept{
+		constexpr TransformState& operator-=(const TransformState other) noexcept{
 			vec -= other.vec;
 			rot -= other.rot;
 
 			return *this;
 		}
 
-		constexpr Transform& operator*=(const float scl) noexcept{
+		constexpr TransformState& operator*=(const float scl) noexcept{
 			vec *= scl;
 			rot *= scl;
 
 			return *this;
 		}
 
-		[[nodiscard]] constexpr friend Transform operator*(Transform self, const float scl) noexcept{
+		[[nodiscard]] constexpr friend TransformState operator*(TransformState self, const float scl) noexcept{
 			return self *= scl;
 		}
 
-		[[nodiscard]] constexpr friend Transform operator+(Transform self, const Transform& other) noexcept{
+		[[nodiscard]] constexpr friend TransformState operator+(TransformState self, const TransformState other) noexcept{
 			return self += other;
 		}
 
-		[[nodiscard]] constexpr friend Transform operator-(Transform self, const Transform& other) noexcept{
+		[[nodiscard]] constexpr friend TransformState operator-(TransformState self, const TransformState other) noexcept{
 			return self -= other;
 		}
 
-		[[nodiscard]] constexpr friend Transform operator-(Transform self) noexcept{
+		[[nodiscard]] constexpr friend TransformState operator-(TransformState self) noexcept{
 			self.vec.reverse();
 			self.rot *= -1;
 			return self;
+		}
+
+		template <typename T>
+			requires (std::convertible_to<AngleType, T>)
+		constexpr explicit(false) operator TransformState<T>() noexcept{
+			return TransformState<T>{vec, static_cast<T>(rot)};
 		}
 
 		/**
@@ -88,16 +98,19 @@ export namespace Geom{
 		 * @param parentRef Parent Frame Reference Trans
 		 * @return Transformed Translation
 		 */
-		[[nodiscard]] constexpr friend Transform operator|(Transform self, const Transform& parentRef){
+		[[nodiscard]] constexpr friend TransformState operator|(TransformState self, const TransformState parentRef) noexcept{
 			return self |= parentRef;
 		}
 
-		[[nodiscard]] constexpr friend Geom::Vec2& operator|=(Geom::Vec2& vec, const Transform& transform){
-			return vec.rotate(transform.rot).add(transform.vec);
+		[[nodiscard]] constexpr friend Vec2& operator|=(Vec2& vec, const TransformState transform) noexcept{
+			return vec.rotate(static_cast<float>(transform.rot)).add(transform.vec);
 		}
 
-		[[nodiscard]] constexpr friend Geom::Vec2 operator|(Geom::Vec2 vec, const Transform& transform){
+		[[nodiscard]] constexpr friend Vec2 operator|(Vec2 vec, const TransformState transform) noexcept{
 			return vec |= transform;
 		}
 	};
+
+	using Transform = TransformState<float>;
+	using UniformTransform = TransformState<Math::Angle>;
 }

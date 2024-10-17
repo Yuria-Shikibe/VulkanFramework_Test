@@ -2,6 +2,8 @@ module;
 
 module Core.UI.Scene;
 
+import Core.Input;
+import Core.Global;
 import Core.UI.Group;
 import Core.UI.Element;
 import Graphic.Renderer.UI;
@@ -18,13 +20,18 @@ void Core::UI::Scene::joinTasks(){
 	asyncTaskOwners.clear();
 }
 
-Core::UI::Scene::Scene(const ext::owner<Group*> root, Graphic::RendererUI* renderer, Bundle* bundle) :
-	SceneBase{root, renderer, bundle}{
+Core::UI::Scene::Scene(const std::string_view name, const ext::owner<Group*> root, Graphic::RendererUI* renderer, Bundle* bundle) :
+	SceneBase{name, root, renderer, bundle}{
+
+	keyMapping = &Global::input->registerSubInput(name);
+
+	if(!root)return;
 	root->setScene(this);
 	root->interactivity = Interactivity::childrenOnly;
 }
 
 Core::UI::Scene::~Scene(){
+	if(keyMapping)Global::input->eraseSubInput(name);
 	delete root.handle;
 }
 
@@ -114,7 +121,8 @@ void Core::UI::Scene::onKeyAction(const int key, const int action, const int mod
 void Core::UI::Scene::onTextInput(int code, int mode){}
 
 void Core::UI::Scene::onScroll(const Geom::Vec2 scroll) const{
-	if(currentScrollFocus) currentScrollFocus->events().fire(Event::Scroll{scroll});
+	const auto mode = keyMapping->mapping.getMode();
+	if(currentScrollFocus) currentScrollFocus->events().fire(Event::Scroll{scroll, mode});
 }
 
 void Core::UI::Scene::onCursorPosUpdate(const Geom::Vec2 newPos){
@@ -137,10 +145,12 @@ void Core::UI::Scene::onCursorPosUpdate(const Geom::Vec2 newPos){
 	if(!currentCursorFocus) return;
 
 	Event::Drag dragEvent{};
+	const auto mode = keyMapping->mapping.getMode();
+
 	for(const auto& [i, state] : mouseKeyStates | std::views::enumerate){
 		if(!state.pressed) continue;
 
-		dragEvent = {state.src, newPos, {static_cast<int>(i), 0, 0}};
+		dragEvent = {state.src, newPos, Ctrl::KeyPack{static_cast<int>(i), Ctrl::Act::Ignore, mode}};
 		currentCursorFocus->events().fire(dragEvent);
 	}
 
@@ -174,18 +184,20 @@ void Core::UI::Scene::draw() const{
 	tooltipManager.draw();
 }
 
-Core::UI::Scene::Scene(Scene&& other) noexcept: SceneBase{std::move(other)},
-                                                tooltipManager{std::move(other.tooltipManager)}{
-	root->setScene(this);
+Core::UI::Scene::Scene(Scene&& other) noexcept:
+	SceneBase{std::move(other)},
+	tooltipManager{std::move(other.tooltipManager)}{
+
 	tooltipManager.scene = this;
+	root->setScene(this);
 }
 
 Core::UI::Scene& Core::UI::Scene::operator=(Scene&& other) noexcept{
 	if(this == &other) return *this;
 	SceneBase::operator =(std::move(other));
 	tooltipManager = std::move(other.tooltipManager);
-	tooltipManager.scene = this;
 
+	tooltipManager.scene = this;
 	root->setScene(this);
 	return *this;
 }

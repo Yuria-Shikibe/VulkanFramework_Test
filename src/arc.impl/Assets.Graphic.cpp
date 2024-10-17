@@ -73,11 +73,11 @@ void Assets::Sampler::load(const VkDevice device){
 
     textureNearestSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
         | Core::Vulkan::SamplerInfo::Default
-        | Core::Vulkan::SamplerInfo::Filter_PIXEL_Linear
+        | Core::Vulkan::SamplerInfo::Filter_Linear
         | Core::Vulkan::SamplerInfo::AddressMode_Clamp
         | Core::Vulkan::SamplerInfo::LOD_Max
         | Core::Vulkan::SamplerInfo::CompareOp<VK_COMPARE_OP_NEVER>
-        | Core::Vulkan::SamplerInfo::Anisotropy<4>);
+        | Core::Vulkan::SamplerInfo::Anisotropy<8>);
 
     textureLowpSampler = Core::Vulkan::Sampler(device, VkSamplerCreateInfo{}
 		| Core::Vulkan::SamplerInfo::Default

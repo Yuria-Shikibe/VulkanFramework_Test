@@ -117,9 +117,9 @@ namespace Graphic{
 		auto rst = batch.acquire(region.view, 1);
 		return Draw::DrawParam<T>{
 			.dataPtr = rst.dataPtr,
-			.index = Core::Vulkan::TextureIndex{rst.imageIndex},
+			.index = TextureIndex{rst.imageIndex},
+			.uv = &region,
 			.modifier = std::move(modifier),
-			.uv = &region
 		};
 	}
 

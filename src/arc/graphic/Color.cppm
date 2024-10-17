@@ -63,12 +63,21 @@ export namespace Graphic{
 		}
 
 	public:
-
+		//TODO is this really good??
 	    constexpr Color& appendLightColor(const Color& color) {
 	        r += static_cast<float>(Math::floor(LightColorRange * color.r, 10));
 	        g += static_cast<float>(Math::floor(LightColorRange * color.g, 10));
 	        b += static_cast<float>(Math::floor(LightColorRange * color.b, 10));
 	        a += static_cast<float>(Math::floor(LightColorRange * color.a, 10));
+
+	        return *this;
+	    }
+
+	    constexpr Color& toLightColor() {
+	        r = static_cast<float>(Math::floor(LightColorRange * r, 10));
+	        g = static_cast<float>(Math::floor(LightColorRange * g, 10));
+	        b = static_cast<float>(Math::floor(LightColorRange * b, 10));
+	        a = static_cast<float>(Math::floor(LightColorRange * a, 10));
 
 	        return *this;
 	    }

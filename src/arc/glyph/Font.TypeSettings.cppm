@@ -258,13 +258,13 @@ namespace Font{
 			}
 
 			[[nodiscard]] IndexedFontFace& getFace() const{
-				const auto t = fontHistory.top(GlobalFontManager->fontFaces_fastAccess.front());
+				const auto t = fontHistory.top(GlobalFontManager->getPrimaryFontFace());
 				if(t == nullptr) throw std::runtime_error("No Valid Font Face");
 				return *t;
 			}
 
 			[[nodiscard]] Glyph& getGlyph(const CharCode code) const{
-				return getFace().obtainGlyph({code, getLastSize()}, GlobalFontManager->atlas, GlobalFontManager->fontPage);
+				return getFace().obtainGlyph({code, getLastSize()}, GlobalFontManager->getAtlas(), GlobalFontManager->getFontPage());
 			}
 		};
 
@@ -372,7 +372,7 @@ namespace Font{
 			[[nodiscard]] explicit(false) TokenModifier(std::function<FuncType>&& modifier)
 				: modifier{std::move(modifier)}{}
 
-			template <ext::Invokable<FuncType> Func>
+			template <ext::invocable<FuncType> Func>
 			[[nodiscard]] explicit(false) TokenModifier(Func&& modifier)
 				: modifier{std::forward<Func>(modifier)}{}
 		};

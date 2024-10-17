@@ -4,7 +4,7 @@
 
 export module Core.UI.Button;
 
-import Core.UI.Element;
+export import Core.UI.Element;
 import Core.Ctrl.KeyPack;
 import std;
 

@@ -12,7 +12,7 @@ import Core.UI.Scene;
 import Graphic.Batch.AutoDrawParam;
 import Graphic.Draw.Func;
 
-import Core.Vulkan.Vertex;
+import Graphic.Vertex;
 
 
 void Core::UI::DefElementDrawer::draw(const Element& element) const {
@@ -23,11 +23,11 @@ void Core::UI::DefElementDrawer::draw(const Element& element) const {
 
 	if(element.getCursorState().pressed){
 		color.a = 0.3f * element.graphicProp().getOpacity();
-		Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, element.prop().getBound_absolute(), color);
+		Draw::Drawer<Vertex_UI>::rectOrtho(++param, element.prop().getBound_absolute(), color);
 	}
 
 	color.a = 1.f * element.graphicProp().getOpacity();
-	Draw::Drawer<Vulkan::Vertex_UI>::Line::rectOrtho(param, 2.f, element.prop().getBound_absolute(), color);
+	Draw::Drawer<Vertex_UI>::Line::rectOrtho(param, 2.f, element.prop().getBound_absolute(), color);
 
 }
 
@@ -168,7 +168,7 @@ std::vector<Core::UI::Element*> Core::UI::Element::dfsFindDeepestElement(Geom::V
 }
 
 void Core::UI::iterateAll_DFSImpl(Geom::Vec2 cursorPos, std::vector<Element*>& selected, Element* current){
-	if(current->isInteractable() && current->containsPos(cursorPos)){
+	if((current->isInteractable()) && current->containsPos_self(cursorPos)){
 		selected.push_back(current);
 	}
 

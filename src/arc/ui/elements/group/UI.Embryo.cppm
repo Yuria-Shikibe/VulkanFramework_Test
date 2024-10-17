@@ -116,7 +116,7 @@ namespace Core::UI{
 				cell.apply(absPos());
 				cell.element->layout();
 
-				lastX += width;;
+				lastX += width;
 
 				if(cell.endRow){
 					currentY++;
