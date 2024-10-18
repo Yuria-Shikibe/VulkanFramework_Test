@@ -51,6 +51,8 @@ import Core.Vulkan.Texture;
 import Game.Delay;
 
 export import Assets.Fx;
+export import Game.World.State;
+export import Game.World.RealEntity;
 
 export namespace Test{
 	static_assert(Core::UI::ElemInitFunc<decltype([](int, Core::UI::BedFace&){})>);
@@ -93,7 +95,11 @@ export namespace Test{
 		using namespace Core;
 		Global::input->binds.registerBind(Ctrl::InputBind{
 				Ctrl::Mouse::_1, Ctrl::Act::Press, []{
-					delayManager.launch(Game::ActionPriority::unignorable, 30, 5, [pos = getMouseToWorld()]{
+					delayManager.launch(Game::ActionPriority::unignorable, {
+						.tick = 45.f,
+						.repeat = 5,
+						.noSuspend = true
+					}, [pos = getMouseToWorld()]{
 						Assets::Fx::CircleOut.launch({
 							.zLayer = 0.2f,
 							.trans = {pos},
@@ -246,5 +252,56 @@ export namespace Test{
 			if(file.extension().empty()) return;
 			adaptor.compile(file);
 		});
+	}
+}
+
+export namespace Test::GamePart{
+	Game::WorldState world{};
+
+	void init(){
+		constexpr float size = 20000.f;
+		world.quadTree = Geom::quad_tree<Game::RealEntity>{{
+			{-size, -size}, {size, size}
+		}};
+	}
+
+	void postUpdate(){
+		world.realEntities.each_par([](Game::RealEntity& e){
+			e.postProcessCollisions();
+		});
+	}
+
+	void update(const float delta){
+		world.all.dumpAll();
+		world.realEntities.dumpAll();
+
+		if(delta == .0f)return;
+
+		world.all.update_par(delta);
+
+		world.updateQuadTree();
+
+		world.realEntities.each_par([](Game::RealEntity& entity){
+			world.quadTree.intersect_test_all(
+				entity,
+				[](Game::RealEntity& sbj, const Game::RealEntity& obj){
+					sbj.testIntersectionWith(obj);
+				},
+				[](const Game::RealEntity& sbj, const Game::RealEntity& obj){
+					if(&sbj == &obj) return false;
+					if(!sbj.getBound().overlap_Exclusive(obj.getBound())) return false;
+
+					return sbj.roughIntersectWith(obj);
+				});
+		});
+
+		world.realEntities.each_par([](Game::RealEntity& e){
+			//OPTM ? actively save the collided entities instead of iterate all
+			(void)e.preProcessCollisions();
+		});
+	}
+
+	void draw(){
+		world.draw(Core::Global::mainCamera->getViewport());
 	}
 }

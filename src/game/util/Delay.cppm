@@ -9,6 +9,7 @@ import Core.Unit;
 
 import ext.concepts;
 import std;
+import ext.algo;
 
 export namespace Game {
 	// using TickRatio = std::ratio<1, 60>;
@@ -20,6 +21,12 @@ export namespace Game {
 		minor,
 
 		last
+	};
+
+	struct ActionData{
+		Core::Tick tick{};
+		unsigned repeat{};
+		bool noSuspend{};
 	};
 
 	struct DelayAction {
@@ -42,6 +49,11 @@ export namespace Game {
 		template <std::invocable Fn>
 		[[nodiscard]] DelayAction(const Core::Tick tick, const unsigned repeat, Fn&& func)
 			: progress(tick.count()), repeatCount{repeat}, action{std::forward<Fn>(func)} {
+		}
+
+		template <std::invocable Fn>
+		[[nodiscard]] DelayAction(ActionData data, Fn&& func)
+			: progress(data.tick.count(), data.noSuspend ? data.tick.count() : 0), repeatCount{data.repeat}, action{std::forward<Fn>(func)} {
 		}
 
 		[[nodiscard]] constexpr bool hasRepeat() const noexcept{
@@ -77,9 +89,9 @@ export namespace Game {
 			mutable std::mutex mtx{};
 
 			template <std::invocable<> Func>
-			void launch(Core::Tick tick, unsigned count, Func&& action){
+			void launch(const ActionData actionData, Func&& action){
 				std::lock_guard lockGuard{mtx};
-				pending.emplace_back(tick, count, std::forward<Func>(action));
+				pending.emplace_back(actionData, std::forward<Func>(action));
 			}
 
 			void dump(){
@@ -91,7 +103,7 @@ export namespace Game {
 			}
 
 			void consume(float deltaTick){
-				std::erase_if(actives, [deltaTick](DelayAction& action){
+				ext::algo::erase_if_unstable(actives, [deltaTick](DelayAction& action){
 					return action.update(deltaTick);
 				});
 			}
@@ -118,10 +130,10 @@ export namespace Game {
 		}
 
 		template <std::invocable<> Func>
-		void launch(const ActionPriority priority, Core::Tick time, unsigned count, Func&& action) {
+		void launch(const ActionPriority priority, const ActionData actionData, Func&& action) {
 			if(priority > lowestPriority)return;
 
-			getGroupAt(priority).launch(time, count, std::forward<Func>(action));
+			getGroupAt(priority).launch(actionData, std::forward<Func>(action));
 		}
 
 		void clear() {
@@ -131,12 +143,20 @@ export namespace Game {
 			}
 		}
 
+		/**
+		 * @brief Only @link ActionPriority::unignorable @endlink action will be applied
+		 */
 		void applyAndClear(){
-			for(std::size_t i = 0; i <= std::to_underlying(lowestPriority); ++i){
-				ActionGroup& group = taskGroup[i];
-
+			{
+				ActionGroup& group = taskGroup[std::to_underlying(ActionPriority::unignorable)];
 				group.dump();
 				group.consume(std::numeric_limits<float>::infinity());
+			}
+
+			for(std::size_t i = std::to_underlying(ActionPriority::unignorable); i <= std::to_underlying(lowestPriority); ++i){
+				ActionGroup& group = taskGroup[i];
+				group.actives.clear();
+				group.pending.clear();
 			}
 		}
 

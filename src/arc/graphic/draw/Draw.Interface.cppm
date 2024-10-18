@@ -90,14 +90,17 @@ export namespace Graphic::Draw{
 		}
 
 		template <typename... Args, VertexModifier<T&> ModifyCallable = std::identity>
-		constexpr void operator()(const VertexProjection<T, std::decay_t<Args>...>& Generator, ModifyCallable modifier,
-		                const Args&... args){
+		constexpr void operator()(
+			const VertexProjection<T, std::decay_t<Args>...>& Generator,
+			ModifyCallable modifier,
+			const Args&... args
+		){
 #if DEBUG_CHECK
 			assert(count < GroupCount);
 			count++;
 #endif
 
-			Generator(t++, modifier, args...);
+			std::invoke(Generator, t++, modifier, args...);
 		}
 	};
 

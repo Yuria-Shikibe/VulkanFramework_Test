@@ -35,7 +35,7 @@ namespace ext{
 	concept Transparent = requires{
 		typename T::is_transparent;
 	};
-
+	//
 	// using Key = std::string;
 	// using Val = std::string;
 	// using Hash = std::hash<Key>;
@@ -52,15 +52,18 @@ namespace ext{
 	public:
 		using key_type = Key;
 		using mapped_type = Val;
-		using value_type = std::pair<key_type, mapped_type>;
+		using value_type_internal = std::pair<key_type, mapped_type>;
 		using value_type_external = std::pair<const key_type, mapped_type>;
+
+		using value_type = value_type_external;
 		using size_type = std::size_t;
 		using hasher = Hash;
 		using key_equal = KeyEqual;
 		using allocator_type = Allocator;
-		using reference = value_type&;
-		using const_reference = const value_type&;
-		using buckets = std::vector<value_type, allocator_type>;
+		using reference = value_type_external&;
+		using const_reference = const value_type_external&;
+
+		using buckets = std::vector<value_type_internal, allocator_type>;
 
 		static_assert(std::is_default_constructible_v<key_equal>);
 		static_assert(std::is_default_constructible_v<hasher>);
@@ -77,14 +80,18 @@ namespace ext{
 		template <typename K>
 		static constexpr bool isEqualerValid = std::same_as<K, key_type> || Transparent<key_equal>;
 
-		template <bool addConst>
+		// static constexpr bool addConst = true;
+		template <bool addConst = false>
 		struct hm_iterator{
 			using container_type = std::conditional_t<addConst, const open_hash_map, open_hash_map>;
 			using difference_type = std::ptrdiff_t;
-			using value_type = std::conditional_t<addConst, const open_hash_map::value_type, open_hash_map::value_type>;
+			using value_type = std::conditional_t<addConst, const open_hash_map::value_type_external, open_hash_map::value_type_external>;
 			using mapped_type = std::conditional_t<addConst, const open_hash_map::mapped_type, open_hash_map::mapped_type>;
 			using pointer = value_type*;
-			using reference = std::add_lvalue_reference_t<value_type>;
+
+			using reference = value_type&;
+			using const_reference = const value_type&;
+
 			using iterator_category = std::forward_iterator_tag;
 
 			[[nodiscard]] hm_iterator() = default;
@@ -97,13 +104,23 @@ namespace ext{
 				return *this;
 			}
 
-			constexpr std::pair<const key_type&, mapped_type&> operator*() const noexcept{
-				auto& [k, v] = hm_->buckets_[idx_];
-				return {k, v};
+			constexpr hm_iterator operator++(int){
+				auto itr = *this;
+				++(*this);
+				return itr;
 			}
 
-			constexpr auto operator->() const noexcept{
-				return std::ranges::data(hm_->buckets_) + idx_;
+			/*constexpr*/ auto& operator*() const noexcept{
+				return *this->operator->();
+			}
+
+			/*constexpr*/ auto* operator->() const noexcept{
+				if constexpr (addConst){
+					return reinterpret_cast<const std::pair<const key_type, mapped_type>*>(std::ranges::data(hm_->buckets_) + idx_);
+				}else{
+					return reinterpret_cast<std::pair<const key_type, mapped_type>*>(std::ranges::data(hm_->buckets_) + idx_);
+				}
+
 			}
 
 			constexpr explicit hm_iterator(container_type* hm) noexcept : hm_(hm){ advance_past_empty(); }
@@ -203,12 +220,12 @@ namespace ext{
 			return this->emplace_impl(std::forward<Args>(args)...);
 		}
 
-		constexpr void erase(const iterator it){ erase_impl(it); }
+		constexpr void erase(const iterator it){ this->erase_impl(it); }
 
-		constexpr size_type erase(const key_type& key){ return erase_impl(key); }
+		constexpr size_type erase(const key_type& key){ return this->erase_impl(key); }
 
 		template <typename K>
-		constexpr size_type erase(const K& x){ return erase_impl(x); }
+		constexpr size_type erase(const K& x){ return this->erase_impl(x); }
 
 		friend constexpr void swap(open_hash_map& lhs, open_hash_map& rhs) noexcept{
 			std::swap(lhs.buckets_, rhs.buckets_);
@@ -245,9 +262,10 @@ namespace ext{
 		}
 
 		template <typename... Args>
+			requires (std::constructible_from<mapped_type, Args...> && std::is_move_assignable_v<mapped_type>)
 		constexpr std::pair<iterator, bool> insert_or_assign(key_type&& key, Args&&... args){
 			if(iterator itr = this->find_impl(key); itr != end()){
-				itr->second = mapped_type{std::forward<Args&&>(args)...};
+				itr->second = mapped_type{std::forward<Args>(args)...};
 				return std::pair{itr, false};
 			} else{
 				return this->emplace_impl(std::move(key), std::forward<Args>(args)...);
@@ -255,9 +273,10 @@ namespace ext{
 		}
 
 		template <typename... Args>
+			requires (std::constructible_from<mapped_type, Args...> && std::is_move_assignable_v<mapped_type>)
 		constexpr std::pair<iterator, bool> insert_or_assign(const key_type& key, Args&&... args){
 			if(iterator itr = this->find_impl(key); itr != end()){
-				itr->second = mapped_type{std::forward<Args&&>(args)...};
+				itr->second = mapped_type{std::forward<Args>(args)...};
 				return std::pair{itr, false};
 			} else{
 				return this->emplace_impl(key, std::forward<Args>(args)...);
@@ -265,11 +284,13 @@ namespace ext{
 		}
 
 		template <typename... Args>
+			requires (std::constructible_from<mapped_type, Args...> && std::is_move_assignable_v<mapped_type>)
 		constexpr std::pair<iterator, bool> try_emplace(key_type&& key, Args&&... args){
 			return this->emplace_impl(std::move(key), std::forward<Args>(args)...);
 		}
 
 		template <typename... Args>
+			requires (std::constructible_from<mapped_type, Args...> && std::is_move_assignable_v<mapped_type>)
 		constexpr std::pair<iterator, bool> try_emplace(const key_type& key, Args&&... args){
 			return this->emplace_impl(key, std::forward<Args>(args)...);
 		}
@@ -316,6 +337,7 @@ namespace ext{
 
 	private:
 		template <std::convertible_to<key_type> K, typename... Args>
+			requires (std::constructible_from<mapped_type, Args...> && std::is_move_assignable_v<mapped_type>)
 		constexpr std::pair<iterator, bool> emplace_impl(const K& key, Args&&... args){
 			assert(!KeyEqualer(empty_key_, key) && "empty key shouldn't be used");
 
@@ -343,7 +365,7 @@ namespace ext{
 				const std::size_t ideal = this->key_to_idx(buckets_[idx].first);
 				if(diff(bucket, ideal) < diff(idx, ideal)){
 					// swap, bucket is closer to ideal than idx
-					buckets_[bucket] = buckets_[idx];
+					buckets_[bucket] = std::move(buckets_[idx]);
 					bucket = idx;
 				}
 			}
@@ -431,6 +453,7 @@ namespace ext{
 		}
 
 	private:
+	public:
 		/*static constexpr */
 		key_type empty_key_{};
 		buckets buckets_{};

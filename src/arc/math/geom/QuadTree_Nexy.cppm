@@ -17,6 +17,11 @@ namespace Geom{
 	//TODO flattened quad tree with pre allocated sub trees
 	constexpr std::size_t MaximumItemCount = 4;
 
+	constexpr std::size_t top_lft_index = 0;
+	constexpr std::size_t top_rit_index = 1;
+	constexpr std::size_t bot_lft_index = 2;
+	constexpr std::size_t bot_rit_index = 3;
+
 	template <std::size_t layers>
 	struct quad_tree_mdspan_trait{
 		using index_type = unsigned;
@@ -42,7 +47,6 @@ namespace Geom{
 
 
 	template <typename ItemTy, ext::number T = float>
-		requires ext::derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
 	struct quad_tree_evaluateable_traits{
 		using rect_type = Rect_Orthogonal<T>;
 
@@ -66,7 +70,9 @@ namespace Geom{
 			return cont.getBound();
 		}
 
-		static bool isIntersectedBetween(const ItemTy& subject, const ItemTy& object) noexcept{
+		static bool isIntersectedBetween(const ItemTy& subject, const ItemTy& object) noexcept requires requires{
+			requires ext::derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>;
+		}{
 			//TODO equalTy support?
 			if(&subject == &object) return false;
 
@@ -97,8 +103,7 @@ namespace Geom{
 	};
 
 	template <typename ItemTy, ext::number T = float>
-		requires std::derived_from<ItemTy, QuadTreeAdaptable<ItemTy, T>>
-	struct basic_quad_tree_node{
+	struct quad_tree_node{
 		using rect_type = Rect_Orthogonal<T>;
 		using trait = quad_tree_evaluateable_traits<ItemTy, T>;
 
@@ -107,9 +112,9 @@ namespace Geom{
 		unsigned branch_size = 0;
 		bool leaf = true;
 
-		[[nodiscard]] basic_quad_tree_node() = default;
+		[[nodiscard]] quad_tree_node() = default;
 
-		[[nodiscard]] explicit basic_quad_tree_node(const rect_type& boundary)
+		[[nodiscard]] explicit quad_tree_node(const rect_type& boundary)
 			: boundary(boundary){
 		}
 
@@ -141,69 +146,9 @@ namespace Geom{
 			return boundary.containsPos_edgeInclusive(object);
 		}
 
-	protected:
-		[[nodiscard]] bool is_children_cached() const noexcept = delete;
-
-		void split() = delete;
-
-		void unsplit() = delete;
-	};
-
-	// constexpr std::size_t quad_tree_layers = 10;
-
-	// template <typename ItemTy, ext::number T = float>
-	// 	requires std::derived_from<ItemTy, QuadTreeAdaptable<ItemTy, T>>
-	// struct static_quad_tree_node{
-	// 	using extent_traits = quad_tree_mdspan_trait<quad_tree_layers>;
-	// 	using rect_type = Rect_Orthogonal<T>;
-	// 	using node_type = basic_quad_tree_node<ItemTy, T>;
-	//
-	// private:
-	// 	rect_type boundary{};
-	//
-	// 	std::array<node_type, extent_traits::required_span_size> nodes{};
-	// 	std::mdspan<node_type,  extent_traits::extent_type> span{nodes.data()};
-	// public:
-	// 	[[nodiscard]] static_quad_tree_node() = default;
-	//
-	// 	[[nodiscard]] explicit static_quad_tree_node(const rect_type boundary)
-	// 		: boundary(boundary){
-	// 		auto subRect = this->boundary.split();
-	//
-	// 	}
-	// };
-	//
-	//
-	// struct EmptyV : QuadTreeAdaptable<EmptyV, float>{
-	// 	[[nodiscard]] Rect_Orthogonal<float> getBound() const noexcept{
-	// 		return {};
-	// 	}
-	//
-	// 	[[nodiscard]] bool roughIntersectWith(const EmptyV& other) const = delete;
-	//
-	// 	[[nodiscard]] bool exactIntersectWith(const EmptyV& other) const = delete;
-	//
-	// 	[[nodiscard]] bool containsPoint(typename Vector2D<float>::PassType point) const = delete;
-	// };
-	//
-	//
-	// struct Ty{
-	// 	static_quad_tree_node<EmptyV> v{};
-	// };
-
-	constexpr std::size_t top_lft_index = 0;
-	constexpr std::size_t top_rit_index = 1;
-	constexpr std::size_t bot_lft_index = 2;
-	constexpr std::size_t bot_rit_index = 3;
-
-	template <typename ItemTy, ext::number T = float>
-		requires std::derived_from<ItemTy, QuadTreeAdaptable<ItemTy, T>>
-	struct quad_tree_node : basic_quad_tree_node<ItemTy, T>{
 	public:
 		using rect_type = Rect_Orthogonal<T>;
 		using trait = quad_tree_evaluateable_traits<ItemTy, T>;
-
-		using basic_quad_tree_node<ItemTy, T>::basic_quad_tree_node;
 
 	private:
 		bool withinBound(const ItemTy& object, const T dst) const noexcept{
@@ -496,43 +441,19 @@ namespace Geom{
 
 		template <
 			std::invocable<ItemTy&, ItemTy&> Func,
-			std::predicate<const ItemTy&, const ItemTy&> Filter = always_true>
-		void intersect_test_all(ItemTy& object, Func func, Filter filter = {}) const{
+			std::predicate<ItemTy&, ItemTy&> Filter = decltype(trait::isIntersectedBetween)>
+		void intersect_test_all(ItemTy& object, Func func, Filter filter = trait::isIntersectedBetween) const{
 			if(!this->overlaps(object)) return;
 
-			for(const auto element : this->items){
-				if(trait::isIntersectedBetween(object, *element)){
-					if(std::invoke(filter, object, *element)){
-						std::invoke(func, *element, object);
-					}
+			for(ItemTy* element : this->items){
+				if(std::invoke(filter, object, *element)){
+					std::invoke(func, object, *element);
 				}
 			}
 
 			// If this node has children, check if the rectangle overlaps with any rectangle in the children
 			if(this->has_valid_children()){
-				for (const quad_tree_node & node : children->nodes){
-					node.intersect_test_all(object, func, filter);
-				}
-			}
-		}
-
-		template <
-			std::invocable<const ItemTy&, const ItemTy&> Func,
-			std::predicate<const ItemTy&, const ItemTy&> Filter = always_true>
-		void intersect_test_all(const ItemTy& object, Func func, Filter filter = {}) const{
-			if(!this->overlaps(object)) return;
-
-			for(const auto element : this->items){
-				if(trait::isIntersectedBetween(object, *element)){
-					if(std::invoke(filter, object, *element)){
-						std::invoke(func, *element, object);
-					}
-				}
-			}
-
-			// If this node has children, check if the rectangle overlaps with any rectangle in the children
-			if(this->has_valid_children()){
-				for (const quad_tree_node & node : children->nodes){
+				for (const quad_tree_node& node : children->nodes){
 					node.intersect_test_all(object, func, filter);
 				}
 			}
@@ -662,12 +583,10 @@ namespace Geom{
 
 	export
 	template <typename ItemTy, ext::number T = float>
-		requires ext::derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
 	using quad_tree = quad_tree_node<ItemTy, T>;
 
 	export
 	template <typename ItemTy, ext::number T = typename ItemTy::coordinate_type>
-		requires ext::derived<ItemTy, QuadTreeAdaptable<ItemTy, T>>
 	struct quad_tree_with_buffer : quad_tree_node<ItemTy, T>{
 	private:
 		using buffer = std::vector<ItemTy*>;

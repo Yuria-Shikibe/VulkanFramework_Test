@@ -103,38 +103,6 @@ namespace ext::algo{
 		}
 
 		return firstFound;
-
-		// if(firstFound != sentinel){
-			// --sl;
-			// while(std::invoke(pred, std::invoke(porj, *sl))) --sl;
-			//
-			// while(firstFound != sentinel){
-			// 	if(std::invoke(pred, std::invoke(porj, *firstFound))){
-			// 		algo::swapItr<replace>(sentinel, firstFound);
-			// 		if(!(--sentinel != firstFound)) break;
-			// 	} else{
-			// 		++firstFound;
-			// 	}
-			// }
-
-			// if constexpr(itrSentinelCompariable<Itr, Sentinel>){
-			// 	while(firstFound < sl){
-			// 		algo::swapItr<replace>(sl, firstFound);
-			//
-			// 		firstFound = std::ranges::find_if(firstFound, sl, pred, porj);
-			// 		while(sl != firstFound && std::invoke(pred, std::invoke(porj, *sl))) --sl;
-			// 	}
-			// } else{
-			// 	while(firstFound != sentinel){
-			// 		if(std::invoke(pred, std::invoke(porj, *firstFound))){
-			// 			algo::swapItr<replace>(sentinel, firstFound);
-			// 			if(!(--sentinel != firstFound)) break;
-			// 		} else{
-			// 			++firstFound;
-			// 		}
-			// 	}
-			// }
-		// }
 	}
 
 	template <bool replace, std::permutable Itr, std::permutable Sentinel, typename Ty, typename Proj = std::identity>

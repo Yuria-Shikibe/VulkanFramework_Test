@@ -10,36 +10,6 @@ import Geom.Transform;
 import Math;
 import std;
 
-namespace Geom{
-	template <typename T>
-struct minmax_result{
-		T min;
-		T max;
-	};
-
-	template <typename T>
-		requires (std::is_arithmetic_v<T>)
-	constexpr minmax_result<T> minmax(T a, T b) noexcept{
-		if(b < a){
-			return {b, a};
-		}
-
-		return {a, b};
-	}
-
-	template <typename T, typename... Args>
-		requires (std::is_arithmetic_v<T> && (std::is_arithmetic_v<Args> && ...))
-	constexpr minmax_result<T> minmax(T first, T second, Args... args) noexcept{
-		const auto [min1, max1] = Geom::minmax(first, second);
-
-		if constexpr(sizeof ...(Args) == 1){
-			return {std::min(min1, args...), std::max(max1, args...)};
-		} else{
-			const auto [min2, max2] = Geom::minmax(args...);
-			return {std::min(min1, min2), std::max(max1, max2)};
-		}
-	}
-}
 
 export namespace Geom {
 	/**
@@ -124,8 +94,8 @@ export namespace Geom {
 		}
 
 		constexpr void updateBound() noexcept{
-			const auto [xMin, xMax] = minmax(v0.x, v1.x, v2.x, v3.x);
-			const auto [yMin, yMax] = minmax(v0.y, v1.y, v2.y, v3.y);
+			const auto [xMin, xMax] = Math::minmax(v0.x, v1.x, v2.x, v3.x);
+			const auto [yMin, yMax] = Math::minmax(v0.y, v1.y, v2.y, v3.y);
 
 			CHECKED_ASSUME(yMin <= yMax);
 			CHECKED_ASSUME(xMin <= xMax);
@@ -199,8 +169,8 @@ export namespace Geom {
 
 	protected:
 		[[nodiscard]] constexpr bool axisOverlap(const QuadBox& other, const Vec2 axis) const noexcept{
-			auto [min1, max1] = minmax(v0.dot(axis), v1.dot(axis), v2.dot(axis), v3.dot(axis));
-			auto [min2, max2] = minmax(other.v0.dot(axis), other.v1.dot(axis), other.v2.dot(axis), other.v3.dot(axis));
+			auto [min1, max1] = Math::minmax(v0.dot(axis), v1.dot(axis), v2.dot(axis), v3.dot(axis));
+			auto [min2, max2] = Math::minmax(other.v0.dot(axis), other.v1.dot(axis), other.v2.dot(axis), other.v3.dot(axis));
 
 			return max1 >= min2 && max2 >= min1;
 		}

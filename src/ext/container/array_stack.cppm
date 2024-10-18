@@ -85,7 +85,7 @@ export namespace ext{
 #endif
 		}
 
-		void checkOverFlow() const noexcept(!DEBUG_CHECK){
+		constexpr void checkOverFlow() const noexcept(!DEBUG_CHECK){
 #if DEBUG_CHECK
 			if(sz >= N){
 				throw std::overflow_error("array stack is overflow");

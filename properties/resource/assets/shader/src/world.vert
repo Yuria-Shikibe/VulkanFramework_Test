@@ -19,6 +19,7 @@ layout(location = 4) out vec4 lightColor;
 
 const float Overflow = .001f;
 const float LightColorRange = 2550.f;
+const float zScale = 512.f;
 
 out gl_PerVertex {
     vec4 gl_Position;
@@ -30,7 +31,7 @@ layout(set = 0, binding = 0) uniform UBO {
 } ubo;
 
 void main() {
-    gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z / 500, 1.0);
+    gl_Position = vec4((ubo.view * vec3(inPosition.xy, 1.0)).xy, inPosition.z / zScale, 1.0);
     baseColor = mod(inColor, 10.f);
     lightColor = inColor / LightColorRange;
 

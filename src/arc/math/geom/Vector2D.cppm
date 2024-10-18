@@ -356,7 +356,7 @@ export namespace Geom{
 		}
 
 		constexpr Vector2D& rotate(const float cos, const float sin) noexcept{
-			if constexpr(std::is_floating_point_v<T>) {
+			if constexpr(std::floating_point<T>) {
 				return this->set(cos * x - sin * y, sin * x + cos * y);
 			}else {
 				return this->set(

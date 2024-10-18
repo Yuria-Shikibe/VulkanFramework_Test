@@ -73,7 +73,7 @@ export namespace Graphic{
 			screenSize.set(w, h);
 		}
 
-		[[nodiscard]] constexpr const Geom::OrthoRectFloat& getViewport() const noexcept {
+		[[nodiscard]] constexpr Geom::OrthoRectFloat getViewport() const noexcept {
 			return viewport;
 		}
 

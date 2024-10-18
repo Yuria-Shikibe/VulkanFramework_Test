@@ -181,6 +181,35 @@ export namespace Math {
 		return result;
 	}
 
+	template <typename T>
+	struct minmax_result{
+		T min;
+		T max;
+	};
+
+	template <typename T>
+		requires (std::is_arithmetic_v<T>)
+	constexpr minmax_result<T> minmax(T a, T b) noexcept{
+		if(b < a){
+			return {b, a};
+		}
+
+		return {a, b};
+	}
+
+	template <typename T, typename... Args>
+		requires (std::is_arithmetic_v<T> && (std::is_arithmetic_v<Args> && ...))
+	constexpr minmax_result<T> minmax(T first, T second, Args... args) noexcept{
+		const auto [min1, max1] = Math::minmax(first, second);
+
+		if constexpr(sizeof ...(Args) == 1){
+			return {std::min(min1, args...), std::max(max1, args...)};
+		} else{
+			const auto [min2, max2] = Math::minmax(args...);
+			return {std::min(min1, min2), std::max(max1, max2)};
+		}
+	}
+
 	constexpr int digits(const int n) noexcept {
 		return n < 100000
 			       ? n < 100
@@ -341,6 +370,7 @@ export namespace Math {
 
 	template <typename  T>
 		requires requires(T a, T b){
+			requires !std::is_arithmetic_v<T>;
 			{a < b} -> std::convertible_to<bool>;
 		}
 	constexpr std::pair<const T, const T> minmax(const T left, const T right) noexcept(noexcept(right < left)){
@@ -842,4 +872,16 @@ export namespace Math {
 	};
 
 	using Range = Section<float>;
+
 }
+
+template <std::size_t N, typename T>
+struct std::tuple_element<N, Math::minmax_result<T>> {
+	using type = T;
+};
+
+template < typename T>
+struct std::tuple_size<Math::minmax_result<T>> : std::integral_constant<std::size_t, 2>{};
+
+
+

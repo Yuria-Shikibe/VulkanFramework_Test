@@ -101,7 +101,7 @@ namespace Game{
 
 		Hitbox() = default;
 
-		[[nodiscard]] Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform)
+		[[nodiscard]] Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform = {})
 			: components(comps), trans(transform){
 			updateHitbox(transform);
 		}
@@ -220,12 +220,13 @@ namespace Game{
 
 			const float dst2 = move.length2();
 
-			const int seg = Math::ceil(std::sqrtf(dst2 / size2) * ContinuousTestScl);
+			const int seg = Math::ceil(std::sqrtf(dst2 / size2) * ContinuousTestScl + std::numeric_limits<float>::epsilon());
 
 			move /= static_cast<float>(seg);
 			size_CCD = seg + 1;
 			sizeClamped_CCD = size_CCD;
 			unitDisplacement_CCD = -move;
+			assert(!unitDisplacement_CCD.isNaN());
 		}
 
 		[[nodiscard]] bool isEnableCCD() const noexcept{
@@ -309,7 +310,14 @@ namespace Game{
 			const bool acquiresRecord = true,
 			const bool soundful = false
 		) const noexcept{
-			constexpr static CollisionData Capture{};
+			constexpr static CollisionData Capture{[]{
+				CollisionData data{};
+
+				data.indices.push(CollisionIndex{});
+
+				return data;
+			}()};
+
 			// const auto subjectCCD_size = sizeCCD_clamped();
 			// const auto objectCCD_size = other.sizeCCD_clamped();
 
@@ -391,7 +399,6 @@ namespace Game{
 						for(auto&& [objectBoxIndex, object] : rangeObject | std::views::enumerate){
 							if(index_subject > this->getClampedSizeCCD() || index_object > other.getClampedSizeCCD()) return nullptr;
 
-							//TODO test whether overlapExact helps improve the performance
 							if(!subject.overlapRough(object) || !subject.overlapExact(object)) continue;
 
 							collisionData = &collided.emplace_back(index_subject);

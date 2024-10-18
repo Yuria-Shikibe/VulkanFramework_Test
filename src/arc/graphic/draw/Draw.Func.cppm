@@ -176,6 +176,27 @@ export namespace Graphic::Draw{
 				}
 			}
 
+
+			template <unsigned count, AutoAcquirableParam M, typename T>
+				requires requires(const T& t){
+					requires count > 0;
+					{ t[0u] };
+				}
+			static void circularPoly_fixed(
+				M& auto_param,
+				const float stroke,
+				const T& poly, const Color& color, const bool cap = true){
+
+				static_assert(std::convertible_to<decltype(poly[0]), Geom::Vec2>, "[x] should be converitible to vec2 for line drawing");
+
+				Geom::Vec2 last{poly[count - 1]};
+				for(unsigned i = 0; i < count; ++i){
+					const auto cur = poly[i];
+					Line::line(++auto_param, stroke, last, cur, color, color, cap);
+					last = cur;
+				}
+			}
+
 			template <AutoAcquirableParam M>
 			static void rectOrtho(
 				M& auto_param,

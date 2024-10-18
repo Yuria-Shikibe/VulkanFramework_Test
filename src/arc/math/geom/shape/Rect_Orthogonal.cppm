@@ -38,7 +38,7 @@ namespace Geom{
 	public:
 		constexpr Rect_Orthogonal(FromUncheckedTag, const T srcX, const T srcY, const T width, const T height) noexcept
 			: src(srcX, srcY), size_{width, height}{
-			assert(width > 0 && height > 0);
+			assert(width >= 0 && height >= 0);
 		}
 
 		constexpr Rect_Orthogonal(const T srcX, const T srcY, const T width, const T height) noexcept
