@@ -26,6 +26,7 @@ export import Core.UI.Styles;
 
 import Core.Input;
 import Core.Window;
+import Graphic.Camera2D;
 
 export import Core.Global.UI;
 export import Core.Global;
@@ -88,7 +89,7 @@ export namespace Test{
 	Game::DelayActionManager delayManager{};
 
 	void update(float delta){
-		delayManager.update(delta);
+		delayManager.update(Core::Tick{delta});
 	}
 
 	void initFx(){
@@ -96,7 +97,7 @@ export namespace Test{
 		Global::input->binds.registerBind(Ctrl::InputBind{
 				Ctrl::Mouse::_1, Ctrl::Act::Press, []{
 					delayManager.launch(Game::ActionPriority::unignorable, {
-						.tick = 45.f,
+						.delay = 45.f,
 						.repeat = 5,
 						.noSuspend = true
 					}, [pos = getMouseToWorld()]{
@@ -263,11 +264,50 @@ export namespace Test::GamePart{
 		world.quadTree = Geom::quad_tree<Game::RealEntity>{{
 			{-size, -size}, {size, size}
 		}};
+		world.all.dumpAll();
+		world.realEntities.dumpAll();
+		world.updateQuadTree();
+
+		Core::Global::input->binds.registerBind(Core::Ctrl::InputBind{
+				Core::Ctrl::Key::F, Core::Ctrl::Act::Press, []{
+					world.add([](Game::RealEntity& entity){
+						const auto cameraPos = Core::Global::mainCamera->getPosition();
+						const auto cursorPos = Test::getMouseToWorld();
+						const auto ang = (-cameraPos + cursorPos).angle();
+
+						entity.motion.trans = {cameraPos, ang};
+						entity.motion.vel = {Geom::dirNor(ang) * 60};
+
+						entity.hitbox = Game::Hitbox{
+								Game::HitBoxComponent{
+									.box = Geom::RectBox{
+										{ 200,  40, },
+										{-100, -20, }}
+								}, entity.motion.trans
+							};
+					});
+				}
+			});
+
 	}
 
-	void postUpdate(){
-		world.realEntities.each_par([](Game::RealEntity& e){
-			e.postProcessCollisions();
+	void postUpdate(float delta){
+		world.realEntities.each([](Game::RealEntity& e){
+			// e.collisionContext.filter();
+			//OPTM ? actively save the collided entities instead of iterate all
+			(void)e.postProcessCollisions_0();
+		});
+		//
+		world.realEntities.each([](Game::RealEntity& e){
+			e.postProcessCollisions_1();
+		});
+
+		world.realEntities.each([](Game::RealEntity& e){
+			e.postProcessCollisions_2();
+		});
+
+		world.realEntities.each([delta](Game::RealEntity& e){
+			e.postProcessCollisions_3(delta);
 		});
 	}
 
@@ -293,11 +333,6 @@ export namespace Test::GamePart{
 
 					return sbj.roughIntersectWith(obj);
 				});
-		});
-
-		world.realEntities.each_par([](Game::RealEntity& e){
-			//OPTM ? actively save the collided entities instead of iterate all
-			(void)e.preProcessCollisions();
 		});
 	}
 

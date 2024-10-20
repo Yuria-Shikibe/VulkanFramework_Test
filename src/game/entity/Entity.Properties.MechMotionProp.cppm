@@ -21,8 +21,8 @@ export namespace Game{
 		Geom::UniformTransform accel;
 
 		constexpr void apply(const UpdateTick tick) noexcept{
-			trans += vel * tick;
 			vel += accel * tick;
+			trans += vel * tick;
 		}
 
 		constexpr void applyAndReset(const UpdateTick tick) noexcept{
@@ -50,8 +50,8 @@ export namespace Game{
 		float rotationalInertiaScale = 1 / 12.0f;
 
 		/** @brief [0, 1]*/
-		float frictionCoefficient = 0.25f;
-		float restitution = 0.0f;
+		float frictionCoefficient = 0.35f;
+		float restitution = 0.15f;
 
 		/** @brief Used For Force Correction*/
 		float collideForceScale = 1.0f;

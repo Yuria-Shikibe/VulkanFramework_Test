@@ -8,9 +8,8 @@ export import Core.Unit;
 import std;
 
 export namespace Core{
-	template <typename T>
-		requires (std::is_floating_point_v<T>)
-    // using T = float;
+	// using T = float;
+	template <std::floating_point T = float>
 	class ApplicationTimer{
 		using Tick = DirectAccessTimeUnit<T, TickRatio>;
 		using Sec = DirectAccessTimeUnit<T>;
@@ -85,8 +84,12 @@ export namespace Core{
 		[[nodiscard]] constexpr Sec getGlobalTime() const noexcept{return {globalTime};}
 		[[nodiscard]] constexpr Sec getUpdateTime() const noexcept{return {updateTime};}
 
-		[[nodiscard]] constexpr Tick globalDeltaTick() const noexcept{return getGlobalDelta();}
-		[[nodiscard]] constexpr Tick updateDeltaTick() const noexcept{return getUpdateDelta();}
+		[[nodiscard]] constexpr Tick globalDeltaTick() const noexcept{
+	        return getGlobalDelta();
+        }
+		[[nodiscard]] constexpr Tick updateDeltaTick() const noexcept{
+	        return std::clamp<T>(Tick{ getUpdateDelta() }.count(), 0, 6);
+        }
 
 	};
 	

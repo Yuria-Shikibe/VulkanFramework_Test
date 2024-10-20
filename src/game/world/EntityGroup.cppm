@@ -71,17 +71,17 @@ namespace Game{
 			pendings.push(std::move(ptr));
 		}
 
+		void dumpAll(){
+			clearExpired();
+			dumpMarkedDeletable();
+			dumpPendings();
+		}
+
 		/**
 		 * @brief thread safe
 		 */
 		void pend(const EntityPtr& ptr){
 			pendings.push(ptr);
-		}
-
-		void dumpAll(){
-			dumpMarkedDeletable();
-			dumpPendings();
-			clearExpired();
 		}
 
 		void notifyDelete(EntityID id){

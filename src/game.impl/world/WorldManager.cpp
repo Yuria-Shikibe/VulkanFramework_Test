@@ -9,7 +9,7 @@ void Game::WorldState::draw(const Geom::OrthoRectFloat viewport) const{
 void Game::WorldState::updateQuadTree(){
 	quadTree.reserved_clear();
 	for(std::shared_ptr<RealEntity>& value : realEntities.entities | std::views::values){
-		value->hitbox.clearCollided();
+		value->clearCollisionData();
 		quadTree.insert(*value);
 	}
 }

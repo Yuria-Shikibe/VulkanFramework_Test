@@ -96,6 +96,17 @@ export namespace Graphic::Draw{
 			);
 		}
 
+
+		template <VertexModifier<Vertex&> M>
+		static void rectOrtho(
+			const DrawParam<M>& param,
+			const Geom::Vec2 pos,
+			const float size,
+			const Color& color
+		){
+			Drawer::rectOrtho(param, Geom::OrthoRectFloat{pos, size}, color);
+		}
+
 		Spec Line{
 			//TODO ortho lines
 			template <VertexModifier<Vertex&> M>
@@ -228,19 +239,20 @@ export namespace Graphic::Draw{
 				vec2_1.scl(radius - dst);
 				vec2_2.scl(radius + dst);
 
-				[&]<std::size_t... I>(std::index_sequence<I...>){
+				for(int i = 0; i < 4; ++i){
 					vec2_0.rotateRT();
 
 					vec2_3.set(vec2_0).scl(radius - dst);
 					vec2_4.set(vec2_0).scl(radius + dst);
 
 					Drawer::fill(++auto_param, vec2_1 + trans.vec, vec2_2 + trans.vec, vec2_4 + trans.vec, vec2_3 + trans.vec,
-					             color, color, color, color
+								 color, color, color, color
 					);
 
 					vec2_1.set(vec2_3);
 					vec2_2.set(vec2_4);
-				}(std::make_index_sequence<4>{});
+				}
+
 			}
 
 			template <AutoAcquirableParam M>

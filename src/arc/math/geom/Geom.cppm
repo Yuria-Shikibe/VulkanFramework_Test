@@ -16,6 +16,8 @@ import Geom.Vector2D;
 import Geom.Shape.RectBox;
 import Geom.Rect_Orthogonal;
 
+import ext.array_stack;
+
 // using namespace Geom::Shape;
 
 export namespace Geom {
@@ -99,12 +101,12 @@ export namespace Geom {
 		float targetSpeed = curVel.length();
 		if(distance <= radius) targetSpeed *= distance / radius;
 
-		return toTarget.sub(curVel.x / smooth, curVel.y / smooth).limit(targetSpeed);
+		return toTarget.sub(curVel.x / smooth, curVel.y / smooth).limitMax(targetSpeed);
 	}
 
-	constexpr Vec2 intersectionLine(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4) {
-		const float x1 = p1.x, x2 = p2.x, x3 = p3.x, x4 = p4.x;
-		const float y1 = p1.y, y2 = p2.y, y3 = p3.y, y4 = p4.y;
+	constexpr Vec2 intersectionLine(const Vec2 p11, const Vec2 p12, const Vec2 p21, const Vec2 p22) {
+		const float x1 = p11.x, x2 = p12.x, x3 = p21.x, x4 = p22.x;
+		const float y1 = p11.y, y2 = p12.y, y3 = p21.y, y4 = p22.y;
 
 		const float dx1 = x1 - x2;
 		const float dy1 = y1 - y2;
@@ -124,6 +126,8 @@ export namespace Geom {
 
 		return Vec2{x, y};
 	}
+
+	// constexpr auto i = intersectionLine({-1, 0}, {1, 0}, {0, -1}, {0, 1});
 
 	 [[deprecated]] std::optional<Vec2> intersectSegments(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4){
 		const float x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, x3 = p3.x, y3 = p3.y, x4 = p4.x, y4 = p4.y;
@@ -193,62 +197,78 @@ export namespace Geom {
 		return closestEdgeNormal;
 	}
 
-	template <ext::derived<QuadBox> T>
-	[[nodiscard]] constexpr Vec2 avgEdgeNormal(const Vec2 p, const T& rectangle) {
+	template <std::derived_from<QuadBox> T>
+	[[nodiscard]] constexpr Vec2 avgEdgeNormal(const Vec2 where, const T& rectangle) noexcept {
 		std::array<std::pair<float, Vec2>, 4> normals{};
 
-		for (int i = 0; i < 4; i++) {
-			auto a = rectangle[i];
-			auto b = rectangle[(i + 1) % 4];
+		for (unsigned i = 0u; i < 4u; i++) {
+			const Vec2 va = rectangle[i];
+			const Vec2 vb = rectangle[(i + 1u) % 4u];
 
-			normals[i].first = ::Geom::dstToSegment(p, a, b) * a.dst(b);
-			normals[i].second = rectangle.getNormalVec(i).normalize();
+			normals[i].first = Geom::dstToSegment(where, va, vb) * va.dst(vb);
+			normals[i].second = (va - vb).rotateRT().normalize();
 		}
 
 		const float total = (normals[0].first + normals[1].first + normals[2].first + normals[3].first);
+		assert(total != 0.f);
 
 		Vec2 closestEdgeNormal{};
 		for(const auto& [weight, normal] : normals) {
-			closestEdgeNormal.add(normal * Math::powIntegral<15>(weight / total));
+			closestEdgeNormal.add(normal * Math::powIntegral<32>(weight / total));
 		}
+
 		return closestEdgeNormal;
 	}
 
 	struct IntersectionResult{
-		std::array<Vec2, 8> intersections;
-		unsigned count;
+		struct Info{
+			Vec2 pos;
+			unsigned short edgeSbj;
+			unsigned short edgeObj;
 
-		constexpr void push(const Vec2 v) noexcept{
-			if(count == intersections.size())return;
-			intersections[count++] = v;
-		}
+			static bool onSameEdge(const unsigned short edgeIdxN_1, const unsigned short edgeIdxN_2) noexcept {
+				return edgeIdxN_1 == edgeIdxN_2;
+			}
+
+			static bool onNearEdge(const unsigned short edgeIdxN_1, const unsigned short edgeIdxN_2) noexcept {
+				return (edgeIdxN_1 + 1) % 4 == edgeIdxN_2 || (edgeIdxN_2 + 1) % 4 == edgeIdxN_1;
+			}
+
+		};
+		ext::array_stack<Info, 4, unsigned> points{};
 
 		explicit operator bool() const noexcept{
-			return count != 0;
+			return !points.empty();
 		}
 
 		[[nodiscard]] constexpr Vec2 avg() const noexcept{
-			if(count > 0) {
-				Vec2 rst{};
-				for(unsigned i = 0; i < count; ++i){
-					rst += intersections[i];
-				}
-				return rst / static_cast<float>(count);
+			assert(!points.empty());
+
+			Vec2 rst{};
+			for (const auto & intersection : points){
+				rst += intersection.pos;
 			}
 
-			//OPTM abort?
-			return {};
+			return rst / static_cast<float>(points.size());
 		}
 	};
 
-	auto rectExactAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) {
+	auto rectExactAvgIntersection(const QuadBox& subjectBox, const QuadBox& objectBox) noexcept {
 		IntersectionResult result{};
 
 		Vec2 rst{};
-		for(int i = 0; i < 4; ++i) {
-			for(int j = 0; j < 4; ++j) {
-				if(intersectSegments(quad1[i], quad1[(i + 1) % 4], quad2[j], quad2[(j + 1) % 4], rst)) {
-					result.push(rst);
+		for(unsigned i = 0; i < 4; ++i) {
+			for(unsigned j = 0; j < 4; ++j) {
+				if(intersectSegments(
+					subjectBox[i], subjectBox[(i + 1) % 4],
+					objectBox[j], objectBox[(j + 1) % 4],
+					rst)
+				) {
+					if(!result.points.full()){
+						result.points.push(IntersectionResult::Info{rst, static_cast<unsigned short>(i), static_cast<unsigned short>(j)});
+					}else{
+						return result;
+					}
 				}
 			}
 		}
@@ -256,7 +276,7 @@ export namespace Geom {
 		return result;
 	}
 
-	Vec2 rectRoughAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) {
+	Vec2 rectRoughAvgIntersection(const QuadBox& quad1, const QuadBox& quad2) noexcept {
 		Vec2 intersections{};
 		unsigned count = 0;
 

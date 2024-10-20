@@ -11,15 +11,21 @@ export namespace ext{
 	 * @tparam T type
 	 * @tparam N capacity
 	 */
-	template<typename T, std::size_t N>
-		requires (std::is_default_constructible_v<T> && N > 0)
+	template<typename T, std::size_t N, std::integral SzType = std::size_t>
+		requires requires{
+			requires std::is_default_constructible_v<T>;
+			requires std::numeric_limits<SzType>::max() >= N;
+		}
 	struct array_stack{
+		using value_type = T;
+		using size_type = SzType;
+
 	private:
 		std::array<T, N> items{};
-		std::size_t sz{};
+		size_type sz{};
 
 	public:
-		[[nodiscard]] constexpr std::size_t size() const noexcept{
+		[[nodiscard]] constexpr size_type size() const noexcept{
 			return sz;
 		}
 
@@ -31,8 +37,24 @@ export namespace ext{
 			return sz == N;
 		}
 
-		[[nodiscard]] constexpr std::size_t capacity() const noexcept{
+		[[nodiscard]] constexpr size_type capacity() const noexcept{
 			return items.size();
+		}
+
+		constexpr decltype(auto) begin() const noexcept{
+			return items.begin();
+		}
+
+		constexpr decltype(auto) end() const noexcept{
+			return items.begin() + sz;
+		}
+
+		constexpr decltype(auto) begin() noexcept{
+			return items.begin();
+		}
+
+		constexpr decltype(auto) end() noexcept{
+			return items.begin() + sz;
 		}
 
 		constexpr void push(const T& val) noexcept(noexcept(checkUnderFlow()) && std::is_nothrow_copy_assignable_v<T>) {
@@ -55,6 +77,12 @@ export namespace ext{
 			checkUnderFlow();
 
 			return items[sz - 1];
+		}
+
+		[[nodiscard]] constexpr decltype(auto) bottom() const noexcept(noexcept(checkUnderFlow())){
+			checkUnderFlow();
+
+			return items[0];
 		}
 
 		constexpr void pop() noexcept(noexcept(checkUnderFlow())){

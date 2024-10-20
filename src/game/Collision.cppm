@@ -43,6 +43,7 @@ namespace Game{
 	 */
 	constexpr float ContinuousTestScl = 1.25f;
 
+	export
 	struct CollisionIndex{
 		Index subject;
 		Index object;
@@ -51,14 +52,15 @@ namespace Game{
 	export
 	struct CollisionData{
 		//TODO provide posterior check?
+		//TODO set expired by set transition to an invalid index or clear indices instead of using a bool flag?
 		bool expired{};
-		Index transition{};
+		Index backtraceIndex{};
 		ext::array_stack<CollisionIndex, 4> indices{};
 
 		[[nodiscard]] CollisionData() = default;
 
 		[[nodiscard]] CollisionData(const Index transition)
-			: transition(transition){
+			: backtraceIndex(transition){
 		}
 
 		[[nodiscard]] constexpr bool empty() const noexcept{
@@ -83,11 +85,13 @@ namespace Game{
 	class Hitbox{
 		/** @brief CCD-traces size.*/
 		Index size_CCD{};
+
+		//TODO make this always 1 less than size ? (make it index clamp instead of size clamp?)
 		/** @brief CCD-traces clamp size. shrink only!*/
-		mutable std::atomic<Index> sizeClamped_CCD{};
+		mutable std::atomic<Index> indexClamped_CCD{};
 
 		/** @brief CCD-traces spacing*/
-		Geom::Vec2 unitDisplacement_CCD{};
+		Geom::Vec2 backtraceUnitMove{};
 
 		mutable std::deque<CollisionData> collided{};
 
@@ -99,57 +103,17 @@ namespace Game{
 		std::vector<HitBoxComponent> components{};
 		Geom::Transform trans{};
 
-		Hitbox() = default;
-
-		[[nodiscard]] Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform = {})
-			: components(comps), trans(transform){
-			updateHitbox(transform);
-		}
-
-		[[nodiscard]] explicit Hitbox(const HitBoxComponent& comps, const Geom::Transform transform = {})
-			: Hitbox(std::vector{comps}, transform){
-		}
-
-		Hitbox(const Hitbox& other)
-			: wrapBound_CCD{other.wrapBound_CCD},
-			  selfBound{other.selfBound},
-			  components{other.components},
-			  trans{other.trans}{
-		}
-
-		Hitbox(Hitbox&& other) noexcept
-			: wrapBound_CCD{std::move(other.wrapBound_CCD)},
-			  selfBound{std::move(other.selfBound)},
-			  components{std::move(other.components)},
-			  trans{std::move(other.trans)}{
-		}
-
-		Hitbox& operator=(const Hitbox& other){
-			if(this == &other) return *this;
-			wrapBound_CCD = other.wrapBound_CCD;
-			selfBound = other.selfBound;
-			components = other.components;
-			trans = other.trans;
-			return *this;
-		}
-
-		Hitbox& operator=(Hitbox&& other) noexcept{
-			if(this == &other) return *this;
-			wrapBound_CCD = std::move(other.wrapBound_CCD);
-			selfBound = std::move(other.selfBound);
-			components = std::move(other.components);
-			trans = std::move(other.trans);
-			return *this;
-		}
-
 		void updateHitbox(const Geom::Transform translation){
 			this->trans = translation;
 
-			const auto displayment = unitDisplacement_CCD * static_cast<float>(size_CCD);
-			const float ang = displayment.angle();
+			const auto displayment = backtraceUnitMove * static_cast<float>(size_CCD);
+			const float ang = displayment.equalsTo(Geom::ZERO) ? +0.f : displayment.angle();
 
 			const float cos = Math::cosDeg(-ang);
 			const float sin = Math::sinDeg(-ang);
+
+			// const float cos = std::cos(ang * Math::DEGREES_TO_RADIANS);
+			// const float sin = std::sin(ang * Math::DEGREES_TO_RADIANS);
 
 			float minX = std::numeric_limits<float>::max();
 			float minY = std::numeric_limits<float>::max();
@@ -182,16 +146,17 @@ namespace Game{
 			maxX += displayment.length();
 
 			wrapBound_CCD = Geom::RectBoxBrief{
-					Geom::Vec2{minX, minY}.rotate(cos, -sin),
-					Geom::Vec2{maxX, minY}.rotate(cos, -sin),
-					Geom::Vec2{maxX, maxY}.rotate(cos, -sin),
-					Geom::Vec2{minX, maxY}.rotate(cos, -sin)
+					Geom::Vec2{minX, minY} .rotate(cos, -sin),
+					Geom::Vec2{maxX, minY} .rotate(cos, -sin),
+					Geom::Vec2{maxX, maxY} .rotate(cos, -sin),
+					Geom::Vec2{minX, maxY} .rotate(cos, -sin)
 				};
 
 			selfBound = wrapBound_CCD.getMaxOrthoBound().shrinkBy(-displayment);
 		}
 
 		void updateHitboxWithCCD(const Geom::Transform translation){
+			// const auto lastTrans = trans;
 			const auto move = translation.vec - this->trans.vec;
 
 			updateHitbox(translation);
@@ -203,10 +168,13 @@ namespace Game{
 			genContinuousRectBox(move);
 		}
 
-	private:
-		[[nodiscard]] float fastGetSize2() const noexcept{
+
+		[[nodiscard]] float estimateMaxLength2() const noexcept{
 			return selfBound.maxDiagonalSqLen() * 0.35f;
 		}
+
+	private:
+
 
 		/**
 		 * \brief This ignores the rotation of the subject entity!
@@ -215,35 +183,28 @@ namespace Game{
 		void genContinuousRectBox(
 			Geom::Vec2 move
 		){
-			const float size2 = fastGetSize2();
+			const float size2 = estimateMaxLength2();
 			if(size2 < 0.025f) return;
 
 			const float dst2 = move.length2();
 
-			const int seg = Math::ceil(std::sqrtf(dst2 / size2) * ContinuousTestScl + std::numeric_limits<float>::epsilon());
+			const Index seg = Math::round<Index>(std::sqrtf(dst2 / size2) * ContinuousTestScl) + 1;
+			assert(seg < 10000);
 
 			move /= static_cast<float>(seg);
+			assert(!backtraceUnitMove.isNaN());
+
 			size_CCD = seg + 1;
-			sizeClamped_CCD = size_CCD;
-			unitDisplacement_CCD = -move;
-			assert(!unitDisplacement_CCD.isNaN());
-		}
-
-		[[nodiscard]] bool isEnableCCD() const noexcept{
-			return sizeClamped_CCD > 0;
-		}
-
-		[[nodiscard]] bool isEmptyCCD() const noexcept{
-			return sizeClamped_CCD == 0;
+			indexClamped_CCD = seg;
+			backtraceUnitMove = -move;
 		}
 
 		void clampCCD(const Index index) const noexcept{
-			atomic_fetch_min_explicit(&sizeClamped_CCD, index, std::memory_order_seq_cst);
+			atomic_fetch_min_explicit(&indexClamped_CCD, index, std::memory_order_seq_cst);
 		}
 
 		[[nodiscard]] Index getClampedSizeCCD() const noexcept{
-			// always >= 1
-			return Math::max(sizeClamped_CCD.load(), 1u);
+			return indexClamped_CCD.load();
 		}
 
 	public:
@@ -272,7 +233,7 @@ namespace Game{
 
 		void checkAllCollided() const noexcept{
 			for(auto& checked_collision_data : collided){
-				if(checked_collision_data.transition > getClampedSizeCCD()){
+				if(checked_collision_data.backtraceIndex > getClampedSizeCCD()){
 					checked_collision_data.expired = true;
 				}
 			}
@@ -292,9 +253,14 @@ namespace Game{
 		 * @param transIndex [0, @link getClampedSizeCCD() @endlink)
 		 * @return Translation
 		 */
-		[[nodiscard]] constexpr Geom::Vec2 getDisplacement_CCD(const Index transIndex) const noexcept{
+		[[nodiscard]] constexpr Geom::Vec2 getBackTraceAt(const Index transIndex) const noexcept{
+			if(!size_CCD)return {};
 			assert(transIndex < size_CCD);
-			return unitDisplacement_CCD * (static_cast<float>(size_CCD - transIndex) - 1.0f);
+			return backtraceUnitMove * (size_CCD - transIndex - 1);
+		}
+
+		constexpr Geom::Vec2 getBackTraceUnitMove() const noexcept{
+			return backtraceUnitMove;
 		}
 
 		// [[nodiscard]] Geom::Vec2 getAvgEdgeNormal(const CollisionData data) const{
@@ -337,8 +303,8 @@ namespace Game{
 
 			//initialize collision state
 			{
-				const auto maxTrans_subject = this->getDisplacement_CCD(0);
-				const auto maxTrans_object = other.getDisplacement_CCD(0);
+				const auto maxTrans_subject = this->getBackTraceAt(0);
+				const auto maxTrans_object = other.getBackTraceAt(0);
 
 				//Move to initial stage
 				for(auto& box : rangeSubject){
@@ -353,19 +319,21 @@ namespace Game{
 				bound_object.move(maxTrans_object);
 			}
 
-			const auto trans_subject = -this->unitDisplacement_CCD;
-			const auto trans_object = -other.unitDisplacement_CCD;
+			const auto trans_subject = -this->backtraceUnitMove;
+			const auto trans_object = -other.backtraceUnitMove;
 
 			Index lastCheckedIndex_subject{};
 			Index lastCheckedIndex_object{};
 
-			for(Index lastIndex_object{}, index_subject{}; index_subject < this->getClampedSizeCCD(); ++index_subject){
+			for(Index lastIndex_object{}, index_subject{}; index_subject <= this->getClampedSizeCCD(); ++index_subject){
 				//Calculate Move Step
-				const float curRatio = static_cast<float>(index_subject + 1) / static_cast<float>(this->getClampedSizeCCD());
+				const float curRatio = static_cast<float>(index_subject) / static_cast<float>(this->getClampedSizeCCD());
 				const Index objectCurrentIndex = //The subject's size may shrink, cause the ratio larger than 1, resulting in array index out of bound
 					Math::ceil(curRatio * static_cast<float>(other.getClampedSizeCCD()));
 
-				assert(objectCurrentIndex <= other.size_CCD);
+				if(objectCurrentIndex >= other.size_CCD){
+					return nullptr;
+				}
 
 				for(Index index_object = lastIndex_object; index_object < objectCurrentIndex; ++index_object){
 					//Perform CCD approach
@@ -419,7 +387,9 @@ namespace Game{
 						}
 					}
 
-
+					if(soundful && collisionData && !collisionData->empty()){
+						return collisionData;
+					}
 
 					lastCheckedIndex_subject = index_subject;
 					lastCheckedIndex_object = index_object;
@@ -429,12 +399,19 @@ namespace Game{
 			}
 
 			return nullptr;
+
 		}
 
 		//TODO shrink CCD bound
 		//TODO shrink requires atomic...
 		void fetchToLastClampPosition() noexcept{
-			this->trans.vec.addScaled(unitDisplacement_CCD, static_cast<float>(sizeClamped_CCD.load()));
+			const auto step = indexClamped_CCD.load();
+			if(!step)return;
+			this->trans.vec.addScaled(backtraceUnitMove, static_cast<float>(step));
+		}
+
+		[[nodiscard]] Geom::Vec2 getBackTraceMove() const noexcept{
+			return getBackTraceAt(indexClamped_CCD.load());
 		}
 
 		[[nodiscard]] bool contains(const Geom::Vec2 vec2) const noexcept{
@@ -443,12 +420,16 @@ namespace Game{
 			});
 		}
 
-		[[nodiscard]] constexpr float getRotationalInertia(const float mass, const float scale = 1 / 12.0f,
-		                                                   const float lengthRadiusRatio = 0.25f) const noexcept{
-			return std::accumulate(components.begin(), components.end(),
-			                       1.0f, [mass, scale, lengthRadiusRatio](const float val, const HitBoxComponent& pair){
-				                       return val + pair.box.getRotationalInertia(mass, scale, lengthRadiusRatio) + mass * pair.trans.vec.length2();
-			                       });
+		[[nodiscard]] constexpr float getRotationalInertia(
+			const float mass, const float scale = 1 / 12.0f,
+			const float lengthRadiusRatio = 0.25f) const noexcept{
+			return std::ranges::fold_left(components, 1.0f, [mass, scale, lengthRadiusRatio](const float val, const HitBoxComponent& pair){
+				return val + pair.box.getRotationalInertia(mass, scale, lengthRadiusRatio) + mass * pair.trans.vec.length2();
+			});
+		}
+
+		Geom::Vec2 getNormalAt(const Geom::Vec2 pos, Index compIndex) const noexcept{
+			return Geom::avgEdgeNormal(pos/* + getCurrentOffsetCCD()*/, components[compIndex].box);
 		}
 
 	private:
@@ -456,6 +437,51 @@ namespace Game{
 			for(auto&& box : boxes){
 				box.box.move(trans);
 			}
+		}
+
+	public:
+
+		Hitbox() = default;
+
+		[[nodiscard]] Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform = {})
+			: components(comps), trans(transform){
+			updateHitbox(transform);
+		}
+
+		[[nodiscard]] explicit Hitbox(const HitBoxComponent& comps, const Geom::Transform transform = {})
+			: Hitbox(std::vector{comps}, transform){
+		}
+
+		Hitbox(const Hitbox& other)
+			: wrapBound_CCD{other.wrapBound_CCD},
+			  selfBound{other.selfBound},
+			  components{other.components},
+			  trans{other.trans}{
+		}
+
+		Hitbox(Hitbox&& other) noexcept
+			: wrapBound_CCD{std::move(other.wrapBound_CCD)},
+			  selfBound{std::move(other.selfBound)},
+			  components{std::move(other.components)},
+			  trans{std::move(other.trans)}{
+		}
+
+		Hitbox& operator=(const Hitbox& other){
+			if(this == &other) return *this;
+			wrapBound_CCD = other.wrapBound_CCD;
+			selfBound = other.selfBound;
+			components = other.components;
+			trans = other.trans;
+			return *this;
+		}
+
+		Hitbox& operator=(Hitbox&& other) noexcept{
+			if(this == &other) return *this;
+			wrapBound_CCD = std::move(other.wrapBound_CCD);
+			selfBound = std::move(other.selfBound);
+			components = std::move(other.components);
+			trans = std::move(other.trans);
+			return *this;
 		}
 	};
 

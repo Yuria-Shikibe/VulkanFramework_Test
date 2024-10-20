@@ -206,6 +206,12 @@ export namespace Geom{
 			return this->add(other.x, other.y);
 		}
 
+		/*constexpr*/ Vector2D& mulAdd(const PassType mul, const PassType add) noexcept {
+			x = std::fma(x, mul.x, add.x);
+			y = std::fma(y, mul.y, add.y);
+			return *this;
+		}
+
 		constexpr Vector2D& addScaled(const PassType other, const T scale) noexcept {
 			x += other.x * scale;
 			y += other.y * scale;
@@ -317,7 +323,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] float length() const noexcept {
-			return std::sqrt(static_cast<float>(length2()));
+			return Math::dst(x, y);
 		}
 
 		[[nodiscard]] constexpr T length2() const noexcept {
@@ -413,8 +419,8 @@ export namespace Geom{
 			return x * tgt.y - y * tgt.x;
 		}
 
-		[[nodiscard]] constexpr Vector2D cross(T val) const noexcept{
-			return {-y * val, x * val};
+		[[nodiscard]] constexpr Vector2D cross(const T val_zAxis) const noexcept{
+			return {-y * val_zAxis, x * val_zAxis};
 		}
 
 		constexpr Vector2D& project_normalized(const PassType tgt) noexcept{
@@ -423,7 +429,7 @@ export namespace Geom{
 			return this->set(tgt).mul(scl / tgt.length2());
 		}
 
-		constexpr Vector2D& project(const PassType tgt) noexcept {
+		constexpr Vector2D& project_nonNormalized(const PassType tgt) noexcept {
 			const float scl = this->dot(tgt);
 
 			return this->set(tgt.x * scl, tgt.y * scl);
@@ -538,12 +544,24 @@ export namespace Geom{
 			return *this;
 		}
 
-		Vector2D& limit(const T limit) noexcept {
-			return this->limit2(limit * limit);
+		Vector2D& limitMax(const T limit) noexcept {
+			return this->limitMax2(limit * limit);
 		}
 
-		Vector2D& limit2(const T limit2) noexcept {
+		Vector2D& limitMax2(const T limit2) noexcept {
 			if (const float len2 = length2(); len2 > limit2) {
+				return this->scl(std::sqrt(static_cast<float>(limit2) / static_cast<float>(len2)));
+			}
+
+			return *this;
+		}
+
+		Vector2D& limitMin(const T limit) noexcept {
+			return this->limitMin2(limit * limit);
+		}
+
+		Vector2D& limitMin2(const T limit2) noexcept {
+			if (const float len2 = length2(); len2 < limit2) {
 				return this->scl(std::sqrt(static_cast<float>(limit2) / static_cast<float>(len2)));
 			}
 
@@ -801,6 +819,14 @@ export namespace Geom{
 		}
 
 	};
+
+	namespace Vec{
+		template <typename N>
+		Vector2D<N> normalTo(const Vector2D<N> approach, const Vector2D<N> normal){
+			auto p = Math::sign(approach.cross(normal));
+			return normal.cross(p);
+		}
+	}
 
 	using Vec2 = Vector2D<float>;
 

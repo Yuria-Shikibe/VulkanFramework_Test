@@ -67,13 +67,7 @@ export namespace Geom {
 
 		constexpr void copyAndMove(const Vec2 trans, const QuadBox& other) noexcept{
 			this->operator=(other);
-
-			v0.add(trans);
-			v1.add(trans);
-			v2.add(trans);
-			v3.add(trans);
-
-			maxOrthoBound.move(trans.x, trans.y);
+			move(trans);
 		}
 
 		constexpr void move(const Vec2 vec2) noexcept{
@@ -221,6 +215,14 @@ export namespace Geom {
 		constexpr void updateNormal() noexcept{
 			normalU = v0 - v3;
 			normalV = v1 - v2;
+		}
+
+		[[nodiscard]] constexpr Vec2 getNormalU() const noexcept{
+			return normalU;
+		}
+
+		[[nodiscard]] constexpr Vec2 getNormalV() const noexcept{
+			return normalV;
 		}
 
 		[[nodiscard]] constexpr bool overlapExact(const RectBoxBrief& other) const {

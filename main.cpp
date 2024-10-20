@@ -131,12 +131,13 @@ int main(){
 
 	{
 		Math::Rand rand{};
-		for(int i = 0; i < 100; ++i){
+		for(int i = 0; i < 1; ++i){
 			Test::GamePart::world.add([&rand](Game::RealEntity& entity){
 				entity.motion.trans = {
-						.vec = {rand.range(16000.f), rand.range(16000.f)},
+						.vec = {rand.range(500.f), rand.range(500.f)},
 						.rot = rand.random(360.f)
 					};
+
 				entity.hitbox = Game::Hitbox{{
 						Game::HitBoxComponent{
 							.trans = {rand.range(80.f), rand.range(80.f), rand.random(360.f)},
@@ -152,14 +153,18 @@ int main(){
 								{rand.random(50.f, 80.f), rand.random(50.f, 80.f)}
 							}
 						},
-						Game::HitBoxComponent{
-							.trans = {rand.range(80.f), rand.range(80.f), rand.random(360.f)},
-							.box = Geom::RectBox{
-								{rand.random(200.f, 700.f), rand.random(200.f, 700.f)},
-								{rand.random(50.f, 80.f), rand.random(50.f, 80.f)}
-							}
-						},
-					}};
+						// Game::HitBoxComponent{
+						// 	.trans = {rand.range(80.f), rand.range(80.f), rand.random(360.f)},
+						// 	.box = Geom::RectBox{
+						// 		{rand.random(200.f, 700.f), rand.random(200.f, 700.f)},
+						// 		{rand.random(50.f, 80.f), rand.random(50.f, 80.f)}
+						// 	}
+						// },
+					}, entity.motion.trans};
+
+				entity.motion.vel = {
+					rand.range(10.f), rand.range(10.f), /*rand.randomDirection()*/
+				};
 			});
 		}
 	}
@@ -180,7 +185,11 @@ int main(){
 		Global::mainEffectManager.update(timer.updateDeltaTick());
 
 		Test::update(timer.updateDeltaTick());
-		Test::GamePart::postUpdate();
+
+		if(!timer.isPaused()){
+			Test::GamePart::postUpdate(timer.updateDeltaTick());
+		}
+
 
 		Global::UI::root->layout();
 		Global::UI::root->update(timer.globalDeltaTick());
@@ -200,19 +209,24 @@ int main(){
 		Geom::Vec2 off2 = off.copy().add(50, 50);
 
 
-		{
-			if(!timer.isPaused()){
+		// {
+		// 	if(!timer.isPaused()){
+		//
+		// 		Math::Rand rand{10};
+		// 		for(auto& value : Test::GamePart::world.realEntities.getEntities()){
+		// 			value.motion.trans.vec += Geom::dirNor(rand.random(360.f)) * (rand.random(1.f, 10.f) * timer.updateDeltaTick());
+		// 		}
+		// 	}
+		//
+		// }
 
-				Math::Rand rand{10};
-				for(auto& value : Test::GamePart::world.realEntities.getEntities()){
-					value.motion.trans.vec += Geom::dirNor(rand.random(360.f)) * (rand.random(1.f, 200.f) * timer.updateDeltaTick());
-				}
-			}
 
-		}
+		// if(!timer.isPaused()){
+		// 	auto & value = Test::GamePart::world.realEntities.getEntities().front();
+		// 	value.motion.trans.vec = Test::getMouseToWorld();
+		// }
 
-		Test::GamePart::update(timer.getUpdateDelta());
-
+		Test::GamePart::update(timer.updateDeltaTick());
 		// Font::TypeSettings::globalInstantParser.requestParseInstantly(fps, std::format("#<font|tele>{:5}|", quad_tree.size()));
 
 		sec += timer.getGlobalDelta();
@@ -264,6 +278,20 @@ int main(){
 				size, lightColor);
 
 			autoParam << Graphic::Draw::WhiteRegion;
+
+			Geom::Vec2 p1{30, 30};
+			Geom::Vec2 p2{Test::getMouseToWorld()};
+			Geom::Vec2 normal{10, 0};
+
+			Drawer::Line::square(autoParam, 2.f, {mainCamera->getPosition(), 45.f}, 24, lightColor);
+
+
+			Drawer::Line::line(++autoParam, 2.f, {}, p1, lightColor, lightColor);
+			// Drawer::Line::line(++autoParam, 2.f, {}, p2, lightColor, lightColor);
+			Drawer::Line::line(++autoParam, 2.f, p1, p2, lightColor, lightColor);
+			Drawer::Line::line(++autoParam, 2.f, p1, p1 + normal, lightColor, lightColor);
+			Drawer::Line::line(++autoParam, 2.f, p1, p1 + Geom::Vec::normalTo(p1 - p2, normal), lightColor, lightColor);
+
 			Test::GamePart::world.quadTree.each([&](const Geom::quad_tree<Game::RealEntity>& node){
 				if(mainCamera->getViewport().overlap_Exclusive(node.get_boundary())){
 					auto color = Graphic::Colors::ROYAL;
@@ -275,7 +303,7 @@ int main(){
 				for(Game::RealEntity* item : node.get_items()){
 					if(mainCamera->getViewport().overlap_Exclusive(item->getBound())){
 						auto color = Graphic::Colors::CLEAR;
-						if(!item->intersections.collisions.empty()){
+						if(!item->collisionContext.collisions.empty()){
 							color.appendLightColor(Graphic::Colors::RED_DUSK);
 						}else{
 							color.appendLightColor(Graphic::Colors::PALE_GREEN);
@@ -283,13 +311,13 @@ int main(){
 
 						autoParam.modifier.depth = 0.0f;
 						for (const auto & component : item->hitbox.components){
-							Drawer::Line::circularPoly_fixed<4>(autoParam, 4.f, component.box, color);
-							Drawer::Line::line(++autoParam, 4.f, item->motion.trans.vec, component.box.transform.vec, Graphic::Colors::ROYAL.copy().toLightColor(), Graphic::Colors::YELLOW.copy().toLightColor());
+							// Drawer::Line::circularPoly_fixed<4>(autoParam, 6.f, component.box, color);
+
 						}
 
-						Drawer::Line::circularPoly_fixed<4>(autoParam, 4.f, item->hitbox.getWrapBox(), color);
-						Drawer::Line::rectOrtho(autoParam, 4.f, item->hitbox.getMinWrapBound(), color);
-						Drawer::Line::line(++autoParam, 4.f, item->motion.trans.vec, node.get_boundary().getCenter(), color, Graphic::Colors::ROYAL.copy().toLightColor());
+						// Drawer::Line::circularPoly_fixed<4>(autoParam, 4.f, item->hitbox.getWrapBox(), color);
+						// Drawer::Line::rectOrtho(autoParam, 2.f, item->hitbox.getMinWrapBound(), color);
+						// Drawer::Line::line(++autoParam, 2.f, item->motion.trans.vec, node.get_boundary().getCenter(), color, Graphic::Colors::ROYAL.copy().toLightColor());
 					}
 				}
 			});
@@ -300,26 +328,26 @@ int main(){
 
 		// Global::UI::root->draw();
 
-		Graphic::InstantBatchAutoParam<Graphic::Vertex_UI> param{
-				Global::UI::renderer->batch, Graphic::Draw::WhiteRegion
-			};
-
-		Geom::grid_generator<4, float> generator{};
-		for(auto rects : Geom::deferred_grid_generator{
-			    std::array{
-				    Geom::Vec2{50.f, 80.f}, Geom::Vec2{120.f, 160.f}, Geom::Vec2{250.f, 320.f}, Geom::Vec2{400.f, 400.f}, Geom::Vec2{600.f, 600.f},
-				    Geom::Vec2{700.f, 650.f}
-			    }
-		    }){
-			Graphic::Draw::Drawer<Graphic::Vertex_UI>::Line::rectOrtho(param, 1.f, rects.move(200, 300), Graphic::Colors::AQUA);
-		}
-
-		Geom::OrthoRectFloat rect{Geom::FromExtent, {20, 80}, {600, 800}};
-
-		// param << imageAtlas.find("main.frame");
+		// Graphic::InstantBatchAutoParam<Graphic::Vertex_UI> param{
+		// 		Global::UI::renderer->batch, Graphic::Draw::WhiteRegion
+		// 	};
 		//
-		// Graphic::Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Graphic::Colors::AQUA);
-		Graphic::Draw::drawNinePatch(param, Test::nineRegion_edge, rect, Graphic::Colors::AQUA);
+		// Geom::grid_generator<4, float> generator{};
+		// for(auto rects : Geom::deferred_grid_generator{
+		// 	    std::array{
+		// 		    Geom::Vec2{50.f, 80.f}, Geom::Vec2{120.f, 160.f}, Geom::Vec2{250.f, 320.f}, Geom::Vec2{400.f, 400.f}, Geom::Vec2{600.f, 600.f},
+		// 		    Geom::Vec2{700.f, 650.f}
+		// 	    }
+		//     }){
+		// 	Graphic::Draw::Drawer<Graphic::Vertex_UI>::Line::rectOrtho(param, 1.f, rects.move(200, 300), Graphic::Colors::AQUA);
+		// }
+		//
+		// Geom::OrthoRectFloat rect{Geom::FromExtent, {20, 80}, {600, 800}};
+		//
+		// // param << imageAtlas.find("main.frame");
+		// //
+		// // Graphic::Draw::Drawer<Vulkan::Vertex_UI>::rectOrtho(++param, rect, Graphic::Colors::AQUA);
+		// Graphic::Draw::drawNinePatch(param, Test::nineRegion_edge, rect, Graphic::Colors::AQUA);
 
 		// Font::TypeSettings::draw(Global::UI::renderer->batch, layout, {200 + timer.getGlobalTime() * 5.f, 200});
 

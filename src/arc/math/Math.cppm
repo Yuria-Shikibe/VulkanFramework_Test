@@ -301,10 +301,14 @@ export namespace Math {
 	constexpr T powIntegral(const T val) noexcept {
 		if constexpr(Exponent == 0) {
 			return 1;
+		}else if constexpr (Exponent == 1) {
+			return val;
 		}else if constexpr (Exponent % 2 == 0) {
-			return Math::powIntegral<Exponent / 2, T>(val) * Math::powIntegral<Exponent / 2, T>(val);
+			const float v = Math::powIntegral<Exponent / 2, T>(val);
+			return v * v;
 		}else {
-			return val * Math::powIntegral<(Exponent - 1) / 2, T>(val) * Math::powIntegral<(Exponent - 1) / 2, T>(val);
+			const float v = Math::powIntegral<(Exponent - 1) / 2, T>(val);
+			return val * v * v;
 		}
 	}
 
@@ -714,9 +718,7 @@ export namespace Math {
 	}
 
 	inline float dst(const float x1, const float y1, const float x2, const float y2) noexcept {
-		const float xd = x2 - x1;
-		const float yd = y2 - y1;
-		return dst(xd, yd);
+		return dst(x2 - x1, y2 - y1);
 	}
 
 	inline float dst2(const float x1, const float y1, const float x2, const float y2) noexcept {

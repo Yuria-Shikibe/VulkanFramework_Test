@@ -173,6 +173,7 @@ void main() {
 
 //    vec4 color = mix(fxaa(inputImage, pos, uv, norstep), nfaa(inputImage, pos, uv, norstep), 0.83f);
     vec4 color = nfaa(inputImage, pos, uv, norstep);
+//    vec4 color = texelFetch(inputImage, pos, 0);
     imageStore(outputImage, pos, color);
 }
 /**

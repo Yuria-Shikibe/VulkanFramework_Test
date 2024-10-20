@@ -23,8 +23,8 @@ export namespace Game {
 		last
 	};
 
-	struct ActionData{
-		Core::Tick tick{};
+	struct ActionParam{
+		Core::Tick delay{};
 		unsigned repeat{};
 		bool noSuspend{};
 	};
@@ -52,8 +52,8 @@ export namespace Game {
 		}
 
 		template <std::invocable Fn>
-		[[nodiscard]] DelayAction(ActionData data, Fn&& func)
-			: progress(data.tick.count(), data.noSuspend ? data.tick.count() : 0), repeatCount{data.repeat}, action{std::forward<Fn>(func)} {
+		[[nodiscard]] DelayAction(ActionParam data, Fn&& func)
+			: progress(data.delay.count(), data.noSuspend ? data.delay.count() : 0), repeatCount{data.repeat}, action{std::forward<Fn>(func)} {
 		}
 
 		[[nodiscard]] constexpr bool hasRepeat() const noexcept{
@@ -89,9 +89,9 @@ export namespace Game {
 			mutable std::mutex mtx{};
 
 			template <std::invocable<> Func>
-			void launch(const ActionData actionData, Func&& action){
+			void launch(const ActionParam param, Func&& action){
 				std::lock_guard lockGuard{mtx};
-				pending.emplace_back(actionData, std::forward<Func>(action));
+				pending.emplace_back(param, std::forward<Func>(action));
 			}
 
 			void dump(){
@@ -102,7 +102,7 @@ export namespace Game {
 				pending.clear();
 			}
 
-			void consume(float deltaTick){
+			void consume(Core::Tick deltaTick){
 				ext::algo::erase_if_unstable(actives, [deltaTick](DelayAction& action){
 					return action.update(deltaTick);
 				});
@@ -130,10 +130,10 @@ export namespace Game {
 		}
 
 		template <std::invocable<> Func>
-		void launch(const ActionPriority priority, const ActionData actionData, Func&& action) {
+		void launch(const ActionPriority priority, const ActionParam param, Func&& action) {
 			if(priority > lowestPriority)return;
 
-			getGroupAt(priority).launch(actionData, std::forward<Func>(action));
+			getGroupAt(priority).launch(param, std::forward<Func>(action));
 		}
 
 		void clear() {
@@ -150,7 +150,7 @@ export namespace Game {
 			{
 				ActionGroup& group = taskGroup[std::to_underlying(ActionPriority::unignorable)];
 				group.dump();
-				group.consume(std::numeric_limits<float>::infinity());
+				group.consume(Core::Tick{std::numeric_limits<float>::infinity()});
 			}
 
 			for(std::size_t i = std::to_underlying(ActionPriority::unignorable); i <= std::to_underlying(lowestPriority); ++i){
