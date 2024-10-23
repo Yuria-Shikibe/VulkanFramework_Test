@@ -420,7 +420,7 @@ export namespace Geom{
 		}
 
 		[[nodiscard]] constexpr Vector2D cross(const T val_zAxis) const noexcept{
-			return {-y * val_zAxis, x * val_zAxis};
+			return {y * val_zAxis, -x * val_zAxis};
 		}
 
 		constexpr Vector2D& project_normalized(const PassType tgt) noexcept{
@@ -563,6 +563,21 @@ export namespace Geom{
 		Vector2D& limitMin2(const T limit2) noexcept {
 			if (const float len2 = length2(); len2 < limit2) {
 				return this->scl(std::sqrt(static_cast<float>(limit2) / static_cast<float>(len2)));
+			}
+
+			return *this;
+		}
+
+		Vector2D& limitClamp(const T min, const T max) noexcept {
+			return this->limitClamp2(min * min, max * max);
+		}
+
+
+		Vector2D& limitClamp2(const T min, const T max) noexcept {
+			if (const float len2 = length2(); len2 < min) {
+				return this->scl(std::sqrt(static_cast<float>(min) / static_cast<float>(len2)));
+			}else if(len2 > max){
+				return this->scl(std::sqrt(static_cast<float>(max) / static_cast<float>(len2)));
 			}
 
 			return *this;
@@ -824,7 +839,7 @@ export namespace Geom{
 		template <typename N>
 		Vector2D<N> normalTo(const Vector2D<N> approach, const Vector2D<N> normal){
 			auto p = Math::sign(approach.cross(normal));
-			return normal.cross(p);
+			return normal.cross(-p);
 		}
 	}
 

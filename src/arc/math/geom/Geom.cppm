@@ -21,6 +21,19 @@ import ext.array_stack;
 // using namespace Geom::Shape;
 
 export namespace Geom {
+	/** Returns a point on the segment nearest to the specified point. */
+	[[nodiscard]] constexpr Vec2 nearestSegmentPoint(const Vec2 where, const Vec2 start, const Vec2 end) noexcept{
+		const float length2 = start.dst2(end);
+		if(length2 == 0) [[unlikely]]{
+			 return start;
+		}
+
+		const float t = ((where.x - start.x) * (end.x - start.x) + (where.y - start.y) * (end.y - start.y)) / length2;
+		if(t <= 0) return start;
+		if(t >= 1) return end;
+		return {start.x + t * (end.x - start.x), start.y + t * (end.y - start.y)};
+	}
+
 	constexpr Vec2 intersectCenterPoint(const QuadBox& subject, const QuadBox& object) {
 		const float x0 = Math::max(subject.v0.x, object.v0.x);
 		const float y0 = Math::max(subject.v0.y, object.v0.y);
@@ -58,38 +71,16 @@ export namespace Geom {
 		return dstToLine(vec2, vert1, vert2);
 	}
 
-	float dstToSegment(const Vec2 p, const Vec2 a, const Vec2 b) {
-		const float lenAB = a.dst(b);
-		if (lenAB < Math::FLOATING_ROUNDING_ERROR) {
-			return a.dst(p);
-		}
+	float dstToSegment(const Vec2 p, const Vec2 a, const Vec2 b) noexcept {
+		const auto nearest = nearestSegmentPoint(p, a, b);
 
-		// AB dot AB
-		if (const float dot = (p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y); dot < 0) {
-			return a.dst(p);
-		} else if (dot > lenAB * lenAB) {
-			return a.dst(p);
-		} else {
-			const float t = dot / (lenAB * lenAB);
-			return p.dst(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
-		}
+		return nearest.dst(p);
 	}
 
-	float dst2ToSegment(const Vec2 p, const Vec2 a, const Vec2 b) {
-		const float lenAB = a.dst(b);
-		if (lenAB < Math::FLOATING_ROUNDING_ERROR) {
-			return a.dst2(p);
-		}
+	constexpr float dst2ToSegment(const Vec2 p, const Vec2 a, const Vec2 b) noexcept {
+		const auto nearest = nearestSegmentPoint(p, a, b);
 
-		// AB dot AB
-		if (const float dot = (p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y); dot < 0) {
-			return a.dst2(p);
-		} else if (dot > lenAB * lenAB) {
-			return a.dst2(p);
-		} else {
-			const float t = dot / (lenAB * lenAB);
-			return p.dst2(a.x + t * (b.x - a.x), a.y + t * (b.y - a.y));
-		}
+		return nearest.dst2(p);
 	}
 
 	[[deprecated]] Vec2 arrive(const Vec2 position, const Vec2 dest, const Vec2 curVel, const float smooth, const float radius, const float tolerance) {
@@ -153,7 +144,7 @@ export namespace Geom {
 		return Vec2{x1 + dx1 * ua, y1 + dy1 * ua};
 	}
 
-	bool intersectSegments(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4, Vec2& out){
+	bool intersectSegments(const Vec2 p1, const Vec2 p2, const Vec2 p3, const Vec2 p4, Vec2& out) noexcept{
 		const float x1 = p1.x, y1 = p1.y, x2 = p2.x, y2 = p2.y, x3 = p3.x, y3 = p3.y, x4 = p4.x, y4 = p4.y;
 
 		const float dx1 = x2 - x1;
@@ -178,7 +169,7 @@ export namespace Geom {
 	}
 
 	template <ext::derived<QuadBox> T>
-	[[nodiscard]] constexpr Vec2 nearestEdgeNormal(const Vec2 p, const T& rectangle) {
+	[[nodiscard]] constexpr Vec2 nearestEdgeNormal(const Vec2 p, const T& rectangle) noexcept {
 		float minDistance = std::numeric_limits<float>::max();
 		Vec2 closestEdgeNormal{};
 
@@ -206,15 +197,16 @@ export namespace Geom {
 			const Vec2 vb = rectangle[(i + 1u) % 4u];
 
 			normals[i].first = Geom::dstToSegment(where, va, vb) * va.dst(vb);
-			normals[i].second = (va - vb).rotateRT().normalize();
+			normals[i].second = rectangle.getNormalVec(i);
 		}
 
 		const float total = (normals[0].first + normals[1].first + normals[2].first + normals[3].first);
 		assert(total != 0.f);
 
 		Vec2 closestEdgeNormal{};
+
 		for(const auto& [weight, normal] : normals) {
-			closestEdgeNormal.add(normal * Math::powIntegral<32>(weight / total));
+			closestEdgeNormal.sub(normal * Math::powIntegral<32>(weight / total));
 		}
 
 		return closestEdgeNormal;
@@ -293,7 +285,7 @@ export namespace Geom {
 		if(count > 0) {
 			return intersections.div(static_cast<float>(count));
 		}else {
-			assert(false);
+			//contains but with no intersection on edge
 			return intersections.set(quad1.v0).add(quad1.v2).add(quad2.v0).add(quad2.v2).scl(0.25f);
 		}
 

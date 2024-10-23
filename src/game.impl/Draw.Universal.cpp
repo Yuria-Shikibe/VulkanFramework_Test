@@ -35,19 +35,21 @@ void Game::Graphic::Draw::hitbox(const Hitbox& hitbox, const float z){
 }
 
 void Game::Graphic::Draw::realEntity(const RealEntity& entity){
-	hitbox(entity.hitbox, entity.zLayer);
 
 	namespace Draw = ::Graphic::Draw;
 	auto autoParam = getParam(entity.zLayer);
 
-	for (const auto & data : entity.collisionContext.postData){
-		for (const auto& [point, normal, _] : data.intersections){
-			Drawer::rectOrtho(++autoParam, point, 12, Colors::ROYAL.copy().toLightColor());
-			Drawer::Line::lineAngle(++autoParam, 2.f, {point, normal.angle()}, 90, Colors::CRIMSON.copy().toLightColor());
-		}
+	for (const auto & component : entity.hitbox.components){
+		Drawer::Line::circularPoly_fixed<4>(autoParam, 4.f, component.box, entity.manifold.underCorrection ? Colors::RED_DUSK : Colors::WHITE);
+		Drawer::Line::line(++autoParam, 4.f,
+			entity.hitbox.trans.vec, component.box.v0,
+			Colors::ROYAL.copy().toLightColor(), Colors::YELLOW.copy().toLightColor());
+	}
 
+	for (const auto & data : entity.manifold.postData){
 		Drawer::rectOrtho(++autoParam, data.mainIntersection.pos, 18, Colors::ROYAL.copy().toLightColor());
 		Drawer::Line::lineAngle(++autoParam, 4.f, {data.mainIntersection.pos, data.mainIntersection.normal.angle()}, 90, Colors::CRIMSON.copy().toLightColor());
+		Drawer::Line::line(++autoParam, 4.f, entity.motion.pos(), entity.motion.pos() + entity.last, Colors::ACID.copy().toLightColor());
 	}
 }
 

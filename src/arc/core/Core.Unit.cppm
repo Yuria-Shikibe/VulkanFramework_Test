@@ -15,17 +15,10 @@ export namespace Core{
 		using std::chrono::duration<T, Ratio>::count;
 		using std::chrono::duration<T, Ratio>::rep;
 		using std::chrono::duration<T, Ratio>::duration;
-
 		[[nodiscard]] constexpr DirectAccessTimeUnit() noexcept = default;
 
 		[[nodiscard]] constexpr explicit(false) DirectAccessTimeUnit(const T Val) noexcept
-			: std::chrono::duration<T, Ratio>(Val){
-		}
-
-		template <typename T2, typename Ratio2>
-		[[nodiscard]] constexpr explicit(false) DirectAccessTimeUnit(const DirectAccessTimeUnit<T2, Ratio2> other) noexcept
-			: std::chrono::duration<T, Ratio>(std::chrono::duration_cast<std::chrono::duration<T, Ratio>>(other)){
-		}
+			: std::chrono::duration<T, Ratio>(Val) {}
 
 		[[nodiscard]] constexpr explicit(false) operator T() const noexcept{
 			return this->count();
@@ -110,9 +103,4 @@ export namespace Core{
 	using Tick = DirectAccessTimeUnit<float, TickRatio>;
 	using Sec = DirectAccessTimeUnit<float>;
 	using Sec_Highres = DirectAccessTimeUnit<double>;
-
-	// void foo(){
-	// 	constexpr Sec sec{20};
-	// 	constexpr Tick tick{ sec };
-	// }
 }

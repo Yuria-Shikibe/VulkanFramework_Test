@@ -33,6 +33,6 @@ namespace Assets::Fx{
 		const auto stroke = effect.data.progress.getInv() * 4.5f;
 
 		Drawer::Line::circle(autoParam, stroke, effect.pos(), effect.data.progress.get(Math::Interp::pow2Out) * effect.drawer->defClipRadius, color);
-	}> CircleOut{50, 120.f};
+	}> CircleOut{50, 90.f};
 }
 

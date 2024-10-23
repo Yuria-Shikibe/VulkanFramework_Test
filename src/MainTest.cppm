@@ -55,6 +55,9 @@ export import Assets.Fx;
 export import Game.World.State;
 export import Game.World.RealEntity;
 
+import ext.timer;
+import ext.shared_stack;
+
 export namespace Test{
 	static_assert(Core::UI::ElemInitFunc<decltype([](int, Core::UI::BedFace&){})>);
 
@@ -89,7 +92,7 @@ export namespace Test{
 	Game::DelayActionManager delayManager{};
 
 	void update(float delta){
-		delayManager.update(Core::Tick{delta});
+		delayManager.update(delta);
 	}
 
 	void initFx(){
@@ -258,9 +261,16 @@ export namespace Test{
 
 export namespace Test::GamePart{
 	Game::WorldState world{};
+	ext::timer<> timer{};
+	ext::shared_stack<Game::RealEntity*> pre_collide_passed{};
+	ext::shared_stack<Game::RealEntity*> post_collide_passed{};
+
+	std::size_t testCount{};
+	std::chrono::microseconds quadTreeTestTime{};
+	std::chrono::microseconds manifoldProcessTime{};
 
 	void init(){
-		constexpr float size = 20000.f;
+		constexpr float size = 400000.f;
 		world.quadTree = Geom::quad_tree<Game::RealEntity>{{
 			{-size, -size}, {size, size}
 		}};
@@ -269,46 +279,119 @@ export namespace Test::GamePart{
 		world.updateQuadTree();
 
 		Core::Global::input->binds.registerBind(Core::Ctrl::InputBind{
-				Core::Ctrl::Key::F, Core::Ctrl::Act::Press, []{
-					world.add([](Game::RealEntity& entity){
+				Core::Ctrl::Key::F, Core::Ctrl::Act::Continuous, []{
+					timer.update_and_run(0, 10, Core::Global::timer.updateDeltaTick(), []{
 						const auto cameraPos = Core::Global::mainCamera->getPosition();
 						const auto cursorPos = Test::getMouseToWorld();
-						const auto ang = (-cameraPos + cursorPos).angle();
+						const auto dst = cursorPos - cameraPos;
+						const auto ang = dst.angle();
 
-						entity.motion.trans = {cameraPos, ang};
-						entity.motion.vel = {Geom::dirNor(ang) * 60};
+						for(int i = 0; i <= 0; ++i){
+							auto& ent = world.add([&](Game::RealEntity& entity){
+								entity.rigidProp.inertialMass /= 5.f;
+								entity.motion.trans = {cameraPos + dst.copy().rotateRT().normalize() * i * 100, ang};
+								entity.motion.vel = {Geom::dirNor(ang) * 500};
 
-						entity.hitbox = Game::Hitbox{
-								Game::HitBoxComponent{
-									.box = Geom::RectBox{
-										{ 200,  40, },
-										{-100, -20, }}
-								}, entity.motion.trans
-							};
+								entity.hitbox = Game::Hitbox{
+										Game::HitBoxComponent{
+											.box = Geom::RectBox{
+												{200, 40,},
+												{-100, -20,}
+											}
+										},
+										entity.motion.trans
+									};
+							});
+						}
+
 					});
+
+
 				}
 			});
 
 	}
 
 	void postUpdate(float delta){
-		world.realEntities.each([](Game::RealEntity& e){
-			// e.collisionContext.filter();
-			//OPTM ? actively save the collided entities instead of iterate all
-			(void)e.postProcessCollisions_0();
+		std::atomic_size_t potentialCount{};
+
+		auto cur0 = std::chrono::system_clock::now();
+
+		world.realEntities.each_par([&potentialCount](Game::RealEntity& entity){
+			world.quadTree.intersect_test_all(
+				entity,
+				[&potentialCount](Game::RealEntity& sbj, const Game::RealEntity& obj){
+					if(sbj.testIntersectionWith(obj)){
+						potentialCount.fetch_add(1, std::memory_order::relaxed);
+					}
+				},
+
+				[](const Game::RealEntity& sbj, const Game::RealEntity& obj){
+					if(&sbj == &obj) return false;
+					if(!sbj.getBound().overlap_Exclusive(obj.getBound())) return false;
+
+					return sbj.roughIntersectWith(obj);
+				});
 		});
+
+		auto cur1 = std::chrono::system_clock::now();
+
+		post_collide_passed.clear_and_reserve(potentialCount.load() + 8);
+		// post_collide_passed.clear_and_reserve(world.realEntities.size() + 8);
+
+		world.realEntities.each([](Game::RealEntity& e){
+			if(e.postProcessCollisions_0()){
+					post_collide_passed.push(&e);
+				}else{
+					e.manifold.clear();
+				}
+		});
+
+		for (Game::RealEntity* e : post_collide_passed){
+			e->postProcessCollisions_1();
+			e->postProcessCollisions_2();
+		}
+
+		for (Game::RealEntity* e : post_collide_passed){
+			e->postProcessCollisions_3(delta);
+		}
+
+		// if(post_collide_passed.size() > 500){
+		// 	std::for_each(std::execution::par, post_collide_passed.begin(), post_collide_passed.end(), [](Game::RealEntity* e){
+		// 		e->postProcessCollisions_1();
+		// 		e->postProcessCollisions_2();
+		// 	});
 		//
-		world.realEntities.each([](Game::RealEntity& e){
-			e.postProcessCollisions_1();
-		});
+		// 	std::for_each(std::execution::par, post_collide_passed.begin(), post_collide_passed.end(), [delta](Game::RealEntity* e){
+		// 		e->postProcessCollisions_3(delta);
+		// 	});
+		// }else{
+		//
+		// }
 
-		world.realEntities.each([](Game::RealEntity& e){
-			e.postProcessCollisions_2();
-		});
+		auto cur2 = std::chrono::system_clock::now();
 
-		world.realEntities.each([delta](Game::RealEntity& e){
-			e.postProcessCollisions_3(delta);
-		});
+		testCount++;
+		quadTreeTestTime += std::chrono::duration_cast<std::chrono::microseconds>(cur1 - cur0);
+		manifoldProcessTime += std::chrono::duration_cast<std::chrono::microseconds>(cur2 - cur1);
+
+		// world.realEntities.each_par ([](Game::RealEntity& e){
+		// 	e.postProcessCollisions_0();
+		// 	e.postProcessCollisions_1();
+		// 	e.postProcessCollisions_2();
+		// });
+		//
+		// world.realEntities.each_par ([delta](Game::RealEntity& e){
+		// 	e.postProcessCollisions_3(delta);
+		// });
+	}
+
+	void printTestPerformance(){
+		std::println("entities: {}", world.realEntities.size());
+		std::println("tested frames: {}", testCount);
+		std::println("avg quadtree time: {}", std::chrono::duration_cast<std::chrono::microseconds>(quadTreeTestTime / testCount));
+		std::println("avg manifold time: {}", std::chrono::duration_cast<std::chrono::microseconds>(manifoldProcessTime / testCount));
+		std::println("avg total test time: {}", std::chrono::duration_cast<std::chrono::microseconds>((quadTreeTestTime + manifoldProcessTime) / testCount));
 	}
 
 	void update(const float delta){
@@ -320,20 +403,6 @@ export namespace Test::GamePart{
 		world.all.update_par(delta);
 
 		world.updateQuadTree();
-
-		world.realEntities.each_par([](Game::RealEntity& entity){
-			world.quadTree.intersect_test_all(
-				entity,
-				[](Game::RealEntity& sbj, const Game::RealEntity& obj){
-					sbj.testIntersectionWith(obj);
-				},
-				[](const Game::RealEntity& sbj, const Game::RealEntity& obj){
-					if(&sbj == &obj) return false;
-					if(!sbj.getBound().overlap_Exclusive(obj.getBound())) return false;
-
-					return sbj.roughIntersectWith(obj);
-				});
-		});
 	}
 
 	void draw(){

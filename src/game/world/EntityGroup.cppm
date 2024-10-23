@@ -58,6 +58,10 @@ namespace Game{
 	public:
 
 
+		std::size_t size() const noexcept{
+			return entities.size();
+		}
+
 		decltype(auto) getEntities() const noexcept{
 			return entities | std::views::values | std::views::transform([](const EntityPtr& ptr) -> EntityType& {
 				return *ptr;

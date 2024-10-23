@@ -213,15 +213,15 @@ namespace Geom{
 			return *this;
 		}
 
-		constexpr Rect_Orthogonal& shrinkBy(const typename Vector2D<T>::PassType directionAndSize) noexcept{
-			const T minX = Math::min(directionAndSize.x, size_.x);
+		/*constexpr*/ Rect_Orthogonal& shrinkBy(const typename Vector2D<T>::PassType directionAndSize) noexcept{
+			const T minX = Math::min(std::abs(directionAndSize.x), size_.x);
 			size_.x -= minX;
 
 			if(directionAndSize.x > 0){
 				src.x += minX;
 			}
 
-			const T minY = Math::min(directionAndSize.y, size_.y);
+			const T minY = Math::min(std::abs(directionAndSize.y), size_.y);
 			size_.y -= minY;
 
 			if(directionAndSize.y > 0){

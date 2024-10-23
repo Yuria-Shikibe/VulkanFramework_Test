@@ -18,6 +18,7 @@ export namespace Core{
 		void init(){
 			glfwInit();
 			glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+			glfwWindowHint(GLFW_REFRESH_RATE, 60);
 		}
 
 		void terminate(){

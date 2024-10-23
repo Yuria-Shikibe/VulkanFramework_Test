@@ -51,7 +51,7 @@ export namespace Game{
 
 		/** @brief [0, 1]*/
 		float frictionCoefficient = 0.35f;
-		float restitution = 0.15f;
+		float restitution = 0.1f;
 
 		/** @brief Used For Force Correction*/
 		float collideForceScale = 1.0f;

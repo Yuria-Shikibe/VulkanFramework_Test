@@ -146,7 +146,7 @@ export namespace Graphic::Draw{
 				const float stroke,
 				const Geom::Vec2 src, const Geom::Vec2 dst,
 				const Color& c, const bool cap = true){
-				Line::line(param, stroke, src, dst, c, cap);
+				Line::line(param, stroke, src, dst, c, c, cap);
 			}
 
 			template <VertexModifier<Vertex&> M>
@@ -189,9 +189,8 @@ export namespace Graphic::Draw{
 
 
 			template <unsigned count, AutoAcquirableParam M, typename T>
-				requires requires(const T& t){
+				requires requires{
 					requires count > 0;
-					{ t[0u] };
 				}
 			static void circularPoly_fixed(
 				M& auto_param,
@@ -252,7 +251,6 @@ export namespace Graphic::Draw{
 					vec2_1.set(vec2_3);
 					vec2_2.set(vec2_4);
 				}
-
 			}
 
 			template <AutoAcquirableParam M>

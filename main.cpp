@@ -1,4 +1,4 @@
-#include <GLFW/glfw3.h>
+ #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
 // #include "src/application_head.h"
@@ -26,6 +26,7 @@ import Geom.Matrix4D;
 import Geom.GridGenerator;
 import Geom.Rect_Orthogonal;
 import Geom.quad_tree;
+import Geom;
 
 import Core.Vulkan.Shader.Compile;
 
@@ -93,7 +94,7 @@ struct Quad : Game::Hitbox,  Geom::QuadTreeAdaptable<Quad, float>{
 	}
 
 	[[nodiscard]] bool exactIntersectWith(const Quad& other) const{
-		return collideWithExact(other) != nullptr;
+		return collideWithExact(other);
 	}
 
 	[[nodiscard]] bool containsPoint(Geom::Vector2D<float>::PassType point) const{
@@ -102,6 +103,11 @@ struct Quad : Game::Hitbox,  Geom::QuadTreeAdaptable<Quad, float>{
 };
 
 int main_(){
+	Core::File file{R"(D:\projects\vulkan_framework\properties\resource\assets\bundles\bundle.zh_cn.json)"};
+
+	auto jval = file.readString();
+
+
 	return 0;
 }
 
@@ -123,18 +129,18 @@ int main(){
 	using namespace Core::Global;
 
 	File file{R"(D:\projects\vulkan_framework\properties\resource\assets\parse_test.txt)"};
-	std::shared_ptr<Font::TypeSettings::GlyphLayout> layout{new Font::TypeSettings::GlyphLayout};
+	std::shared_ptr<Font::TypeSettings::GlyphLayout> count{new Font::TypeSettings::GlyphLayout};
 	std::shared_ptr<Font::TypeSettings::GlyphLayout> fps{new Font::TypeSettings::GlyphLayout};
-	layout->setAlign(Align::Pos::right);
+	count->setAlign(Align::Pos::right);
 
-	Font::TypeSettings::globalInstantParser.requestParseInstantly(layout, file.readString());
+	Font::TypeSettings::globalInstantParser.requestParseInstantly(count, file.readString());
 
 	{
 		Math::Rand rand{};
-		for(int i = 0; i < 1; ++i){
+		for(int i = 0; i < 10000; ++i){
 			Test::GamePart::world.add([&rand](Game::RealEntity& entity){
 				entity.motion.trans = {
-						.vec = {rand.range(500.f), rand.range(500.f)},
+						.vec = {rand.range(120000.f), rand.range(120000.f)},
 						.rot = rand.random(360.f)
 					};
 
@@ -176,7 +182,10 @@ int main(){
 
 	timer.resetTime();
 
+	std::future<void> upt{};
+
 	while(!window->shouldClose()){
+		// std::this_thread::sleep_for(std::chrono::milliseconds(30));
 		timer.fetchTime();
 		window->pollEvents();
 		input->update(timer.globalDeltaTick());
@@ -186,8 +195,9 @@ int main(){
 
 		Test::update(timer.updateDeltaTick());
 
-		if(!timer.isPaused()){
-			Test::GamePart::postUpdate(timer.updateDeltaTick());
+		if(true){
+			if(upt.valid())upt.get();
+			Test::GamePart::update(timer.updateDeltaTick());
 		}
 
 
@@ -226,8 +236,8 @@ int main(){
 		// 	value.motion.trans.vec = Test::getMouseToWorld();
 		// }
 
-		Test::GamePart::update(timer.updateDeltaTick());
 		// Font::TypeSettings::globalInstantParser.requestParseInstantly(fps, std::format("#<font|tele>{:5}|", quad_tree.size()));
+		Font::TypeSettings::globalInstantParser.requestParseInstantly(count, std::format("#<font|tele>{}", Test::GamePart::world.realEntities.entities.size()));
 
 		sec += timer.getGlobalDelta();
 		if(sec > 1.f){
@@ -251,46 +261,54 @@ int main(){
 
 
 			autoParam.modifier.depth = 0.5f;
-			autoParam << Test::texturePester;
-			Drawer::rect(
-				++autoParam,
-				{{400, 200}, 100},
-				size, baseColor);
+			// autoParam << Test::texturePester;
+			// Drawer::rect(
+			// 	++autoParam,
+			// 	{{400, 200}, 100},
+			// 	size, baseColor);
+			//
+			// autoParam << Test::texturePesterLight;
+			// Drawer::rect(
+			// 	++autoParam,
+			// 	{{400, 200}, 100},
+			// 	size, lightColor);
+			//
+			//
+			// autoParam.modifier.depth = 0.3f;
+			// autoParam << Test::texturePester;
+			// Drawer::rect(
+			// 	++autoParam,
+			// 	{{460, 240}, 45},
+			// 	size, baseColor);
+			//
+			// autoParam << Test::texturePesterLight;
+			// Drawer::rect(
+			// 	++autoParam,
+			// 	{{460, 240}, 45},
+			// 	size, lightColor);
 
-			autoParam << Test::texturePesterLight;
-			Drawer::rect(
-				++autoParam,
-				{{400, 200}, 100},
-				size, lightColor);
-
-
-			autoParam.modifier.depth = 0.3f;
-			autoParam << Test::texturePester;
-			Drawer::rect(
-				++autoParam,
-				{{460, 240}, 45},
-				size, baseColor);
-
-			autoParam << Test::texturePesterLight;
-			Drawer::rect(
-				++autoParam,
-				{{460, 240}, 45},
-				size, lightColor);
-
+			// Geom::RectBox rect_box{
+			// 	{200, 400}, {-100, -200}, {{500, 200}, 33}
+			// };
+			//
 			autoParam << Graphic::Draw::WhiteRegion;
-
-			Geom::Vec2 p1{30, 30};
-			Geom::Vec2 p2{Test::getMouseToWorld()};
-			Geom::Vec2 normal{10, 0};
-
+			//
+			// // Geom::Vec2 p1{30, 30};
+			// Geom::Vec2 p2{Test::getMouseToWorld()};
+			// // Geom::Vec2 normal{10, 0};
+			//
 			Drawer::Line::square(autoParam, 2.f, {mainCamera->getPosition(), 45.f}, 24, lightColor);
+			// Drawer::Line::circularPoly_fixed<4>(autoParam, 6.f, rect_box, lightColor);
+			//
+			// Drawer::rectOrtho(++autoParam, (rect_box.v0 + rect_box.v2) / 2, 6.f, lightColor);
+			// auto normal = Geom::avgEdgeNormal(p2, rect_box).setLength(30);
 
 
-			Drawer::Line::line(++autoParam, 2.f, {}, p1, lightColor, lightColor);
+			// Drawer::Line::line(++autoParam, 2.f, {}, p1, lightColor, lightColor);
 			// Drawer::Line::line(++autoParam, 2.f, {}, p2, lightColor, lightColor);
-			Drawer::Line::line(++autoParam, 2.f, p1, p2, lightColor, lightColor);
-			Drawer::Line::line(++autoParam, 2.f, p1, p1 + normal, lightColor, lightColor);
-			Drawer::Line::line(++autoParam, 2.f, p1, p1 + Geom::Vec::normalTo(p1 - p2, normal), lightColor, lightColor);
+			// Drawer::Line::line(++autoParam, 2.f, p1, p2, lightColor, lightColor);
+			// Drawer::Line::line(++autoParam, 3.f, p2, p2 + normal, lightColor, lightColor);
+			// Drawer::Line::line(++autoParam, 2.f, p1, p1 + Geom::Vec::normalTo(p1 - p2, normal), lightColor, lightColor);
 
 			Test::GamePart::world.quadTree.each([&](const Geom::quad_tree<Game::RealEntity>& node){
 				if(mainCamera->getViewport().overlap_Exclusive(node.get_boundary())){
@@ -303,7 +321,7 @@ int main(){
 				for(Game::RealEntity* item : node.get_items()){
 					if(mainCamera->getViewport().overlap_Exclusive(item->getBound())){
 						auto color = Graphic::Colors::CLEAR;
-						if(!item->collisionContext.collisions.empty()){
+						if(!item->manifold.collisions.empty()){
 							color.appendLightColor(Graphic::Colors::RED_DUSK);
 						}else{
 							color.appendLightColor(Graphic::Colors::PALE_GREEN);
@@ -315,16 +333,21 @@ int main(){
 
 						}
 
-						// Drawer::Line::circularPoly_fixed<4>(autoParam, 4.f, item->hitbox.getWrapBox(), color);
-						// Drawer::Line::rectOrtho(autoParam, 2.f, item->hitbox.getMinWrapBound(), color);
-						// Drawer::Line::line(++autoParam, 2.f, item->motion.trans.vec, node.get_boundary().getCenter(), color, Graphic::Colors::ROYAL.copy().toLightColor());
+						// Drawer::Line::circularPoly_fixed<4>(autoParam, 6.f, item->hitbox.getWrapBox(), color);
+						// Drawer::Line::rectOrtho(autoParam, 4.f, item->hitbox.getMinWrapBound(), color);
+						// Drawer::Line::rectOrtho(autoParam, 2.f, item->hitbox.getMaxWrapBound(), color);
+						// Drawer::Line::line(++autoParam, 2.f, item->hitbox.trans.vec, item->hitbox.trans.vec + item->hitbox.getBackTraceUnitMove(), color, Graphic::Colors::ROYAL.copy().toLightColor());
 					}
 				}
 			});
-
-			Global::rendererWorld->batch.consumeAll();
-			Global::rendererWorld->doPostProcess();
 		}
+
+		upt = std::async([]{
+			Test::GamePart::postUpdate(timer.updateDeltaTick());
+		});
+
+		Global::rendererWorld->batch.consumeAll();
+		Global::rendererWorld->doPostProcess();
 
 		// Global::UI::root->draw();
 
@@ -359,7 +382,8 @@ int main(){
 
 		// Global::UI::renderer->blit();
 
-		Font::TypeSettings::draw(Global::UI::renderer->batch, fps, {200 + timer.getGlobalTime() * 5.f, 200});
+		Font::TypeSettings::draw(Global::UI::renderer->batch, fps, {200, 200});
+		Font::TypeSettings::draw(Global::UI::renderer->batch, count, {200, 300});
 
 		Global::UI::renderer->batch.consumeAll();
 		Global::UI::renderer->blit();
@@ -370,6 +394,7 @@ int main(){
 		vulkanManager->blitToScreen();
 	}
 
+	Test::GamePart::printTestPerformance();
 
 	vkDeviceWaitIdle(vulkanManager->context.device);
 

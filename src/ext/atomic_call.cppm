@@ -28,7 +28,7 @@ export namespace ext{
 		}
 
 		[[nodiscard]] return_type wait_and_get() const noexcept{
-			value_lk.wait(true, std::memory_order::acquire);
+			value_lk.wait(true, std::memory_order::relaxed);
 
 			return expected;
 		}

@@ -102,7 +102,7 @@ export namespace Game {
 				pending.clear();
 			}
 
-			void consume(Core::Tick deltaTick){
+			void consume(float deltaTick){
 				ext::algo::erase_if_unstable(actives, [deltaTick](DelayAction& action){
 					return action.update(deltaTick);
 				});
@@ -150,7 +150,7 @@ export namespace Game {
 			{
 				ActionGroup& group = taskGroup[std::to_underlying(ActionPriority::unignorable)];
 				group.dump();
-				group.consume(Core::Tick{std::numeric_limits<float>::infinity()});
+				group.consume(std::numeric_limits<float>::infinity());
 			}
 
 			for(std::size_t i = std::to_underlying(ActionPriority::unignorable); i <= std::to_underlying(lowestPriority); ++i){

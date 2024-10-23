@@ -1,3 +1,7 @@
+module;
+
+#include <cassert>
+
 export module Math.Angle;
 
 import std;
@@ -41,7 +45,7 @@ namespace Math{
 			return a > HALF_VAL ? a - HALF_VAL * 2.f : a;
 		}
 
-		CONSTEXPR void clamp() noexcept{
+		CONSTEXPR void clampInternal() noexcept{
 			deg = getAngleInPi(deg);
 		}
 
@@ -57,12 +61,24 @@ namespace Math{
 		[[nodiscard]] constexpr Angle() noexcept = default;
 
 		[[nodiscard]] CONSTEXPR Angle(FromRadiansTag, const value_type deg) noexcept : deg(deg * RadToDeg){
-			clamp();
+			clampInternal();
 		}
 
 		[[nodiscard]] CONSTEXPR explicit(false) Angle(const value_type deg) noexcept : deg(deg){
-			clamp();
+			clampInternal();
 		}
+
+		constexpr void clamp(const value_type min, const value_type max) noexcept{
+			deg = std::clamp(deg, min, max);
+		}
+
+		constexpr void clamp(const value_type maxabs) noexcept{
+			assert(maxabs >= 0.f);
+			deg = std::clamp(deg, -maxabs, maxabs);
+		}
+
+		constexpr friend bool operator==(const Angle& lhs, const Angle& rhs) noexcept = default;
+		constexpr auto operator<=>(const Angle&) const noexcept = default;
 
 		constexpr Angle operator-() const noexcept{
 			Angle rst{*this};
@@ -88,14 +104,14 @@ namespace Math{
 
 		CONSTEXPR Angle& operator*=(const value_type val) noexcept{
 			deg *= val;
-			clamp();
+			clampInternal();
 
 			return *this;
 		}
 
 		CONSTEXPR Angle& operator/=(const value_type val) noexcept{
 			deg /= val;
-			clamp();
+			clampInternal();
 
 			return *this;
 		}

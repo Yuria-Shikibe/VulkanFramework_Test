@@ -1,3 +1,7 @@
+module;
+
+#include <cassert>
+
 export module Math;
 
 import std;
@@ -359,11 +363,7 @@ export namespace Math {
 
 	template <ext::number T>
 	T clampRange(const T v, const T absMax) noexcept(!DEBUG_CHECK){
-#ifdef _DEBUG
-		if(absMax < 0) {
-			throw std::invalid_argument{"arg absMax is Negative"};
-		}
-#endif
+		assert(absMax >= 0);
 
 		if(std::abs(v) > absMax){
 			return std::copysign(absMax, v);
@@ -721,7 +721,7 @@ export namespace Math {
 		return dst(x2 - x1, y2 - y1);
 	}
 
-	inline float dst2(const float x1, const float y1, const float x2, const float y2) noexcept {
+	constexpr float dst2(const float x1, const float y1, const float x2, const float y2) noexcept {
 		const float xd = x2 - x1;
 		const float yd = y2 - y1;
 		return xd * xd + yd * yd;

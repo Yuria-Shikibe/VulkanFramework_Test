@@ -30,15 +30,12 @@ namespace Game{
 	{
 	public:
 
-		struct CollisionTestContext{
+		struct Manifold{
+
+
 			struct Collision{ // NOLINT(*-pro-type-member-init)
 				const RealEntity* other;
-				const CollisionData* data;
-
-				[[nodiscard]] bool isExpired() const noexcept{
-					assert(data != nullptr);
-					return data->expired;
-				}
+				CollisionData data;
 			};
 
 			struct Intersection{
@@ -52,8 +49,9 @@ namespace Game{
 				const RealEntity* other{};
 				Geom::Vec2 correctionVec{};
 				Intersection mainIntersection{};
-				std::vector<Intersection> intersections{};
 			};
+
+			bool underCorrection{};
 
 			std::vector<const RealEntity*> lastCollided{};
 
@@ -65,32 +63,56 @@ namespace Game{
 				return !collisions.empty();
 			}
 
-			void push(const RealEntity* other, const CollisionData* data){
-				collisions.emplace_back(other, data);
-			}
+			// void push(const RealEntity* other, const CollisionData* data){
+			// 	collisions.emplace_back(other, data);
+			// }
 
 			[[jetbrains::has_side_effects]]
-			bool filter() noexcept{
-				std::erase_if(collisions, [](const Collision& c){
-					//OPTM why it becomes empty???
-					return c.isExpired() || c.data->empty();
+			bool filter(const unsigned backtraceIndex) noexcept{
+				std::erase_if(collisions, [backtraceIndex](const Collision& c){
+					return c.data.transition > backtraceIndex;
 				});
 
 				return collided();
 			}
 
+			void markLast(){
+				for (const auto & data : postData){
+					if(auto itr = std::ranges::find(lastCollided, data.other); itr != lastCollided.end()){
+						//notify itr entering collision
+
+						lastCollided.erase(itr);
+					}
+				}
+
+				for (const auto & data : lastCollided){
+					//notify data exiting collision
+				}
+
+				lastCollided = {std::from_range, postData | std::views::transform(&Manifold::CollisionPostData::other)};
+
+			}
+
 			void processIntersections(RealEntity& subject) noexcept;
+
+			void clear(){
+				std::destroy_at(this);
+				std::construct_at(this);
+			}
 		};
 
 		MechMotionProp motion{};
 		RigidProp rigidProp{};
 	protected:
-		Geom::Vec2 collisionTestTempVel{};
+		Geom::Transform collisionTestTempVel{};
 		Geom::Vec2 collisionTestTempPos{};
 
 	public:
+		Geom::Vec2 last{};
+
+	public:
 		Hitbox hitbox{};
-		CollisionTestContext collisionContext{};
+		Manifold manifold{};
 
 		const Faction* faction{};
 
@@ -101,24 +123,28 @@ namespace Game{
 		// Collision Test Methods BEGIN
 		// ---------------------------------------------------------------------
 
-		[[nodiscard]] bool postProcessCollisions_0() noexcept{
+		auto postProcessCollisions_0() noexcept{
 			//TODO is this necessary?
-			auto backTrace = hitbox.getBackTraceMove();
-			// std::println("unit {}", hitbox.getBackTraceUnitMove());
-			// std::println("trace {}", backTrace);
+			bool rst = manifold.filter(hitbox.getBackTraceIndex());
 
-			motion.trans.vec += backTrace;
-			hitbox.trans.vec = motion.trans.vec;
-			motion.check();
-			return collisionContext.filter();
-		}
+			if(rst){
+				if(!manifold.underCorrection){
+					const auto backTrace = hitbox.getBackTraceMove();
 
-		void clearCollisionData() const noexcept{
-			hitbox.clearCollided();
+					motion.trans.vec += backTrace;
+					hitbox.trans.vec = motion.trans.vec;
+				}
+			}else{
+				manifold.underCorrection = false;
+			}
+
+
+
+			return rst;
 		}
 
 		void postProcessCollisions_1() noexcept{
-			collisionContext.processIntersections(*this);
+			manifold.processIntersections(*this);
 		}
 
 		void postProcessCollisions_2() noexcept;
@@ -143,7 +169,7 @@ namespace Game{
 			motion.applyAndReset(deltaTick);
 
 			motion.vel.vec.lerp({}, 0.05f * deltaTick);
-			motion.vel.rot /= 1.125f;
+			motion.vel.rot /= 1.0125f;
 
 			hitbox.updateHitboxWithCCD(motion.trans);
 		}
@@ -169,31 +195,27 @@ namespace Game{
 			if(std::abs(zLayer - object.zLayer) > zThickness + object.zThickness)return false;
 
 			if(ignoreCollisionBetween(*this))return false;
+			// if(std::ranges::contains(collisionContext.lastCollided, &object))return false;
 
 			return hitbox.collideWithRough(object.hitbox);
 		}
 
 		// ReSharper disable once CppHidingFunction
 		[[nodiscard]] bool exactIntersectWith(const RealEntity& object) const noexcept{
-			const auto data = hitbox.collideWithExact(object.hitbox);
-
-			if(data && !data->indices.empty()){
-				return true;
-			}
-
-			return false;
-
+			return hitbox.collideWithExact(object.hitbox, {}, false);
 		}
 
 
 		// ReSharper disable once CppHidingFunction
-		void testIntersectionWith(const RealEntity& object){
-			const auto* data = hitbox.collideWithExact(object.hitbox, true, true);
-
-			if(data && !data->indices.empty()){
-				auto t = data->indices.top();
-				collisionContext.push(&object, data);
-			}
+		bool testIntersectionWith(const RealEntity& object){
+			return hitbox.collideWithExact(object.hitbox, [this, &object](const unsigned index) {
+				return &manifold.collisions.emplace_back(&object, CollisionData{index}).data;
+			}, false);
+			//
+			// if(data && !data->indices.empty()){
+			// 	auto t = data->indices.top();
+			// 	collisionContext.push(&object, data);
+			// }
 		}
 
 	public:
@@ -205,99 +227,120 @@ namespace Game{
 
 	private:
 		[[nodiscard]] constexpr Geom::Vec2 collideVelAt(const Geom::Vec2 dst) const {
-			return collisionTestTempVel + dst.cross(motion.vel.rot * Math::DEGREES_TO_RADIANS);
+			return motion.vel.vec - dst.cross(Math::clampRange(static_cast<float>(motion.vel.rot) * Math::DEGREES_TO_RADIANS, 15.f));
 		}
 
 	public:
 
 		virtual void calCollideTo(
-			const RealEntity* object,
-			CollisionTestContext::Intersection intersection,
+			const RealEntity& object,
+			Manifold::Intersection intersection,
 			const float energyScale,
 			UpdateTick deltaTick
 		) {
+			assert(&object != this);
 			//Pull in to correct calculation
 
 			// if(object->isOverrideCollisionTo(this)) {
 			// 	const_cast<Game::RealityEntity*>(object)->overrideCollisionTo(this, data.intersection);
 			// 	return;
 			// }
+			// if(std::ranges::contains(collisionContext.lastCollided, &object))return;
 
 			using Geom::Vec2;
 
 			//Origin Point To Hit Point
-			const Vec2 dstToSubject = (intersection.pos - motion.trans.vec).limitMin(10);
-			const Vec2 dstToObject  = (intersection.pos - object->motion.trans.vec).limitMin(10);
+			const Vec2 dstToSubject = (intersection.pos - motion.trans.vec);
+			const Vec2 dstToObject  = (intersection.pos - object.motion.trans.vec);
 
 			const Vec2 subjectVel = collideVelAt(dstToSubject);
-			const Vec2 objectVel = object->collideVelAt(dstToObject);
+			const Vec2 objectVel = object.collideVelAt(dstToObject);
 
 			const Vec2 relVel = (objectVel - subjectVel) * energyScale;
 
+			const Vec2 approach = intersection.normal;//motion.pos() - object.motion.pos();
+
+			Vec2 correctionVec{};
+
+			bool contains = std::ranges::contains(manifold.lastCollided, &object);
+
+			// if(contains && approach.dot(relVel) > 0.f){
+			// 	return;
+			// }
+
+			//TODO correction
 			//TODO overlap quit process
-			if(relVel.isZero())return;
+			if(relVel.length2() > Math::sqr(2)){
+				const Vec2 collisionNormalVec = intersection.normal;
 
-			const Vec2 collisionNormalVec =
-				intersection.normal;
-				// object->hitbox.getNormalAt(intersection.pos, intersection.index.object).normalize();
+				const float scaledMass = 1 / rigidProp.inertialMass + 1 / object.rigidProp.inertialMass;
+				const float subjectRotationalInertia = this->getRotationalInertia();
+				const float objectRotationalInertia = object.getRotationalInertia();
 
-			Vec2 collisionTangentVec = collisionNormalVec.copy().rotateRT_counterClockwise();
-			if(collisionTangentVec.dot(relVel) < 0)collisionTangentVec.reverse();
+				const Vec2 vertHitVel{relVel.copy().project_nonNormalized(collisionNormalVec)};
+				const Vec2 horiHitVel{(relVel - vertHitVel)};
 
-			const float scaledMass = 1 / rigidProp.inertialMass + 1 / object->rigidProp.inertialMass;
+				const Vec2 collisionTangentVec = horiHitVel.copy().normalize();
 
-			//TODO cache this?
-			const float subjectRotationalInertia = this->getRotationalInertia();
-			const float objectRotationalInertia = object->getRotationalInertia();
+				const Vec2 impulseNormal = vertHitVel * (1 + std::min(rigidProp.restitution, object.rigidProp.restitution)) /
+				(scaledMass +
+					Math::sqr(dstToObject.cross(collisionNormalVec)) / objectRotationalInertia +
+					Math::sqr(dstToSubject.cross(collisionNormalVec)) / subjectRotationalInertia
+				);
 
-			const Vec2 vertHitVel{relVel.copy().project_nonNormalized(collisionNormalVec)};
-			const Vec2 horiHitVel{(relVel - vertHitVel)};
+				Vec2 impulseTangent = horiHitVel *
+					horiHitVel.length() /
+					(scaledMass +
+						Math::sqr(dstToObject.cross(collisionTangentVec)) / objectRotationalInertia +
+						Math::sqr(dstToSubject.cross(collisionTangentVec)) / subjectRotationalInertia);
 
-			Vec2 impulseNormal{vertHitVel};
-			impulseNormal *= (1 + (rigidProp.restitution - object->rigidProp.restitution)) /
-			(scaledMass +
-				Math::sqr(dstToObject.cross(collisionNormalVec)) / objectRotationalInertia +
-				Math::sqr(dstToSubject.cross(collisionNormalVec)) / subjectRotationalInertia
-			);
+				impulseTangent.limitMax(std::sqrt(rigidProp.frictionCoefficient * object.rigidProp.frictionCoefficient) * impulseNormal.length());
 
-			const Vec2 impulseTangent = horiHitVel.sign().cross(std::min(
-				(rigidProp.frictionCoefficient + object->rigidProp.frictionCoefficient) * impulseNormal.length(), //u * Fn
-				horiHitVel.length() /
-			(scaledMass +
-				Math::sqr(dstToObject.cross(collisionTangentVec)) / objectRotationalInertia +
-				Math::sqr(dstToSubject.cross(collisionTangentVec)) / subjectRotationalInertia)
-			));
+				Vec2 impulse = impulseNormal + impulseTangent;
 
-			Vec2 additional = collisionNormalVec * impulseNormal.length() + collisionTangentVec * impulseTangent.length();
+				last = impulse;
 
-			// additional.limit2(relVel.length2());
+				collisionTestTempVel.vec += impulse / rigidProp.inertialMass;
+				collisionTestTempVel.rot += dstToSubject.cross(impulse) / subjectRotationalInertia * Math::RADIANS_TO_DEGREES * 0.75f;
 
-			if(std::ranges::contains(collisionContext.lastCollided, object)){
-				std::println(std::cerr, "duplicated collided");
-
-
-			}else{
-				motion.accel.vec += additional / rigidProp.inertialMass;
-				motion.accel.rot += dstToSubject.cross(additional) / subjectRotationalInertia * Math::RADIANS_TO_DEGREES;
-				motion.vel += motion.accel * deltaTick;
+				correctionVec = impulse;
 			}
 
-			// ----- correction -----
+			// if(contains && approach.dot(motion.vel.vec) > 0.f){
+			// 	correctionVec *= .35f;
+			// }
+
+			correction:
 
 			// collision correction
-			if(hitbox.components[intersection.index.subject].box.contains(intersection.pos)){
-				//hit correction, yes this makes no sense
-				// additional.reverse();//.scl(.35f);
-				auto approach = object->motion.pos() - motion.pos();
-				bool b = collisionTestTempVel.length() * rigidProp.inertialMass < object->collisionTestTempVel.length() * object->rigidProp.inertialMass;
-				if(b) {
-					auto correction = additional * .35f;//.copy().setLength2(hitbox.estimateMaxLength2());
-					if(correction.dot(approach) > 0){
-						correction.reverse();
-					}
-					collisionTestTempPos.add(correction.scl(0.005f));
-					motion.vel.vec.add(correction.scl(0.5f));
+			if(contains && rigidProp.inertialMass <= object.rigidProp.inertialMass){
+				// if(rigidProp.inertialMass == object.rigidProp.inertialMass){
+				// 	if(std::less{}(this, &object))return;
+				// }
+
+				auto unitLength = correctionVec;
+
+				if(unitLength.equalsTo(Geom::ZERO) || unitLength.dot(approach) < .0f){
+					unitLength = approach.copy().setLength(4);
+				}else{
+					unitLength.limitClamp(3, 12);
 				}
+
+				auto sbjBox = static_cast<Geom::RectBoxBrief>(hitbox.components[intersection.index.subject].box);
+				const auto& objBox = object.hitbox.components[intersection.index.object].box;
+
+				sbjBox.move(motion.vel.vec * deltaTick);
+				Geom::Vec2 begin{sbjBox.v0};
+
+				while(sbjBox.overlapRough(objBox) && sbjBox.overlapExact(objBox)){
+					sbjBox.move(unitLength);
+				}
+
+				unitLength.setLength(4.);
+				collisionTestTempVel.vec += unitLength / 2;
+				collisionTestTempPos += sbjBox.v0 - begin + unitLength;
+
+				manifold.underCorrection = true;
 			}
 
 			// if(motion.vel.vec.dot(relVel) > 0){

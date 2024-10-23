@@ -1,5 +1,6 @@
 module;
 
+#include "../src/arc/math/simd.hpp"
 #include "../src/ext/adapted_attributes.hpp"
 
 export module Geom.Shape.RectBox;
@@ -31,7 +32,7 @@ export namespace Geom {
 		Vec2 v2{};
 		Vec2 v3{};
 
-	// protected:
+	protected:
 		/**
 		 * \brief Exported Vert [bottom-left, bottom-right, top-right, top-left], dynamic calculated
 		 */
@@ -65,21 +66,46 @@ export namespace Geom {
 			}
 		}
 
-		constexpr void copyAndMove(const Vec2 trans, const QuadBox& other) noexcept{
+		SIMD_DISABLED_CONSTEXPR void copyAndMove(const Vec2 trans, const QuadBox& other) noexcept{
 			this->operator=(other);
 			move(trans);
 		}
 
-		constexpr void move(const Vec2 vec2) noexcept{
+		SIMD_DISABLED_CONSTEXPR void move(const Vec2 vec2) noexcept{
+#if SIMD_ENABLED
+			// Load vec2 into a SIMD register
+			const __m128 vec2Simd = _mm_set_ps(vec2.x, vec2.y, vec2.x, vec2.y);
+
+			// Load v0, v1, v2, and v3 into SIMD registers
+			__m128 v0Simd = _mm_loadu_ps(reinterpret_cast<const float*>(&v0));
+			__m128 v1Simd = _mm_loadu_ps(reinterpret_cast<const float*>(&v1));
+			__m128 v2Simd = _mm_loadu_ps(reinterpret_cast<const float*>(&v2));
+			__m128 v3Simd = _mm_loadu_ps(reinterpret_cast<const float*>(&v3));
+
+			// Perform the move operation
+			v0Simd = _mm_add_ps(v0Simd, vec2Simd);
+			v1Simd = _mm_add_ps(v1Simd, vec2Simd);
+			v2Simd = _mm_add_ps(v2Simd, vec2Simd);
+			v3Simd = _mm_add_ps(v3Simd, vec2Simd);
+
+			// Store the results back to v0, v1, v2, and v3
+			_mm_storeu_ps(reinterpret_cast<float*>(&v0), v0Simd);
+			_mm_storeu_ps(reinterpret_cast<float*>(&v1), v1Simd);
+			_mm_storeu_ps(reinterpret_cast<float*>(&v2), v2Simd);
+			_mm_storeu_ps(reinterpret_cast<float*>(&v3), v3Simd);
+
+#else
+
 			v0 += vec2;
 			v1 += vec2;
 			v2 += vec2;
 			v3 += vec2;
+#endif
 
 			maxOrthoBound.src += vec2;
 		}
 
-		constexpr void move(const Vec2 vec2, const float scl) noexcept{
+		SIMD_DISABLED_CONSTEXPR void move(const Vec2 vec2, const float scl) noexcept{
 			move(vec2 * scl);
 		}
 
@@ -106,7 +132,7 @@ export namespace Geom {
 				&& lhs.v3 == rhs.v3;
 		}
 
-		[[nodiscard]] constexpr bool overlapExact(const QuadBox& other,
+		[[nodiscard]] SIMD_DISABLED_CONSTEXPR bool overlapExact(const QuadBox& other,
 			const Vec2 axis_1, const Vec2 axis_2,
 			const Vec2 axis_3, const Vec2 axis_4
 		) const noexcept{
@@ -125,7 +151,7 @@ export namespace Geom {
 				maxOrthoBound.overlap_Exclusive(other);
 		}
 
-		[[nodiscard]] constexpr bool overlapExact(const OrthoRectFloat other) const noexcept{
+		[[nodiscard]] SIMD_DISABLED_CONSTEXPR bool overlapExact(const OrthoRectFloat other) const noexcept{
 			return overlapExact(QuadBox{other},
 				Geom::norXVec2<float>,
 				Geom::norYVec2<float>,
@@ -153,20 +179,43 @@ export namespace Geom {
 			return oddNodes;
 		}
 
-		[[nodiscard]] constexpr Vec2 getNormalVec(const int edgeIndex) const noexcept{
+		[[nodiscard]] Vec2 getNormalVec(const int edgeIndex) const noexcept{
 			const auto begin = this->operator[](edgeIndex);
 			const auto end   = this->operator[]((edgeIndex + 1) % 4);
 
-			return (begin - end).rotateRT();
+			return (begin - end).normalize().rotateRT();
 		}
 
 
 	protected:
-		[[nodiscard]] constexpr bool axisOverlap(const QuadBox& other, const Vec2 axis) const noexcept{
-			auto [min1, max1] = Math::minmax(v0.dot(axis), v1.dot(axis), v2.dot(axis), v3.dot(axis));
-			auto [min2, max2] = Math::minmax(other.v0.dot(axis), other.v1.dot(axis), other.v2.dot(axis), other.v3.dot(axis));
+		[[nodiscard]] SIMD_DISABLED_CONSTEXPR bool axisOverlap(const QuadBox& other, const Vec2 axis) const noexcept{
+#if SIMD_ENABLED
+			const __m128 vertices1_x = _mm_set_ps(v0.x, v1.x, v2.x, v3.x);
+			const __m128 vertices1_y = _mm_set_ps(v0.y, v1.y, v2.y, v3.y);
+			const __m128 vertices2_x = _mm_set_ps(other.v0.x, other.v1.x, other.v2.x, other.v3.x);
+			const __m128 vertices2_y = _mm_set_ps(other.v0.y, other.v1.y, other.v2.y, other.v3.y);
+
+			const __m128 axis_x = _mm_set1_ps(axis.x);
+			const __m128 axis_y = _mm_set1_ps(axis.y);
+
+			const __m128 dot1 = _mm_add_ps(_mm_mul_ps(vertices1_x, axis_x), _mm_mul_ps(vertices1_y, axis_y));
+			const __m128 dot2 = _mm_add_ps(_mm_mul_ps(vertices2_x, axis_x), _mm_mul_ps(vertices2_y, axis_y));
+
+			std::array<float, 4> dot1_array{};
+			std::array<float, 4> dot2_array{};
+			_mm_storeu_ps(dot1_array.data(), dot1);
+			_mm_storeu_ps(dot2_array.data(), dot2);
+
+			auto [min1, max1] = Math::minmax(dot1_array[0], dot1_array[1], dot1_array[2], dot1_array[3]);
+			auto [min2, max2] = Math::minmax(dot2_array[0], dot2_array[1], dot2_array[2], dot2_array[3]);
 
 			return max1 >= min2 && max2 >= min1;
+#else
+			auto [min1, max1] = Math::minmax(v0.dot(axis), v1.dot(axis), v2.dot(axis), v3.dot(axis));
+			auto [min2, max2] = Math::minmax(other.v0.dot(axis), other.v1.dot(axis), other.v2.dot(axis), other.v3.dot(axis));
+			return max1 >= min2 && max2 >= min1;
+#endif
+
 		}
 	};
 
@@ -213,8 +262,8 @@ export namespace Geom {
 		}
 
 		constexpr void updateNormal() noexcept{
-			normalU = v0 - v3;
-			normalV = v1 - v2;
+			normalU = (v0 - v3)/*.normalize()*/;
+			normalV = (v1 - v2)/*.normalize()*/;
 		}
 
 		[[nodiscard]] constexpr Vec2 getNormalU() const noexcept{
@@ -225,13 +274,13 @@ export namespace Geom {
 			return normalV;
 		}
 
-		[[nodiscard]] constexpr bool overlapExact(const RectBoxBrief& other) const {
+		[[nodiscard]] SIMD_DISABLED_CONSTEXPR bool overlapExact(const RectBoxBrief& other) const {
 			return
 				axisOverlap(other, normalU) && axisOverlap(other, normalV) &&
 				axisOverlap(other, other.normalU) && axisOverlap(other, other.normalV);
 		}
 
-		[[nodiscard]] constexpr bool overlapExact(const QuadBox& other, const Vec2 normalU, const Vec2 normalV) const {
+		[[nodiscard]] SIMD_DISABLED_CONSTEXPR bool overlapExact(const QuadBox& other, const Vec2 normalU, const Vec2 normalV) const {
 			return
 				axisOverlap(other, this->normalU) && axisOverlap(other, this->normalV) &&
 				axisOverlap(other, normalU) && axisOverlap(other, normalV);
@@ -320,18 +369,25 @@ export namespace Geom {
 
 		constexpr void update(const Vec2 pos, const float rot) noexcept{
 			transform.vec = pos;
-			transform.rot = rot;
 
-			const float cos = Math::cosDeg(transform.rot);
-			const float sin = Math::sinDeg(transform.rot);
+
+			const float cos = Math::cosDeg(rot);
+			const float sin = Math::sinDeg(rot);
 
 			v0.set(offset).rotate(cos, sin);
 			v1.set(size.x, 0).rotate(cos, sin);
 			v3.set(0, size.y).rotate(cos, sin);
 			v2 = v1 + v3;
 
-			normalU = v3;
-			normalV = v1;
+			if(transform.rot != rot){
+				normalU = v3;
+				normalV = v1;
+				// normalU.normalize();
+				// normalV.normalize();
+
+				transform.rot = rot;
+			}
+
 
 			v0 += transform.vec;
 			v1 += v0;

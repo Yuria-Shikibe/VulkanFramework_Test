@@ -43,22 +43,23 @@ namespace Game{
 
 		Geom::quad_tree<RealEntity> quadTree{};
 
+
 		void draw(Geom::OrthoRectFloat viewport) const;
 
 		template <InvocableEntityInitFunc Fn>
-		void add(Fn fn){
+		auto& add(Fn fn){
 			using EntityType = typename EntityInitFuncTraits<Fn>::EntityType;
 			std::shared_ptr<EntityType> entity{createEntityPtr<EntityType>()};
 
 			std::invoke(fn, *entity);
 
-			this->pendEntityPtr<EntityType>(std::move(entity));
+			return this->pendEntityPtr<EntityType>(std::move(entity));
 		}
 
 		template <std::derived_from<Entity> Ty>
-		void add(){
+		Ty& add(){
 			std::shared_ptr<Ty> entity{createEntityPtr<Ty>()};
-			this->pendEntityPtr<Ty>(std::move(entity));
+			return this->pendEntityPtr<Ty>(std::move(entity));
 		}
 
 		void updateQuadTree();
@@ -78,12 +79,16 @@ namespace Game{
 		}
 
 		template <std::derived_from<Entity> Ty>
-		void pendEntityPtr(std::shared_ptr<Ty>&& entity){
+		Ty& pendEntityPtr(std::shared_ptr<Ty>&& entity){
+			Ty& e = entity.operator*();
+
 			if constexpr (std::derived_from<Ty, RealEntity>){
 				realEntities.pend(entity);
 			}
 
 			all.pend(std::move(entity));
+
+			return e;
 		}
 
 		template <typename T>

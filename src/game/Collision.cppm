@@ -26,7 +26,7 @@ constexpr std::memory_order drop_release(const std::memory_order m) noexcept{
 }
 
 template <typename T>
-T atomic_fetch_min_explicit(std::atomic<T>* pv, typename std::atomic<T>::value_type v, std::memory_order m) noexcept{
+T atomic_fetch_min_explicit(std::atomic<T>* pv, typename std::atomic<T>::value_type v, const std::memory_order m) noexcept{
 	auto const mr = drop_release(m);
 	auto t = (mr != m) ? pv->fetch_add(0, m) : pv->load(mr);
 	while(std::min(v, t) != t){
@@ -41,7 +41,7 @@ namespace Game{
 	/**
 	 * \brief Used of CCD precision, the larger - the slower and more accurate
 	 */
-	constexpr float ContinuousTestScl = 1.25f;
+	constexpr float ContinuousTestScl = 1.33f;
 
 	export
 	struct CollisionIndex{
@@ -53,14 +53,13 @@ namespace Game{
 	struct CollisionData{
 		//TODO provide posterior check?
 		//TODO set expired by set transition to an invalid index or clear indices instead of using a bool flag?
-		bool expired{};
-		Index backtraceIndex{};
+		Index transition{};
 		ext::array_stack<CollisionIndex, 4> indices{};
 
 		[[nodiscard]] CollisionData() = default;
 
 		[[nodiscard]] CollisionData(const Index transition)
-			: backtraceIndex(transition){
+			: transition(transition){
 		}
 
 		[[nodiscard]] constexpr bool empty() const noexcept{
@@ -81,19 +80,34 @@ namespace Game{
 		std::vector<HitBoxComponent> hitBoxGroup{};
 	};
 
+	union HitboxSpan{
+		std::span<Geom::RectBoxBrief> temporary;
+		std::span<const HitBoxComponent> components{};
+	};
+
+	export
+	template <typename T>
+	concept CollisionCollector = requires(T t){
+		requires std::is_invocable_r_v<CollisionData*, T, Index>;
+	};
+
+	struct CollisionNoCollect{
+		constexpr CollisionData* operator()(Index) const noexcept{
+			assert(false);
+			return nullptr;
+		}
+	};
+
+
 	export
 	class Hitbox{
 		/** @brief CCD-traces size.*/
-		Index size_CCD{};
-
-		//TODO make this always 1 less than size ? (make it index clamp instead of size clamp?)
+		Index size_CCD{1};
 		/** @brief CCD-traces clamp size. shrink only!*/
 		mutable std::atomic<Index> indexClamped_CCD{};
 
 		/** @brief CCD-traces spacing*/
 		Geom::Vec2 backtraceUnitMove{};
-
-		mutable std::deque<CollisionData> collided{};
 
 		//wrap box
 		Geom::RectBoxBrief wrapBound_CCD{};
@@ -104,6 +118,8 @@ namespace Game{
 		Geom::Transform trans{};
 
 		void updateHitbox(const Geom::Transform translation){
+			assert(!components.empty());
+
 			this->trans = translation;
 
 			const auto displayment = backtraceUnitMove * static_cast<float>(size_CCD);
@@ -159,8 +175,8 @@ namespace Game{
 			// const auto lastTrans = trans;
 			const auto move = translation.vec - this->trans.vec;
 
-			updateHitbox(translation);
 			genContinuousRectBox(move);
+			updateHitbox(translation);
 		}
 
 		void move(const Geom::Vec2 move){
@@ -184,27 +200,29 @@ namespace Game{
 			Geom::Vec2 move
 		){
 			const float size2 = estimateMaxLength2();
-			if(size2 < 0.025f) return;
+			if(size2 < 0.025f){
+				return;
+			}
 
 			const float dst2 = move.length2();
 
-			const Index seg = Math::round<Index>(std::sqrtf(dst2 / size2) * ContinuousTestScl) + 1;
-			assert(seg < 10000);
+			const Index seg = Math::min(Math::round<Index>(std::sqrtf(dst2 / size2) * ContinuousTestScl), 64u);
 
-			move /= static_cast<float>(seg);
-			assert(!backtraceUnitMove.isNaN());
+			if(seg > 0){
+				move /= static_cast<float>(seg);
+				backtraceUnitMove = -move;
+			}else{
+				backtraceUnitMove = {};
+			}
+
+			// std::println(std::cerr, "{}", seg);
 
 			size_CCD = seg + 1;
-			indexClamped_CCD = seg;
-			backtraceUnitMove = -move;
+			indexClamped_CCD.store(seg, std::memory_order::release);
 		}
 
 		void clampCCD(const Index index) const noexcept{
-			atomic_fetch_min_explicit(&indexClamped_CCD, index, std::memory_order_seq_cst);
-		}
-
-		[[nodiscard]] Index getClampedSizeCCD() const noexcept{
-			return indexClamped_CCD.load();
+			atomic_fetch_min_explicit(&indexClamped_CCD, index, std::memory_order::acq_rel);
 		}
 
 	public:
@@ -231,16 +249,8 @@ namespace Game{
 			return components.size();
 		}
 
-		void checkAllCollided() const noexcept{
-			for(auto& checked_collision_data : collided){
-				if(checked_collision_data.backtraceIndex > getClampedSizeCCD()){
-					checked_collision_data.expired = true;
-				}
-			}
-		}
-
-		void clearCollided() const noexcept{
-			collided.clear();
+		[[nodiscard]] Index getBackTraceIndex() const noexcept{
+			return indexClamped_CCD.load(std::memory_order::acquire);
 		}
 
 		/**
@@ -250,17 +260,22 @@ namespace Game{
 		 * |    End              Initial
 		 * |   State              State
 		 * @endcode
-		 * @param transIndex [0, @link getClampedSizeCCD() @endlink)
+		 * @param transIndex [0, @link getClampedIndexCCD() @endlink)
 		 * @return Translation
 		 */
-		[[nodiscard]] constexpr Geom::Vec2 getBackTraceAt(const Index transIndex) const noexcept{
-			if(!size_CCD)return {};
+		[[nodiscard]] constexpr Geom::Vec2 getBackTraceMoveAt(const Index transIndex) const noexcept{
+			if(size_CCD == transIndex)return {};
 			assert(transIndex < size_CCD);
 			return backtraceUnitMove * (size_CCD - transIndex - 1);
 		}
 
-		constexpr Geom::Vec2 getBackTraceUnitMove() const noexcept{
+		[[nodiscard]] constexpr Geom::Vec2 getBackTraceUnitMove() const noexcept{
 			return backtraceUnitMove;
+		}
+
+
+		[[nodiscard]] Geom::Vec2 getBackTraceMove() const noexcept{
+			return getBackTraceMoveAt(getBackTraceIndex());
 		}
 
 		// [[nodiscard]] Geom::Vec2 getAvgEdgeNormal(const CollisionData data) const{
@@ -271,148 +286,322 @@ namespace Game{
 			return wrapBound_CCD.overlapRough(other.wrapBound_CCD) && wrapBound_CCD.overlapExact(other.wrapBound_CCD);
 		}
 
-		[[nodiscard]] const CollisionData* collideWithExact(
+		//TODO remake this bullshit...
+		template <CollisionCollector Col = CollisionNoCollect>
+		bool collideWithExact(
 			const Hitbox& other,
-			const bool acquiresRecord = true,
+			Col collector = {},
 			const bool soundful = false
 		) const noexcept{
-			constexpr static CollisionData Capture{[]{
-				CollisionData data{};
-
-				data.indices.push(CollisionIndex{});
-
-				return data;
-			}()};
-
-			// const auto subjectCCD_size = sizeCCD_clamped();
-			// const auto objectCCD_size = other.sizeCCD_clamped();
-
 			Geom::OrthoRectFloat bound_subject = this->selfBound;
 			Geom::OrthoRectFloat bound_object = other.selfBound;
-
-			std::vector<Geom::RectBoxBrief> tempHitboxes{};
-
-			{
-				tempHitboxes.reserve(components.size() + other.components.size());
-				tempHitboxes.append_range(components | std::views::transform(&HitBoxComponent::box));
-				tempHitboxes.append_range(other.components | std::views::transform(&HitBoxComponent::box));
-			}
-
-			const auto rangeSubject = std::span{tempHitboxes.begin(), size()};
-			const auto rangeObject = std::span{tempHitboxes.begin() + size(), tempHitboxes.end()};
-
-			//initialize collision state
-			{
-				const auto maxTrans_subject = this->getBackTraceAt(0);
-				const auto maxTrans_object = other.getBackTraceAt(0);
-
-				//Move to initial stage
-				for(auto& box : rangeSubject){
-					box.move(maxTrans_subject);
-				}
-
-				for(auto& box : rangeObject){
-					box.move(maxTrans_object);
-				}
-
-				bound_subject.move(maxTrans_subject);
-				bound_object.move(maxTrans_object);
-			}
 
 			const auto trans_subject = -this->backtraceUnitMove;
 			const auto trans_object = -other.backtraceUnitMove;
 
-			Index lastCheckedIndex_subject{};
-			Index lastCheckedIndex_object{};
+			const bool sbjHasTrans = backtraceUnitMove.isZero();
+			const bool objHasTrans = other.backtraceUnitMove.isZero();
 
-			for(Index lastIndex_object{}, index_subject{}; index_subject <= this->getClampedSizeCCD(); ++index_subject){
-				//Calculate Move Step
-				const float curRatio = static_cast<float>(index_subject) / static_cast<float>(this->getClampedSizeCCD());
-				const Index objectCurrentIndex = //The subject's size may shrink, cause the ratio larger than 1, resulting in array index out of bound
-					Math::ceil(curRatio * static_cast<float>(other.getClampedSizeCCD()));
 
-				if(objectCurrentIndex >= other.size_CCD){
-					return nullptr;
-				}
+			std::vector<Geom::RectBoxBrief> tempHitboxes{};
+			HitboxSpan rangeSubject{};
+			HitboxSpan rangeObject{};
 
-				for(Index index_object = lastIndex_object; index_object < objectCurrentIndex; ++index_object){
-					//Perform CCD approach
+			if(sbjHasTrans && objHasTrans){
+				rangeSubject.components = components;
+				rangeObject.components = other.components;
+			}else if(!sbjHasTrans && objHasTrans){
+				tempHitboxes.reserve(components.size());
+				tempHitboxes.append_range(components | std::views::transform(&HitBoxComponent::box));
 
-					//Rough collision test 1;
-					if(!bound_subject.overlap_Inclusive(bound_object)){
-						bound_subject.move(trans_subject);
-						bound_object.move(trans_object);
+				rangeSubject.temporary = tempHitboxes;
+				rangeObject.components = other.components;
+			}else if(sbjHasTrans && !objHasTrans){
+				tempHitboxes.reserve(other.components.size());
+				tempHitboxes.append_range(other.components | std::views::transform(&HitBoxComponent::box));
 
-						continue;
-					}
+				rangeSubject.components = components;
+				rangeObject.temporary = tempHitboxes;
+			}else{
+				tempHitboxes.reserve(components.size() + other.components.size());
+				tempHitboxes.append_range(components | std::views::transform(&HitBoxComponent::box));
+				tempHitboxes.append_range(other.components | std::views::transform(&HitBoxComponent::box));
 
-					bound_subject.move(trans_subject);
-					bound_object.move(trans_object);
-
-					//Rough test passed, move boxes to last valid position
-					for(auto& box : rangeSubject){
-						box.move(trans_subject * (index_subject - lastCheckedIndex_subject));
-					}
-
-					for(auto& box : rangeObject){
-						box.move(trans_object * (index_object - lastCheckedIndex_object));
-					}
-
-					//Collision Test
-					//TODO O(n^2) Is a small local quad tree necessary?
-
-					CollisionData* collisionData{};
-
-					for(auto&& [subjectBoxIndex, subject] : rangeSubject | std::views::enumerate){
-						for(auto&& [objectBoxIndex, object] : rangeObject | std::views::enumerate){
-							if(index_subject > this->getClampedSizeCCD() || index_object > other.getClampedSizeCCD()) return nullptr;
-
-							if(!subject.overlapRough(object) || !subject.overlapExact(object)) continue;
-
-							collisionData = &collided.emplace_back(index_subject);
-
-							if(collisionData->empty()){
-								this->clampCCD(index_subject);
-								other.clampCCD(index_object);
-							}
-
-							if(acquiresRecord){
-								collisionData->indices.push({static_cast<Index>(subjectBoxIndex), static_cast<Index>(objectBoxIndex)});
-								if(!soundful || collisionData->indices.full()){
-									return collisionData;
-								}
-							}else{
-								return &Capture;
-							}
-						}
-					}
-
-					if(soundful && collisionData && !collisionData->empty()){
-						return collisionData;
-					}
-
-					lastCheckedIndex_subject = index_subject;
-					lastCheckedIndex_object = index_object;
-				}
-
-				lastIndex_object = objectCurrentIndex;
+				rangeSubject.temporary = std::span{tempHitboxes.begin(), size()};;
+				rangeObject.temporary = std::span{tempHitboxes.begin() + size(), tempHitboxes.end()};;
 			}
 
-			return nullptr;
 
+			//initialize collision state
+			{
+				if(!sbjHasTrans){
+					const auto maxTrans_subject = this->getBackTraceMoveAt(0);
+
+					//Move to initial stage
+					for(auto& box : rangeSubject.temporary){
+						box.move(maxTrans_subject);
+					}
+
+					bound_subject.move(maxTrans_subject);
+				}
+
+				if(!objHasTrans){
+					const auto maxTrans_object = other.getBackTraceMoveAt(0);
+
+					for(auto& box : rangeObject.temporary){
+						box.move(maxTrans_object);
+					}
+
+					bound_object.move(maxTrans_object);
+				}
+			}
+
+			assert(size_CCD > 0);
+			assert(other.size_CCD > 0);
+
+			Index index_object{};
+			Index index_subject{};
+
+			auto sbjMoveFunc = [&]{
+				if(sbjHasTrans)return;
+				for(auto& box : rangeSubject.temporary){
+					box.move(trans_subject);
+				}
+				bound_subject.move(trans_subject);
+			};
+
+			auto objMoveFunc = [&]{
+				if(objHasTrans)return;
+				for(auto& box : rangeObject.temporary){
+					box.move(trans_object);
+				}
+				bound_object.move(trans_object);
+			};
+
+			//OPTM this is horrible...
+
+			for(; index_subject <= getBackTraceIndex(); ++index_subject){
+				const auto curIdx = other.getBackTraceIndex();
+
+				for(; index_object <= curIdx; ++index_object){
+					if(!bound_subject.overlap_Exclusive(bound_object)){
+						goto next0;
+					}
+
+					if(this->loadTo<Col>(
+						collector, soundful, other,
+						rangeSubject, index_subject,
+						rangeObject, index_object
+					)){
+						return true;
+					}
+
+					next0:
+					objMoveFunc();
+				}
+
+				if(!bound_subject.overlap_Exclusive(bound_object)){
+					goto next1;
+				}
+
+				if(this->loadTo<Col>(
+					collector, soundful, other,
+					rangeSubject, index_subject,
+					rangeObject, index_object
+				)){
+					return true;
+				}
+
+				next1:
+				sbjMoveFunc();
+
+				if(!objHasTrans){
+					for(auto& box : rangeObject.temporary){
+						box.move(-trans_object * (curIdx + 1));
+					}
+
+					bound_object.move(-trans_object * (curIdx + 1));
+				}
+			}
+
+			auto curIdx = other.getBackTraceIndex();
+
+			for(; index_object <= curIdx; ++index_object){
+				if(!bound_subject.overlap_Exclusive(bound_object)){
+					goto next2;
+				}
+
+				if(this->loadTo<Col>(
+					collector, soundful, other,
+					rangeSubject, index_subject,
+					rangeObject, index_object
+				)){
+					return true;
+				}
+
+				next2:
+				objMoveFunc();
+			}
+
+			if(!bound_subject.overlap_Exclusive(bound_object)){
+				return false;
+			}
+
+			if(this->loadTo<Col>(
+				collector, soundful, other,
+				rangeSubject, index_subject,
+				rangeObject, index_object
+			)){
+				return true;
+			}
+
+			return false;
+			//
+			// for(; index_subject <= this->getClampedIndexCCD() + 1; ++index_subject){
+			// 	const auto ratio = static_cast<float>(index_subject/* + 1*/) / static_cast<float>(size_CCD);
+			// 	const auto ceilIndex = static_cast<Index>(Math::ceil(ratio * other.size_CCD));
+			//
+			// 	assert(ratio >= 0.f && ratio <= 1.f);
+			//
+			// 	const auto dst = lastCeilIndex - lastBeginIdx2;
+			// 	if(lastCeilIndex != ceilIndex){
+			// 		if(dst == 1){
+			// 			for(auto& box : rangeObject){
+			// 				box.move(trans_object);
+			// 			}
+			// 			bound_object.move(trans_object);
+			// 			++objMove;
+			// 		}
+			//
+			// 		//ceil changed
+			// 		lastBeginIdx2 = lastCeilIndex;
+			// 		lastCeilIndex = ceilIndex;
+			// 	}else{
+			// 		if(dst > 1){
+			// 			for(auto& box : rangeObject){
+			// 				box.move(trans_object * -dst);
+			// 			}
+			// 			bound_object.move(trans_object * -dst);
+			// 			objMove -= dst;
+			// 		}
+			// 	}
+			//
+			// 	for(index_object = lastBeginIdx2; index_object <= ceilIndex; ++index_object){
+			// 		if(this->loadTo<Col>(
+			// 			collector, soundful, other,
+			// 			rangeSubject, index_subject,
+			// 			rangeObject, index_object
+			// 		)){
+			// 			return true;
+			// 		}
+			//
+			// 		next:
+			// 		if(ceilIndex - lastBeginIdx2 > 1){
+			// 			for(auto& box : rangeObject){
+			// 				box.move(trans_object);
+			// 			}
+			// 			bound_object.move(trans_object);
+			// 			++objMove;
+			// 		}
+			// 	}
+			//
+			// 	for(auto& box : rangeSubject){
+			// 		box.move(trans_subject);
+			// 	}
+			// 	bound_subject.move(trans_subject);
+			// 	++sbjMove;
+			// }
+			//
+			// return false;
 		}
 
-		//TODO shrink CCD bound
-		//TODO shrink requires atomic...
-		void fetchToLastClampPosition() noexcept{
-			const auto step = indexClamped_CCD.load();
-			if(!step)return;
-			this->trans.vec.addScaled(backtraceUnitMove, static_cast<float>(step));
+	private:
+		template <CollisionCollector Col = CollisionNoCollect>
+		bool loadTo(
+			Col collector, const bool soundful, const Hitbox& other,
+			const HitboxSpan rangeSubject, const Index index_subject,
+			const HitboxSpan rangeObject, const Index index_object
+		) const noexcept{
+			CollisionData* collisionData{};
+			assert(index_subject <= size_CCD);
+			assert(index_object <= other.size_CCD);
+
+			// if(!bound_subject.overlap_Inclusive(bound_object)){
+			// 	goto next;
+			// }
+
+			auto tryIntersect = [&](
+				const std::span<Geom::RectBoxBrief>::size_type subjectBoxIndex, const Geom::RectBoxBrief& subject,
+				const std::span<Geom::RectBoxBrief>::size_type objectBoxIndex, const Geom::RectBoxBrief& object
+			){
+				if(index_subject > this->getBackTraceIndex() + 1 || index_object > other.getBackTraceIndex() + 1) return false;
+
+				if(!subject.overlapRough(object) || !subject.overlapExact(object)) return false;
+
+				if constexpr (std::same_as<Col, CollisionNoCollect>){
+					this->clampCCD(index_subject);
+					other.clampCCD(index_object);
+
+					return true;
+				}
+
+				if(!collisionData){
+					this->clampCCD(index_subject);
+					other.clampCCD(index_object);
+					collisionData = std::invoke(collector, index_subject);
+				}
+
+				collisionData->indices.push({static_cast<Index>(subjectBoxIndex), static_cast<Index>(objectBoxIndex)});
+				if(!soundful || collisionData->indices.full()){
+					return true;
+				}
+			};
+
+
+			if(backtraceUnitMove.isZero() && other.backtraceUnitMove.isZero()){
+				for(auto&& [subjectBoxIndex, subject] : rangeSubject.components | std::views::transform(&HitBoxComponent::box) | std::views::enumerate){
+					for(auto&& [objectBoxIndex, object] : rangeObject.components | std::views::transform(&HitBoxComponent::box) | std::views::enumerate){
+						if(tryIntersect(subjectBoxIndex, subject, objectBoxIndex, object)){
+							return true;
+						}
+					}
+				}
+			}else if(!backtraceUnitMove.isZero() && other.backtraceUnitMove.isZero()){
+				for(auto&& [subjectBoxIndex, subject] : rangeSubject.temporary | std::views::enumerate){
+					for(auto&& [objectBoxIndex, object] : rangeObject.components | std::views::transform(&HitBoxComponent::box) | std::views::enumerate){
+						if(tryIntersect(subjectBoxIndex, subject, objectBoxIndex, object)){
+							return true;
+						}
+					}
+				}
+			}else if(backtraceUnitMove.isZero() && !other.backtraceUnitMove.isZero()){
+				for(auto&& [subjectBoxIndex, subject] : rangeSubject.components | std::views::transform(&HitBoxComponent::box) | std::views::enumerate){
+					for(auto&& [objectBoxIndex, object] : rangeObject.temporary | std::views::enumerate){
+						if(tryIntersect(subjectBoxIndex, subject, objectBoxIndex, object)){
+							return true;
+						}
+					}
+				}
+			}else{
+				for(auto&& [subjectBoxIndex, subject] : rangeSubject.temporary | std::views::enumerate){
+					for(auto&& [objectBoxIndex, object] : rangeObject.temporary | std::views::enumerate){
+						if(tryIntersect(subjectBoxIndex, subject, objectBoxIndex, object)){
+							return true;
+						}
+					}
+				}
+			}
+
+			assert(soundful || !collisionData);
+			if(collisionData){
+				assert(!collisionData->empty());
+				return true;
+			}
+
+			return false;
 		}
 
-		[[nodiscard]] Geom::Vec2 getBackTraceMove() const noexcept{
-			return getBackTraceAt(indexClamped_CCD.load());
-		}
+	public:
 
 		[[nodiscard]] bool contains(const Geom::Vec2 vec2) const noexcept{
 			return std::ranges::any_of(components, [vec2](const HitBoxComponent& data){
@@ -428,22 +617,11 @@ namespace Game{
 			});
 		}
 
-		Geom::Vec2 getNormalAt(const Geom::Vec2 pos, Index compIndex) const noexcept{
-			return Geom::avgEdgeNormal(pos/* + getCurrentOffsetCCD()*/, components[compIndex].box);
-		}
-
-	private:
-		static void transHitboxGroup(const std::span<HitBoxComponent> boxes, const Geom::Vec2 trans) noexcept{
-			for(auto&& box : boxes){
-				box.box.move(trans);
-			}
-		}
-
 	public:
 
 		Hitbox() = default;
 
-		[[nodiscard]] Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform = {})
+		[[nodiscard]] explicit Hitbox(const std::vector<HitBoxComponent>& comps, const Geom::Transform transform = {})
 			: components(comps), trans(transform){
 			updateHitbox(transform);
 		}

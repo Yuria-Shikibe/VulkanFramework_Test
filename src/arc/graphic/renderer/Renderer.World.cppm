@@ -68,7 +68,7 @@ export namespace Graphic{
 		ComputePostProcessor ssao{};
 		ComputePostProcessor merge{};
 		ComputePostProcessor nfaa_merge{};
-		ComputePostProcessor nfaa_light{};
+		// ComputePostProcessor nfaa_light{};
 
 
 		[[nodiscard]] RendererWorld() = default;
@@ -185,7 +185,7 @@ export namespace Graphic{
 			}
 			createDepthView();
 
-			nfaa_light.resize(size, getComputeTransient(), commandPool_Compute.obtain());
+			// nfaa_light.resize(size, getComputeTransient(), commandPool_Compute.obtain());
 			gaussian.resize(size, getComputeTransient(), commandPool_Compute.obtain());
 			ssao.resize(size, getComputeTransient(), commandPool_Compute.obtain());
 			merge.resize(size, getComputeTransient(), commandPool_Compute.obtain());
@@ -205,9 +205,9 @@ export namespace Graphic{
 			return nfaa_merge.images.back();
 		}
 
-		Core::Vulkan::Attachment& getResult_NFAA_light(){
-			return nfaa_light.images.back();
-		}
+		// Core::Vulkan::Attachment& getResult_NFAA_light(){
+		// 	return nfaa_light.images.back();
+		// }
 
 		Core::Vulkan::Attachment& getResult_SSAO(){
 			return ssao.images.back();
@@ -224,7 +224,7 @@ export namespace Graphic{
 
 			Util::submitCommand(context().device.getPrimaryComputeQueue(), std::array{
 									// endBatchCommand.get(),
-									nfaa_light.mainCommandBuffer.get(),
+									// nfaa_light.mainCommandBuffer.get(),
 				                    gaussian.mainCommandBuffer.get(),
 				                    ssao.mainCommandBuffer.get(),
 				                    merge.mainCommandBuffer.get(),
@@ -242,22 +242,22 @@ export namespace Graphic{
 
 		void createPostProcessors(){
 
-			{
-				nfaa_light = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
-					AttachmentPort port{};
-
-					port.addAttachment(0, lightAttachment);
-					return port;
-				}, {},
-					getComputeTransient(),
-					commandPool_Compute.obtain()});
-			}
+			// {
+			// 	nfaa_light = Assets::PostProcess::Factory::nfaaFactory.generate({size, [this]{
+			// 		AttachmentPort port{};
+			//
+			// 		port.addAttachment(0, lightAttachment);
+			// 		return port;
+			// 	}, {},
+			// 		getComputeTransient(),
+			// 		commandPool_Compute.obtain()});
+			// }
 			
 			{
 				gaussian = Assets::PostProcess::Factory::gaussianFactory.generate({size, [this]{
 					AttachmentPort port{};
 
-					port.addAttachment(0, getResult_NFAA_light());
+					port.addAttachment(0, lightAttachment);
 					return port;
 				}, [this]{
 					return std::vector{cameraPropertyDescriptorLayout.get()};
